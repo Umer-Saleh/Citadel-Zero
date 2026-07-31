@@ -20,7 +20,7 @@ function generateSalt() {
 
 /** Expand one strong key into an independent sub-key. */
 function hkdf(masterKey, context) {
-  return Buffer.from(
+  return Buffer.from( 
     crypto.hkdfSync('sha256', masterKey, Buffer.alloc(0), context, KEY_LENGTH)
   );
 }
