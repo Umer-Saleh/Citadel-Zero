@@ -5,12 +5,9 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
 
-const { serverStoreAuth, serverVerifyAuth } = require('./auth');
-const userRepo = require('./repositories/userRepo');
-const vaultRepo = require('./repositories/vaultRepo');
-
-const DUMMY_HASH = '$argon2id$v=19$m=65536,p=4,t=3$rm29g6kvVdhtbZxachGdMw$' +
-                   'V8EhUOs5sbp1qvmFPFlsVFl9x6QZkIYUlpSKmdEE2HI';
+const authService = require('./services/authService');
+const vaultService = require('./services/vaultService');
+const { AppError } = require('./errors/AppError');
 
 const app = express();
 
@@ -33,7 +30,7 @@ const apiLimiter = rateLimitEnabled ? rateLimit({
   max: 300,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'too many requests' }
+  message: { error: 'TOO_MANY_REQUESTS' }
 }) : noLimit;
 
 const authLimiter = rateLimitEnabled ? rateLimit({
@@ -41,7 +38,7 @@ const authLimiter = rateLimitEnabled ? rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'too many attempts, try again later' }
+  message: { error: 'TOO_MANY_ATTEMPTS' }
 }) : noLimit;
 
 app.use('/api/', apiLimiter);
@@ -66,14 +63,14 @@ function requireAuth(req, res, next) {
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
 
   if (!token) {
-    return res.status(401).json({ error: 'no token' });
+    return res.status(401).json({ error: 'NO_TOKEN' });
   }
 
   try {
     req.userId = jwt.verify(token, process.env.JWT_SECRET).sub;
     next();
   } catch {
-    return res.status(401).json({ error: 'invalid or expired token' });
+    return res.status(401).json({ error: 'INVALID_TOKEN' });
   }
 }
 
@@ -85,108 +82,63 @@ app.get('/api/health', (req, res) => {
 });
 
 // ---------------------------------------------------------------
-// SIGNUP
-// Receives an auth hash, a salt, and KDF parameters.
-// Never receives the master password or any encryption key.
+// AUTH ROUTES
+// Routes translate HTTP to and from service calls. They contain no
+// business logic and no SQL.
 // ---------------------------------------------------------------
 app.post('/api/auth/signup', wrap(async (req, res) => {
   const { email, authHash, kdfSalt, kdfParams } = req.body;
 
   if (!email || !authHash || !kdfSalt || !kdfParams) {
-    return res.status(400).json({ error: 'missing fields' });
+    return res.status(400).json({ error: 'MISSING_FIELDS' });
   }
 
-  try {
-    const stored = await serverStoreAuth(authHash);
-    const user = await userRepo.create({ email, kdfSalt, kdfParams, authHash: stored });
+  const user = await authService.signup({ email, authHash, kdfSalt, kdfParams });
 
-    console.log(`[server] registered ${email} as ${user.id}`);
-    res.status(201).json({ ok: true });
-  } catch (err) {
-    if (err.code === '23505') {           // unique_violation
-      return res.status(409).json({ error: 'account already exists' });
-    }
-    throw err;                            // hand off to the error handler
-  }
+  console.log(`[server] registered ${email} as ${user.id}`);
+  res.status(201).json({ ok: true });
 }));
 
-// ---------------------------------------------------------------
-// KDF PARAMS
-// Public by design: the client needs the salt and cost parameters
-// before it can derive anything.
-// ---------------------------------------------------------------
 app.get('/api/user/kdf-params', wrap(async (req, res) => {
   const { email } = req.query;
 
   if (!email) {
-    return res.status(400).json({ error: 'missing email' });
+    return res.status(400).json({ error: 'MISSING_FIELDS' });
   }
 
-  const user = await userRepo.findByEmail(email);
-
-  if (!user) {
-    return res.status(404).json({ error: 'not found' });
-  }
-
-  res.status(200).json({ kdfSalt: user.kdf_salt, kdfParams: user.kdf_params });
+  res.status(200).json(await authService.getKdfParams(email));
 }));
 
-// ---------------------------------------------------------------
-// LOGIN
-// Identical 401 for unknown account and wrong password, so the
-// response cannot be used to discover which emails are registered.
-// ---------------------------------------------------------------
 app.post('/api/auth/login', wrap(async (req, res) => {
   const { email, authHash } = req.body;
 
   if (!email || !authHash) {
-    return res.status(400).json({ error: 'missing fields' });
+    return res.status(400).json({ error: 'MISSING_FIELDS' });
   }
 
-  const user = await userRepo.findByEmail(email);
-
-  // Always run a verification, even for unknown accounts, so the
-  // response time does not reveal whether the email is registered.
-  const valid = await serverVerifyAuth(authHash, user ? user.auth_hash : DUMMY_HASH)
-                      .catch(() => false);
-
-  if (!user || !valid) {
-    console.log(`[server] failed login for ${email}`);
-    return res.status(401).json({ error: 'invalid credentials' });
-  }
-
-  const token = jwt.sign({ sub: user.id }, process.env.JWT_SECRET, { expiresIn: '15m' });
+  const { token } = await authService.login({ email, authHash });
+  
   console.log(`[server] login success for ${email}`);
   res.status(200).json({ ok: true, token });
 }));
 
 // ---------------------------------------------------------------
-// VAULT
-// Ciphertext in, ciphertext out. Every repository call is scoped
-// by the user_id carried in the verified token.
+// VAULT ROUTES
+// Ciphertext in, ciphertext out. Ownership is enforced in the
+// service and repository layers using the token-derived userId.
 // ---------------------------------------------------------------
 app.get('/api/vault', requireAuth, wrap(async (req, res) => {
-  const rows = await vaultRepo.listByUser(req.userId);
-
-  res.status(200).json({
-    items: rows.map(r => ({
-      id: r.id,
-      ciphertext: r.encrypted_data,
-      nonce: r.nonce,
-      authTag: r.auth_tag,
-      updatedAt: r.updated_at
-    }))
-  });
+  res.status(200).json({ items: await vaultService.list(req.userId) });
 }));
 
 app.post('/api/vault', requireAuth, wrap(async (req, res) => {
   const { ciphertext, nonce, authTag } = req.body;
 
   if (!ciphertext || !nonce || !authTag) {
-    return res.status(400).json({ error: 'missing fields' });
+    return res.status(400).json({ error: 'MISSING_FIELDS' });
   }
 
-  const item = await vaultRepo.create(req.userId, { ciphertext, nonce, authTag });
+  const item = await vaultService.create(req.userId, { ciphertext, nonce, authTag });
 
   console.log(`[server] stored encrypted item ${item.id}`);
   res.status(201).json({ id: item.id });
@@ -196,24 +148,17 @@ app.put('/api/vault/:id', requireAuth, wrap(async (req, res) => {
   const { ciphertext, nonce, authTag } = req.body;
 
   if (!ciphertext || !nonce || !authTag) {
-    return res.status(400).json({ error: 'missing fields' });
+    return res.status(400).json({ error: 'MISSING_FIELDS' });
   }
 
-  const updated = await vaultRepo.update(req.userId, req.params.id,
-                                         { ciphertext, nonce, authTag });
+  await vaultService.update(req.userId, req.params.id, { ciphertext, nonce, authTag });
 
-  if (!updated) {
-    return res.status(404).json({ error: 'not found' });
-  }
   res.status(200).json({ ok: true });
 }));
 
 app.delete('/api/vault/:id', requireAuth, wrap(async (req, res) => {
-  const removed = await vaultRepo.remove(req.userId, req.params.id);
+  await vaultService.remove(req.userId, req.params.id);
 
-  if (!removed) {
-    return res.status(404).json({ error: 'not found' });
-  }
   res.status(200).json({ ok: true });
 }));
 
@@ -221,17 +166,22 @@ app.delete('/api/vault/:id', requireAuth, wrap(async (req, res) => {
 // 404 — anything that matched no route
 // ---------------------------------------------------------------
 app.use((req, res) => {
-  res.status(404).json({ error: 'not found' });
+  res.status(404).json({ error: 'NOT_FOUND' });
 });
 
 // ---------------------------------------------------------------
-// CATCH-ALL ERROR HANDLER
+// ERROR HANDLER
 // Four parameters is what marks this as an error handler in Express.
-// Details are logged server-side; the client gets nothing useful.
+// Operational errors carry a safe client-facing code; anything else
+// is a bug, logged in full and reported as a generic 500.
 // ---------------------------------------------------------------
 app.use((err, req, res, next) => {
-  console.error('[server] unhandled:', err.message);
-  res.status(500).json({ error: 'internal error' });
+  if (err instanceof AppError && err.isOperational) {
+    return res.status(err.statusCode).json({ error: err.code });
+  }
+
+  console.error('[server] unhandled:', err);
+  res.status(500).json({ error: 'INTERNAL_ERROR' });
 });
 
 module.exports = app;
