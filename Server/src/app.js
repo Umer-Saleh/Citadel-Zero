@@ -4,11 +4,13 @@ const express = require('express');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
-const { query } = require('./db');
-const { serverStoreAuth, serverVerifyAuth } = require('./auth');
-const argon2 = require('argon2');
 
-const DUMMY_HASH = '$argon2id$v=19$m=65536,p=4,t=3$rm29g6kvVdhtbZxachGdMw$' +'V8EhUOs5sbp1qvmFPFlsVFl9x6QZkIYUlpSKmdEE2HI';
+const { serverStoreAuth, serverVerifyAuth } = require('./auth');
+const userRepo = require('./repositories/userRepo');
+const vaultRepo = require('./repositories/vaultRepo');
+
+const DUMMY_HASH = '$argon2id$v=19$m=65536,p=4,t=3$rm29g6kvVdhtbZxachGdMw$' +
+                   'V8EhUOs5sbp1qvmFPFlsVFl9x6QZkIYUlpSKmdEE2HI';
 
 const app = express();
 
@@ -21,7 +23,8 @@ app.use(express.json({ limit: '64kb' }));
 
 // Rate limiting is disabled in tests so the suite can exercise
 // auth endpoints freely. It stays on everywhere else.
-const rateLimitEnabled = process.env.RATE_LIMIT_ENABLED !== 'false' && process.env.NODE_ENV !== 'test';
+const rateLimitEnabled = process.env.RATE_LIMIT_ENABLED !== 'false'
+                      && process.env.NODE_ENV !== 'test';
 
 const noLimit = (req, res, next) => next();
 
@@ -95,15 +98,9 @@ app.post('/api/auth/signup', wrap(async (req, res) => {
 
   try {
     const stored = await serverStoreAuth(authHash);
+    const user = await userRepo.create({ email, kdfSalt, kdfParams, authHash: stored });
 
-    const { rows } = await query(
-      `INSERT INTO users (email, kdf_salt, kdf_params, auth_hash)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id`,
-      [email, kdfSalt, kdfParams, stored]
-    );
-
-    console.log(`[server] registered ${email} as ${rows[0].id}`);
+    console.log(`[server] registered ${email} as ${user.id}`);
     res.status(201).json({ ok: true });
   } catch (err) {
     if (err.code === '23505') {           // unique_violation
@@ -125,16 +122,13 @@ app.get('/api/user/kdf-params', wrap(async (req, res) => {
     return res.status(400).json({ error: 'missing email' });
   }
 
-  const { rows } = await query(
-    'SELECT kdf_salt, kdf_params FROM users WHERE email = $1',
-    [email]
-  );
+  const user = await userRepo.findByEmail(email);
 
-  if (rows.length === 0) {
+  if (!user) {
     return res.status(404).json({ error: 'not found' });
   }
 
-  res.status(200).json({ kdfSalt: rows[0].kdf_salt, kdfParams: rows[0].kdf_params });
+  res.status(200).json({ kdfSalt: user.kdf_salt, kdfParams: user.kdf_params });
 }));
 
 // ---------------------------------------------------------------
@@ -149,10 +143,10 @@ app.post('/api/auth/login', wrap(async (req, res) => {
     return res.status(400).json({ error: 'missing fields' });
   }
 
-  const { rows } = await query('SELECT id, auth_hash FROM users WHERE email = $1', [email]);
-  const user = rows[0];
+  const user = await userRepo.findByEmail(email);
 
-  // Always run a verification, even for unknown accounts.
+  // Always run a verification, even for unknown accounts, so the
+  // response time does not reveal whether the email is registered.
   const valid = await serverVerifyAuth(authHash, user ? user.auth_hash : DUMMY_HASH)
                       .catch(() => false);
 
@@ -168,17 +162,11 @@ app.post('/api/auth/login', wrap(async (req, res) => {
 
 // ---------------------------------------------------------------
 // VAULT
-// Ciphertext in, ciphertext out. Every query is scoped by the
-// user_id carried in the verified token.
+// Ciphertext in, ciphertext out. Every repository call is scoped
+// by the user_id carried in the verified token.
 // ---------------------------------------------------------------
 app.get('/api/vault', requireAuth, wrap(async (req, res) => {
-  const { rows } = await query(
-    `SELECT id, encrypted_data, nonce, auth_tag, updated_at
-     FROM vault_items
-     WHERE user_id = $1
-     ORDER BY created_at`,
-    [req.userId]
-  );
+  const rows = await vaultRepo.listByUser(req.userId);
 
   res.status(200).json({
     items: rows.map(r => ({
@@ -198,15 +186,10 @@ app.post('/api/vault', requireAuth, wrap(async (req, res) => {
     return res.status(400).json({ error: 'missing fields' });
   }
 
-  const { rows } = await query(
-    `INSERT INTO vault_items (user_id, encrypted_data, nonce, auth_tag)
-     VALUES ($1, $2, $3, $4)
-     RETURNING id`,
-    [req.userId, ciphertext, nonce, authTag]
-  );
+  const item = await vaultRepo.create(req.userId, { ciphertext, nonce, authTag });
 
-  console.log(`[server] stored encrypted item ${rows[0].id}`);
-  res.status(201).json({ id: rows[0].id });
+  console.log(`[server] stored encrypted item ${item.id}`);
+  res.status(201).json({ id: item.id });
 }));
 
 app.put('/api/vault/:id', requireAuth, wrap(async (req, res) => {
@@ -216,26 +199,19 @@ app.put('/api/vault/:id', requireAuth, wrap(async (req, res) => {
     return res.status(400).json({ error: 'missing fields' });
   }
 
-  const { rowCount } = await query(
-    `UPDATE vault_items
-     SET encrypted_data = $1, nonce = $2, auth_tag = $3, updated_at = now()
-     WHERE id = $4 AND user_id = $5`,
-    [ciphertext, nonce, authTag, req.params.id, req.userId]
-  );
+  const updated = await vaultRepo.update(req.userId, req.params.id,
+                                         { ciphertext, nonce, authTag });
 
-  if (rowCount === 0) {
+  if (!updated) {
     return res.status(404).json({ error: 'not found' });
   }
   res.status(200).json({ ok: true });
 }));
 
 app.delete('/api/vault/:id', requireAuth, wrap(async (req, res) => {
-  const { rowCount } = await query(
-    'DELETE FROM vault_items WHERE id = $1 AND user_id = $2',
-    [req.params.id, req.userId]
-  );
+  const removed = await vaultRepo.remove(req.userId, req.params.id);
 
-  if (rowCount === 0) {
+  if (!removed) {
     return res.status(404).json({ error: 'not found' });
   }
   res.status(200).json({ ok: true });
