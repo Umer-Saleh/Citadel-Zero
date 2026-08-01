@@ -1,10 +1,13 @@
 const argon2 = require('argon2');
-const { generateSalt, deriveKeys, DEFAULT_KDF_PARAMS } = require('./crypto');
 
-// ---------- SERVER SIDE ----------
-// These functions run on the server. Note what they never touch:
-// the master password, the master key, or the vault key.
-
+/**
+ * Server-side re-hash of the client's auth hash.
+ *
+ * Without this, a stolen auth_hash column would be password-equivalent:
+ * an attacker could replay a stored value straight to the login endpoint.
+ * The cost is lower than the client-side KDF because the input is already
+ * a 256-bit uniformly random value, not a guessable password.
+ */
 async function serverStoreAuth(authHash) {
   return argon2.hash(authHash, { type: argon2.argon2id });
 }
@@ -13,34 +16,4 @@ async function serverVerifyAuth(authHash, storedAuth) {
   return argon2.verify(storedAuth, authHash);
 }
 
-// ---------- CLIENT SIDE ----------
-
-async function clientSignup(email, masterPassword) {
-  const salt = generateSalt();
-  const params = DEFAULT_KDF_PARAMS;
-  const { authHash, vaultKey } = await deriveKeys(masterPassword, salt, params);
-
-  return {
-    // what gets sent over the network
-    payload: {
-      email,
-      authHash: authHash.toString('base64'),
-      kdfSalt: salt.toString('base64'),
-      kdfParams: params
-    },
-    // what stays on the device
-    vaultKey
-  };
-}
-
-async function clientLogin(masterPassword, kdfSalt, kdfParams) {
-  const salt = Buffer.from(kdfSalt, 'base64');
-  const { authHash, vaultKey } = await deriveKeys(masterPassword, salt, kdfParams);
-
-  return {
-    payload: { authHash: authHash.toString('base64') },
-    vaultKey
-  };
-}
-
-module.exports = { serverStoreAuth, serverVerifyAuth, clientSignup, clientLogin };
+module.exports = { serverStoreAuth, serverVerifyAuth };
