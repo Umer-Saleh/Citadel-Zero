@@ -5,7 +5,7 @@ const {
   generateSalt, deriveKeys, encryptItem, decryptItem, DEFAULT_KDF_PARAMS
 } = require('../../src/crypto');
 
-const FAST = { m: 8192, t: 1, p: 1 };
+const FAST = { m: 19456, t: 2, p: 1 };
 const SALT = Buffer.from('0123456789abcdef0123456789abcdef', 'hex');
 const PASSWORD = 'correct horse battery staple';
 

@@ -9,6 +9,9 @@ const authService = require('./services/authService');
 const vaultService = require('./services/vaultService');
 const { AppError } = require('./errors/AppError');
 
+const { validate } = require('./middleware/validate');
+const { signupSchema, loginSchema, kdfParamsQuerySchema, vaultItemSchema, uuidParamSchema} = require('./routes/schemas');
+
 const app = express();
 
 // ---------------------------------------------------------------
@@ -85,81 +88,62 @@ app.get('/api/health', (req, res) => {
 // Routes translate HTTP to and from service calls. They contain no
 // business logic and no SQL.
 // ---------------------------------------------------------------
-app.post('/api/auth/signup', wrap(async (req, res) => {
-  const { email, authHash, kdfSalt, kdfParams } = req.body;
 
-  if (!email || !authHash || !kdfSalt || !kdfParams) {
-    return res.status(400).json({ error: 'MISSING_FIELDS' });
-  }
 
-  const user = await authService.signup({ email, authHash, kdfSalt, kdfParams });
+app.post('/api/auth/signup', validate(signupSchema), wrap(async (req, res) => {
+  const user = await authService.signup(req.body);
 
-  console.log(`[server] registered ${email} as ${user.id}`);
+  console.log(`[server] registered ${req.body.email} as ${user.id}`);
   res.status(201).json({ ok: true });
 }));
 
-app.get('/api/user/kdf-params', wrap(async (req, res) => {
-  const { email } = req.query;
+app.get('/api/user/kdf-params',
+  validate(kdfParamsQuerySchema, 'query'),
+  wrap(async (req, res) => {
+    res.status(200).json(await authService.getKdfParams(req.validated.query.email));
+  }));
 
-  if (!email) {
-    return res.status(400).json({ error: 'MISSING_FIELDS' });
-  }
+app.post('/api/auth/login', validate(loginSchema), wrap(async (req, res) => {
+  const { token } = await authService.login(req.body);
 
-  res.status(200).json(await authService.getKdfParams(email));
-}));
-
-app.post('/api/auth/login', wrap(async (req, res) => {
-  const { email, authHash } = req.body;
-
-  if (!email || !authHash) {
-    return res.status(400).json({ error: 'MISSING_FIELDS' });
-  }
-
-  const { token } = await authService.login({ email, authHash });
-  
-  console.log(`[server] login success for ${email}`);
+  console.log(`[server] login success for ${req.body.email}`);
   res.status(200).json({ ok: true, token });
 }));
+
 
 // ---------------------------------------------------------------
 // VAULT ROUTES
 // Ciphertext in, ciphertext out. Ownership is enforced in the
 // service and repository layers using the token-derived userId.
 // ---------------------------------------------------------------
+
 app.get('/api/vault', requireAuth, wrap(async (req, res) => {
   res.status(200).json({ items: await vaultService.list(req.userId) });
 }));
 
-app.post('/api/vault', requireAuth, wrap(async (req, res) => {
-  const { ciphertext, nonce, authTag } = req.body;
-
-  if (!ciphertext || !nonce || !authTag) {
-    return res.status(400).json({ error: 'MISSING_FIELDS' });
-  }
-
-  const item = await vaultService.create(req.userId, { ciphertext, nonce, authTag });
+app.post('/api/vault', requireAuth, validate(vaultItemSchema), wrap(async (req, res) => {
+  const item = await vaultService.create(req.userId, req.body);
 
   console.log(`[server] stored encrypted item ${item.id}`);
   res.status(201).json({ id: item.id });
 }));
 
-app.put('/api/vault/:id', requireAuth, wrap(async (req, res) => {
-  const { ciphertext, nonce, authTag } = req.body;
+app.put('/api/vault/:id',
+  requireAuth,
+  validate(uuidParamSchema, 'params'),
+  validate(vaultItemSchema),
+  wrap(async (req, res) => {
+    await vaultService.update(req.userId, req.params.id, req.body);
+    res.status(200).json({ ok: true });
+  }));
 
-  if (!ciphertext || !nonce || !authTag) {
-    return res.status(400).json({ error: 'MISSING_FIELDS' });
-  }
-
-  await vaultService.update(req.userId, req.params.id, { ciphertext, nonce, authTag });
-
-  res.status(200).json({ ok: true });
-}));
-
-app.delete('/api/vault/:id', requireAuth, wrap(async (req, res) => {
-  await vaultService.remove(req.userId, req.params.id);
-
-  res.status(200).json({ ok: true });
-}));
+app.delete('/api/vault/:id',
+  requireAuth,
+  validate(uuidParamSchema, 'params'),
+  wrap(async (req, res) => {
+    await vaultService.remove(req.userId, req.params.id);
+    res.status(200).json({ ok: true });
+  }));
 
 // ---------------------------------------------------------------
 // 404 — anything that matched no route
