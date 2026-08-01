@@ -3,12 +3,14 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-"scripts": {
-  "start": "node src/server.js",
-  "dev": "node --watch src/server.js",
-"test": "node --test --test-concurrency=1 \"test/**/*.test.js\"",
-"test:cov": "c8 node --test --test-concurrency=1 \"test/**/*.test.js\""
-},
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test --test-concurrency=1 \"test/**/*.test.js\"",
+    "test:cov": "c8 node --test --test-concurrency=1 \"test/**/*.test.js\"",
+    "migrate": "node-pg-migrate -m migrations",
+    "migrate:test": "node scripts/migrate-test.js"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -26,6 +28,8 @@
   },
   "devDependencies": {
     "c8": "^12.0.0",
+    "cross-env": "^10.1.0",
+    "node-pg-migrate": "^9.0.0",
     "supertest": "^7.2.2"
   }
 }
