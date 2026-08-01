@@ -86,3 +86,39 @@ test('login for an unknown account returns 401', async () => {
 
   assert.strictEqual(res.status, 401);
 });
+
+test('signup rejects KDF parameters below the OWASP floor', async () => {
+  const { payload } = await makeSignupPayload();
+  payload.kdfParams = { m: 8, t: 1, p: 1 };
+
+  const res = await request(app).post('/api/auth/signup').send(payload);
+
+  assert.strictEqual(res.status, 400, 'weak KDF params were accepted');
+});
+
+test('signup rejects unknown fields', async () => {
+  const { payload } = await makeSignupPayload();
+  payload.isAdmin = true;
+
+  const res = await request(app).post('/api/auth/signup').send(payload);
+
+  assert.strictEqual(res.status, 400);
+});
+
+test('signup rejects a malformed email', async () => {
+  const { payload } = await makeSignupPayload();
+  payload.email = 'not-an-email';
+
+  const res = await request(app).post('/api/auth/signup').send(payload);
+
+  assert.strictEqual(res.status, 400);
+});
+
+test('signup rejects a wrong-length authHash', async () => {
+  const { payload } = await makeSignupPayload();
+  payload.authHash = 'dG9vc2hvcnQ=';
+
+  const res = await request(app).post('/api/auth/signup').send(payload);
+
+  assert.strictEqual(res.status, 400);
+});

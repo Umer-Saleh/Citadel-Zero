@@ -3,8 +3,9 @@ require('./setup');
 const { query, pool } = require('../../src/db');
 const { generateSalt, deriveKeys } = require('../../src/crypto');
 
-// Cheap KDF params for tests. We are testing logic, not cost.
-const FAST_KDF = { m: 8192, t: 1, p: 1 };
+// Must satisfy the server-side minimum enforced in routes/schemas.js.
+// Tests exercise the same floor production does.
+const FAST_KDF = { m: 19456, t: 2, p: 1 };
 
 async function resetDatabase() {
   await query('TRUNCATE vault_items, users RESTART IDENTITY CASCADE');
