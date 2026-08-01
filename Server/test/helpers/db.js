@@ -18,7 +18,7 @@ async function closeDatabase() {
 /** Build a valid signup payload plus the keys the client would keep. */
 async function makeSignupPayload(email = 'test@example.com', password = 'test-password-123') {
   const salt = generateSalt();
-  const { authHash, vaultKey } = await deriveKeys(password, salt, FAST_KDF);
+  const { authHash, kek } = await deriveKeys(password, salt, FAST_KDF);
 
   return {
     payload: {
@@ -27,7 +27,7 @@ async function makeSignupPayload(email = 'test@example.com', password = 'test-pa
       kdfSalt: salt.toString('base64'),
       kdfParams: FAST_KDF
     },
-    vaultKey,
+    kek,
     password
   };
 }

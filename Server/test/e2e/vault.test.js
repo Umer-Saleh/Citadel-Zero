@@ -11,16 +11,16 @@ const { encryptItem, decryptItem } = require('../../src/crypto');
 test.beforeEach(resetDatabase);
 test.after(closeDatabase);
 
-/** Sign up, log in, and return { token, vaultKey }. */
+/** Sign up, log in, and return { token, kek }. */
 async function createUserAndLogin(email = 'test@example.com') {
-  const { payload, vaultKey } = await makeSignupPayload(email);
+  const { payload, kek } = await makeSignupPayload(email);
   await request(app).post('/api/auth/signup').send(payload);
 
   const res = await request(app)
     .post('/api/auth/login')
     .send({ email: payload.email, authHash: payload.authHash });
 
-  return { token: res.body.token, vaultKey };
+  return { token: res.body.token, kek };
 }
 
 test('vault is empty for a new user', async () => {
@@ -35,13 +35,13 @@ test('vault is empty for a new user', async () => {
 });
 
 test('an item can be stored and retrieved', async () => {
-  const { token, vaultKey } = await createUserAndLogin();
+  const { token, kek } = await createUserAndLogin();
   const secret = { site: 'github.com', password: 'hunter2' };
 
   const created = await request(app)
     .post('/api/vault')
     .set('Authorization', `Bearer ${token}`)
-    .send(encryptItem(secret, vaultKey));
+    .send(encryptItem(secret, kek));
 
   assert.strictEqual(created.status, 201);
   assert.ok(created.body.id);
@@ -51,16 +51,16 @@ test('an item can be stored and retrieved', async () => {
     .set('Authorization', `Bearer ${token}`);
 
   assert.strictEqual(list.body.items.length, 1);
-  assert.deepStrictEqual(decryptItem(list.body.items[0], vaultKey), secret);
+  assert.deepStrictEqual(decryptItem(list.body.items[0], kek), secret);
 });
 
 test('the server never returns plaintext', async () => {
-  const { token, vaultKey } = await createUserAndLogin();
+  const { token, kek } = await createUserAndLogin();
 
   await request(app)
     .post('/api/vault')
     .set('Authorization', `Bearer ${token}`)
-    .send(encryptItem({ site: 'github.com', password: 'hunter2' }, vaultKey));
+    .send(encryptItem({ site: 'github.com', password: 'hunter2' }, kek));
 
   const list = await request(app)
     .get('/api/vault')
@@ -76,17 +76,17 @@ test('the server never returns plaintext', async () => {
 });
 
 test('an item can be updated', async () => {
-  const { token, vaultKey } = await createUserAndLogin();
+  const { token, kek } = await createUserAndLogin();
 
   const created = await request(app)
     .post('/api/vault')
     .set('Authorization', `Bearer ${token}`)
-    .send(encryptItem({ site: 'github.com', password: 'old' }, vaultKey));
+    .send(encryptItem({ site: 'github.com', password: 'old' }, kek));
 
   const updated = await request(app)
     .put(`/api/vault/${created.body.id}`)
     .set('Authorization', `Bearer ${token}`)
-    .send(encryptItem({ site: 'github.com', password: 'new' }, vaultKey));
+    .send(encryptItem({ site: 'github.com', password: 'new' }, kek));
 
   assert.strictEqual(updated.status, 200);
 
@@ -94,16 +94,16 @@ test('an item can be updated', async () => {
     .get('/api/vault')
     .set('Authorization', `Bearer ${token}`);
 
-  assert.strictEqual(decryptItem(list.body.items[0], vaultKey).password, 'new');
+  assert.strictEqual(decryptItem(list.body.items[0], kek).password, 'new');
 });
 
 test('an item can be deleted', async () => {
-  const { token, vaultKey } = await createUserAndLogin();
+  const { token, kek } = await createUserAndLogin();
 
   const created = await request(app)
     .post('/api/vault')
     .set('Authorization', `Bearer ${token}`)
-    .send(encryptItem({ site: 'github.com' }, vaultKey));
+    .send(encryptItem({ site: 'github.com' }, kek));
 
   const deleted = await request(app)
     .delete(`/api/vault/${created.body.id}`)
@@ -140,7 +140,7 @@ test('user A cannot read user B items', async () => {
   await request(app)
     .post('/api/vault')
     .set('Authorization', `Bearer ${bob.token}`)
-    .send(encryptItem({ site: 'secret.com' }, bob.vaultKey));
+    .send(encryptItem({ site: 'secret.com' }, bob.kek));
 
   const aliceView = await request(app)
     .get('/api/vault')
@@ -156,12 +156,12 @@ test('user A cannot modify user B items', async () => {
   const bobItem = await request(app)
     .post('/api/vault')
     .set('Authorization', `Bearer ${bob.token}`)
-    .send(encryptItem({ site: 'secret.com', password: 'bob-secret' }, bob.vaultKey));
+    .send(encryptItem({ site: 'secret.com', password: 'bob-secret' }, bob.kek));
 
   const attack = await request(app)
     .put(`/api/vault/${bobItem.body.id}`)
     .set('Authorization', `Bearer ${alice.token}`)
-    .send(encryptItem({ site: 'hacked.com' }, alice.vaultKey));
+    .send(encryptItem({ site: 'hacked.com' }, alice.kek));
 
   assert.strictEqual(attack.status, 404, 'expected 404, not 403 — 403 confirms the item exists');
 
@@ -170,7 +170,7 @@ test('user A cannot modify user B items', async () => {
     .get('/api/vault')
     .set('Authorization', `Bearer ${bob.token}`);
 
-  assert.strictEqual(decryptItem(bobView.body.items[0], bob.vaultKey).password, 'bob-secret');
+  assert.strictEqual(decryptItem(bobView.body.items[0], bob.kek).password, 'bob-secret');
 });
 
 test('user A cannot delete user B items', async () => {
@@ -180,7 +180,7 @@ test('user A cannot delete user B items', async () => {
   const bobItem = await request(app)
     .post('/api/vault')
     .set('Authorization', `Bearer ${bob.token}`)
-    .send(encryptItem({ site: 'secret.com' }, bob.vaultKey));
+    .send(encryptItem({ site: 'secret.com' }, bob.kek));
 
   const attack = await request(app)
     .delete(`/api/vault/${bobItem.body.id}`)
