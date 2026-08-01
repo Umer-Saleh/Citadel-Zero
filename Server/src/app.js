@@ -1,4 +1,4 @@
-require('dotenv').config();
+const config = require('./config');
 
 const express = require('express');
 const helmet = require('helmet');
@@ -20,8 +20,7 @@ app.use(express.json({ limit: '64kb' }));
 
 // Rate limiting is disabled in tests so the suite can exercise
 // auth endpoints freely. It stays on everywhere else.
-const rateLimitEnabled = process.env.RATE_LIMIT_ENABLED !== 'false'
-                      && process.env.NODE_ENV !== 'test';
+const rateLimitEnabled = config.rateLimitEnabled;
 
 const noLimit = (req, res, next) => next();
 
@@ -67,7 +66,7 @@ function requireAuth(req, res, next) {
   }
 
   try {
-    req.userId = jwt.verify(token, process.env.JWT_SECRET).sub;
+    req.userId = jwt.verify(token, config.JWT_SECRET).sub;
     next();
   } catch {
     return res.status(401).json({ error: 'INVALID_TOKEN' });
