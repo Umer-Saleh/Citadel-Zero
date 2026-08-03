@@ -3,6 +3,7 @@ require('../helpers/setup');
 const test = require('node:test');
 const assert = require('node:assert');
 const request = require('supertest');
+const { unwrapDEK } = require('../../src/crypto');
 
 const app = require('../../src/app');
 const { resetDatabase, closeDatabase, makeSignupPayload } = require('../helpers/db');
@@ -11,7 +12,7 @@ const { encryptItem, decryptItem } = require('../../src/crypto');
 test.beforeEach(resetDatabase);
 test.after(closeDatabase);
 
-/** Sign up, log in, and return { token, kek }. */
+/** Sign up, log in, and return { token, dek }. */
 async function createUserAndLogin(email = 'test@example.com') {
   const { payload, kek } = await makeSignupPayload(email);
   await request(app).post('/api/auth/signup').send(payload);
@@ -20,7 +21,10 @@ async function createUserAndLogin(email = 'test@example.com') {
     .post('/api/auth/login')
     .send({ email: payload.email, authHash: payload.authHash });
 
-  return { token: res.body.token, kek };
+  // The client unwraps the DEK returned by the server.
+  const dek = unwrapDEK(res.body.wrappedDek, kek);
+
+  return { token: res.body.token, dek };
 }
 
 test('vault is empty for a new user', async () => {
@@ -35,13 +39,13 @@ test('vault is empty for a new user', async () => {
 });
 
 test('an item can be stored and retrieved', async () => {
-  const { token, kek } = await createUserAndLogin();
+  const { token, dek } = await createUserAndLogin();
   const secret = { site: 'github.com', password: 'hunter2' };
 
   const created = await request(app)
     .post('/api/vault')
     .set('Authorization', `Bearer ${token}`)
-    .send(encryptItem(secret, kek));
+    .send(encryptItem(secret, dek));
 
   assert.strictEqual(created.status, 201);
   assert.ok(created.body.id);
@@ -51,16 +55,16 @@ test('an item can be stored and retrieved', async () => {
     .set('Authorization', `Bearer ${token}`);
 
   assert.strictEqual(list.body.items.length, 1);
-  assert.deepStrictEqual(decryptItem(list.body.items[0], kek), secret);
+  assert.deepStrictEqual(decryptItem(list.body.items[0], dek), secret);
 });
 
 test('the server never returns plaintext', async () => {
-  const { token, kek } = await createUserAndLogin();
+  const { token, dek } = await createUserAndLogin();
 
   await request(app)
     .post('/api/vault')
     .set('Authorization', `Bearer ${token}`)
-    .send(encryptItem({ site: 'github.com', password: 'hunter2' }, kek));
+    .send(encryptItem({ site: 'github.com', password: 'hunter2' }, dek));
 
   const list = await request(app)
     .get('/api/vault')
@@ -76,17 +80,17 @@ test('the server never returns plaintext', async () => {
 });
 
 test('an item can be updated', async () => {
-  const { token, kek } = await createUserAndLogin();
+  const { token, dek } = await createUserAndLogin();
 
   const created = await request(app)
     .post('/api/vault')
     .set('Authorization', `Bearer ${token}`)
-    .send(encryptItem({ site: 'github.com', password: 'old' }, kek));
+    .send(encryptItem({ site: 'github.com', password: 'old' }, dek));
 
   const updated = await request(app)
     .put(`/api/vault/${created.body.id}`)
     .set('Authorization', `Bearer ${token}`)
-    .send(encryptItem({ site: 'github.com', password: 'new' }, kek));
+    .send(encryptItem({ site: 'github.com', password: 'new' }, dek));
 
   assert.strictEqual(updated.status, 200);
 
@@ -94,16 +98,16 @@ test('an item can be updated', async () => {
     .get('/api/vault')
     .set('Authorization', `Bearer ${token}`);
 
-  assert.strictEqual(decryptItem(list.body.items[0], kek).password, 'new');
+  assert.strictEqual(decryptItem(list.body.items[0], dek).password, 'new');
 });
 
 test('an item can be deleted', async () => {
-  const { token, kek } = await createUserAndLogin();
+  const { token, dek } = await createUserAndLogin();
 
   const created = await request(app)
     .post('/api/vault')
     .set('Authorization', `Bearer ${token}`)
-    .send(encryptItem({ site: 'github.com' }, kek));
+    .send(encryptItem({ site: 'github.com' }, dek));
 
   const deleted = await request(app)
     .delete(`/api/vault/${created.body.id}`)
@@ -140,7 +144,7 @@ test('user A cannot read user B items', async () => {
   await request(app)
     .post('/api/vault')
     .set('Authorization', `Bearer ${bob.token}`)
-    .send(encryptItem({ site: 'secret.com' }, bob.kek));
+    .send(encryptItem({ site: 'secret.com' }, bob.dek));
 
   const aliceView = await request(app)
     .get('/api/vault')
@@ -156,12 +160,12 @@ test('user A cannot modify user B items', async () => {
   const bobItem = await request(app)
     .post('/api/vault')
     .set('Authorization', `Bearer ${bob.token}`)
-    .send(encryptItem({ site: 'secret.com', password: 'bob-secret' }, bob.kek));
+    .send(encryptItem({ site: 'secret.com', password: 'bob-secret' }, bob.dek));
 
   const attack = await request(app)
     .put(`/api/vault/${bobItem.body.id}`)
     .set('Authorization', `Bearer ${alice.token}`)
-    .send(encryptItem({ site: 'hacked.com' }, alice.kek));
+    .send(encryptItem({ site: 'hacked.com' }, alice.dek));
 
   assert.strictEqual(attack.status, 404, 'expected 404, not 403 — 403 confirms the item exists');
 
@@ -170,7 +174,7 @@ test('user A cannot modify user B items', async () => {
     .get('/api/vault')
     .set('Authorization', `Bearer ${bob.token}`);
 
-  assert.strictEqual(decryptItem(bobView.body.items[0], bob.kek).password, 'bob-secret');
+  assert.strictEqual(decryptItem(bobView.body.items[0], bob.dek).password, 'bob-secret');
 });
 
 test('user A cannot delete user B items', async () => {
@@ -180,7 +184,7 @@ test('user A cannot delete user B items', async () => {
   const bobItem = await request(app)
     .post('/api/vault')
     .set('Authorization', `Bearer ${bob.token}`)
-    .send(encryptItem({ site: 'secret.com' }, bob.kek));
+    .send(encryptItem({ site: 'secret.com' }, bob.dek));
 
   const attack = await request(app)
     .delete(`/api/vault/${bobItem.body.id}`)

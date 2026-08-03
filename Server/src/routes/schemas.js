@@ -17,11 +17,20 @@ const kdfParams = z.object({
   p: z.number().int().min(1).max(4)
 }).strict();
 
+// The DEK encrypted under the password-derived KEK. The server
+// stores these three values and can never unwrap them.
+const wrappedDekSchema = z.object({
+  ciphertext: base64(32),   // the DEK itself; the GCM tag is stored separately
+  nonce: base64(12),
+  authTag: base64(16)
+}).strict();
+
 const signupSchema = z.object({
   email: z.string().email().max(254),
   authHash: base64(32),
   kdfSalt: base64(16),
-  kdfParams
+  kdfParams,
+  wrappedDek: wrappedDekSchema
 }).strict();
 
 const loginSchema = z.object({
@@ -34,7 +43,7 @@ const kdfParamsQuerySchema = z.object({
 }).strict();
 
 // Ciphertext length is capped to bound how much a single item can
-// occupy. 64 KB of plaintext is far beyond any realistic entry.
+// occupy. This is far beyond any realistic vault entry.
 const vaultItemSchema = z.object({
   ciphertext: z.string().min(1).max(100_000),
   nonce: base64(12),
@@ -50,5 +59,6 @@ module.exports = {
   loginSchema,
   kdfParamsQuerySchema,
   vaultItemSchema,
-  uuidParamSchema
+  uuidParamSchema,
+  wrappedDekSchema
 };
