@@ -9,7 +9,8 @@
     "test": "node --test --test-concurrency=1 \"test/**/*.test.js\"",
     "test:cov": "c8 node --test --test-concurrency=1 \"test/**/*.test.js\"",
     "migrate": "node-pg-migrate -m migrations",
-    "migrate:test": "node scripts/migrate-test.js"
+    "migrate:test": "node scripts/migrate-test.js",
+    "vectors": "node scripts/generate-vectors.js"
   },
   "keywords": [],
   "author": "",
