@@ -19,6 +19,11 @@ function generateRecoveryKey() {
     bits += byte.toString(2).padStart(8, '0');
   }
 
+  // 128 bits does not divide evenly into 5-bit base32 characters.
+  // Pad to 130 so we get exactly 26 characters — a clean 6+6+6+4
+  // grouping with no stray single character to mistype.
+  bits = bits.padEnd(130, '0');
+
   let out = '';
   for (let i = 0; i + 5 <= bits.length; i += 5) {
     out += alphabet[parseInt(bits.slice(i, i + 5), 2)];
