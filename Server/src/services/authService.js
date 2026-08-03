@@ -10,10 +10,10 @@ const DUMMY_HASH = '$argon2id$v=19$m=65536,p=4,t=3$rm29g6kvVdhtbZxachGdMw$' + 'V
 
 const ACCESS_TOKEN_TTL = '15m';
 
-async function signup({ email, authHash, kdfSalt, kdfParams }) {
+async function signup({ email, authHash, kdfSalt, kdfParams, wrappedDek }) {
   try {
     const stored = await serverStoreAuth(authHash);
-    return await userRepo.create({ email, kdfSalt, kdfParams, authHash: stored });
+    return await userRepo.create({ email, kdfSalt, kdfParams, authHash: stored, wrappedDek });
   } catch (err) {
     if (err.code === '23505') {                     // unique_violation
       throw new AppError('EMAIL_TAKEN', 409, 'account already exists');
@@ -46,7 +46,15 @@ async function login({ email, authHash }) {
 
   const token = jwt.sign({ sub: user.id }, config.JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL });
 
-  return { token, userId: user.id, email: user.email };
+  return { 
+      token, 
+      userId: user.id, 
+      email: user.email, 
+      wrappedDek: {
+      ciphertext: user.wrapped_dek,
+      nonce: user.wrapped_dek_nonce,
+      authTag: user.wrapped_dek_tag
+    } };
 }
 
 module.exports = { signup, getKdfParams, login };

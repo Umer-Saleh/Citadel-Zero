@@ -1,7 +1,7 @@
 require('./setup');
 
 const { query, pool } = require('../../src/db');
-const { generateSalt, deriveKeys } = require('../../src/crypto');
+const { generateSalt, deriveKeys, generateDEK, wrapDEK, unwrapDEK} = require('../../src/crypto');
 
 // Must satisfy the server-side minimum enforced in routes/schemas.js.
 // Tests exercise the same floor production does.
@@ -20,13 +20,20 @@ async function makeSignupPayload(email = 'test@example.com', password = 'test-pa
   const salt = generateSalt();
   const { authHash, kek } = await deriveKeys(password, salt, FAST_KDF);
 
+  // The client generates a random DEK and wraps it under the KEK.
+  // Only the wrapper is ever sent to the server.
+  const dek = generateDEK();
+  const wrappedDek = wrapDEK(dek, kek);
+
   return {
     payload: {
       email,
       authHash: authHash.toString('base64'),
       kdfSalt: salt.toString('base64'),
-      kdfParams: FAST_KDF
+      kdfParams: FAST_KDF,
+      wrappedDek
     },
+    dek,
     kek,
     password
   };

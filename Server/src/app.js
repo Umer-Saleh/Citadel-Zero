@@ -61,10 +61,10 @@ app.get('/api/user/kdf-params',
   }));
 
 app.post('/api/auth/login', validate(loginSchema), wrap(async (req, res) => {
-  const { token } = await authService.login(req.body);
+  const { token, wrappedDek } = await authService.login(req.body);
 
   console.log(`[server] login success for ${req.body.email}`);
-  res.status(200).json({ ok: true, token });
+  res.status(200).json({ ok: true, token, wrappedDek });
 }));
 
 // ---------------------------------------------------------------
