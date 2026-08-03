@@ -30,7 +30,9 @@ const signupSchema = z.object({
   authHash: base64(32),
   kdfSalt: base64(16),
   kdfParams,
-  wrappedDek: wrappedDekSchema
+  wrappedDek: wrappedDekSchema,
+  recoverySalt: base64(16),
+  recoveryWrappedDek: wrappedDekSchema
 }).strict();
 
 const loginSchema = z.object({
@@ -62,6 +64,23 @@ const changePasswordSchema = z.object({
   newWrappedDek: wrappedDekSchema
 }).strict();
 
+const recoveryMaterialQuerySchema = z.object({
+  email: z.string().email().max(254)
+}).strict();
+
+// Recovery replaces the password-derived wrapper with a new one.
+// The client proves possession of the recovery key by successfully
+// unwrapping the DEK — the server never sees the recovery key itself.
+const recoverSchema = z.object({
+  email: z.string().email().max(254),
+  newAuthHash: base64(32),
+  newKdfSalt: base64(16),
+  newKdfParams: kdfParams,
+  newWrappedDek: wrappedDekSchema,
+  newRecoverySalt: base64(16),
+  newRecoveryWrappedDek: wrappedDekSchema
+}).strict();
+
 module.exports = {
   signupSchema,
   loginSchema,
@@ -69,5 +88,7 @@ module.exports = {
   vaultItemSchema,
   uuidParamSchema,
   wrappedDekSchema,
-  changePasswordSchema
+  changePasswordSchema,
+  recoveryMaterialQuerySchema,
+  recoverSchema
 };

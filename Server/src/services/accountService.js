@@ -38,4 +38,60 @@ async function changePassword(userId, {
   console.log(`[server] password changed for ${user.email}`);
 }
 
-module.exports = { changePassword };
+/** Public material the client needs before deriving the recovery KEK. */
+async function getRecoveryMaterial(email) {
+  const user = await userRepo.findRecoveryByEmail(email);
+
+  if (!user || !user.recovery_wrapped_dek) {
+    throw new AppError('NOT_FOUND', 404, 'not found');
+  }
+
+  return {
+    recoverySalt: user.recovery_salt,
+    recoveryWrappedDek: {
+      ciphertext: user.recovery_wrapped_dek,
+      nonce: user.recovery_wrapped_dek_nonce,
+      authTag: user.recovery_wrapped_dek_tag
+    }
+  };
+}
+
+/**
+ * Complete a recovery: replace the password-derived wrapper and issue
+ * a fresh recovery wrapper.
+ *
+ * Note what the server cannot verify here: it has no way to check that
+ * the client actually holds the recovery key. Possession is proved
+ * implicitly — only someone who unwrapped the real DEK can produce a
+ * new wrapper containing it. A client that guesses would simply lock
+ * itself out of its own vault, which is why this endpoint is heavily
+ * rate limited rather than authenticated.
+ */
+async function completeRecovery({
+  email, newAuthHash, newKdfSalt, newKdfParams,
+  newWrappedDek, newRecoverySalt, newRecoveryWrappedDek
+}) {
+  const user = await userRepo.findByEmail(email);
+
+  if (!user) {
+    throw new AppError('NOT_FOUND', 404, 'not found');
+  }
+
+  const stored = await serverStoreAuth(newAuthHash);
+
+  await userRepo.updateCredentials(user.id, {
+    authHash: stored,
+    kdfSalt: newKdfSalt,
+    kdfParams: newKdfParams,
+    wrappedDek: newWrappedDek
+  });
+
+  await userRepo.updateRecoveryWrapper(user.id, {
+    recoverySalt: newRecoverySalt,
+    recoveryWrappedDek: newRecoveryWrappedDek
+  });
+
+  console.log(`[server] recovery completed for ${email}`);
+}
+
+module.exports = { changePassword, getRecoveryMaterial, completeRecovery };

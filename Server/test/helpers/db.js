@@ -1,7 +1,11 @@
 require('./setup');
 
 const { query, pool } = require('../../src/db');
-const { generateSalt, deriveKeys, generateDEK, wrapDEK, unwrapDEK} = require('../../src/crypto');
+const {
+  generateSalt, deriveKeys, generateDEK, wrapDEK,
+  generateRecoveryKey, deriveRecoveryKek
+} = require('../../src/crypto');
+
 
 // Must satisfy the server-side minimum enforced in routes/schemas.js.
 // Tests exercise the same floor production does.
@@ -19,11 +23,16 @@ async function closeDatabase() {
 async function makeSignupPayload(email = 'test@example.com', password = 'test-password-123') {
   const salt = generateSalt();
   const { authHash, kek } = await deriveKeys(password, salt, FAST_KDF);
-
+  
   // The client generates a random DEK and wraps it under the KEK.
   // Only the wrapper is ever sent to the server.
   const dek = generateDEK();
-  const wrappedDek = wrapDEK(dek, kek);
+
+  // The same DEK, wrapped a second time under a key derived from an
+  // independent recovery key. Two doors, one vault.
+  const recoveryKey = generateRecoveryKey();
+  const recoverySalt = generateSalt();
+  const recoveryKek = deriveRecoveryKek(recoveryKey, recoverySalt);
 
   return {
     payload: {
@@ -31,10 +40,13 @@ async function makeSignupPayload(email = 'test@example.com', password = 'test-pa
       authHash: authHash.toString('base64'),
       kdfSalt: salt.toString('base64'),
       kdfParams: FAST_KDF,
-      wrappedDek
+      wrappedDek: wrapDEK(dek, kek),
+      recoverySalt: recoverySalt.toString('base64'),
+      recoveryWrappedDek: wrapDEK(dek, recoveryKek)
     },
     dek,
     kek,
+    recoveryKey,
     password
   };
 }

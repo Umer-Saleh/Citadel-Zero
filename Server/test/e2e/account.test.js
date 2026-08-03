@@ -7,7 +7,8 @@ const request = require('supertest');
 const app = require('../../src/app');
 const { resetDatabase, closeDatabase, makeSignupPayload, FAST_KDF } = require('../helpers/db');
 const {
-  generateSalt, deriveKeys, wrapDEK, unwrapDEK, encryptItem, decryptItem
+  generateSalt, deriveKeys, wrapDEK, unwrapDEK, encryptItem, decryptItem,
+  generateRecoveryKey, deriveRecoveryKek
 } = require('../../src/crypto');
 
 test.beforeEach(resetDatabase);
@@ -46,6 +47,42 @@ async function buildPasswordChange(dek, currentAuthHash, newPassword = NEW_PASSW
     newWrappedDek: wrapDEK(dek, newKek)      // the SAME dek, new wrapper
   };
 }
+
+// ---------- RECOVERY ----------
+
+/** Build the client-side half of a recovery, given the recovery key. */
+async function buildRecovery(email, recoveryKey, recoveryMaterial, newPassword) {
+  // Unwrap the DEK using the recovery key — this is the whole point.
+  const recoveryKek = deriveRecoveryKek(
+    recoveryKey,
+    Buffer.from(recoveryMaterial.recoverySalt, 'base64')
+  );
+  const dek = unwrapDEK(recoveryMaterial.recoveryWrappedDek, recoveryKek);
+
+  // Set up new credentials around the recovered DEK.
+  const newSalt = generateSalt();
+  const { authHash, kek } = await deriveKeys(newPassword, newSalt, FAST_KDF);
+
+  // Issue a fresh recovery kit too — the old one has been used.
+  const newRecoveryKey = generateRecoveryKey();
+  const newRecoverySalt = generateSalt();
+  const newRecoveryKek = deriveRecoveryKek(newRecoveryKey, newRecoverySalt);
+
+  return {
+    dek,
+    newRecoveryKey,
+    payload: {
+      email,
+      newAuthHash: authHash.toString('base64'),
+      newKdfSalt: newSalt.toString('base64'),
+      newKdfParams: FAST_KDF,
+      newWrappedDek: wrapDEK(dek, kek),
+      newRecoverySalt: newRecoverySalt.toString('base64'),
+      newRecoveryWrappedDek: wrapDEK(dek, newRecoveryKek)
+    }
+  };
+}
+
 
 // ---------- THE POINT ----------
 
@@ -202,4 +239,147 @@ test('one user cannot change another user password', async () => {
     .send({ email: 'bob@example.com', authHash: bobPayload.authHash });
 
   assert.strictEqual(bobLogin.status, 200);
+});
+
+test('the recovery key unwraps the same DEK as the password', async () => {
+  const { payload, dek, recoveryKey } = await makeSignupPayload(EMAIL, OLD_PASSWORD);
+  await request(app).post('/api/auth/signup').send(payload);
+
+  const material = await request(app)
+    .get('/api/account/recovery-material')
+    .query({ email: EMAIL });
+
+  assert.strictEqual(material.status, 200);
+
+  const recoveryKek = deriveRecoveryKek(
+    recoveryKey,
+    Buffer.from(material.body.recoverySalt, 'base64')
+  );
+
+  assert.deepStrictEqual(
+    unwrapDEK(material.body.recoveryWrappedDek, recoveryKek),
+    dek,
+    'recovery wrapper does not contain the same DEK'
+  );
+});
+
+test('recovery restores access to the vault', async () => {
+  const { payload, dek, recoveryKey } = await makeSignupPayload(EMAIL, OLD_PASSWORD);
+  await request(app).post('/api/auth/signup').send(payload);
+
+  // Store an item under the original password.
+  const login = await request(app)
+    .post('/api/auth/login')
+    .send({ email: EMAIL, authHash: payload.authHash });
+
+  const secret = { site: 'github.com', password: 'hunter2' };
+  await request(app)
+    .post('/api/vault')
+    .set('Authorization', `Bearer ${login.body.token}`)
+    .send(encryptItem(secret, dek));
+
+  // The password is now forgotten. Recover with the kit.
+  const material = await request(app)
+    .get('/api/account/recovery-material')
+    .query({ email: EMAIL });
+
+  const recovery = await buildRecovery(EMAIL, recoveryKey, material.body, NEW_PASSWORD);
+
+  const res = await request(app)
+    .post('/api/account/recover')
+    .send(recovery.payload);
+
+  assert.strictEqual(res.status, 200);
+
+  // Log in with the new password and read the vault.
+  const params = await request(app)
+    .get('/api/user/kdf-params')
+    .query({ email: EMAIL });
+
+  const { authHash, kek } = await deriveKeys(
+    NEW_PASSWORD,
+    Buffer.from(params.body.kdfSalt, 'base64'),
+    params.body.kdfParams
+  );
+
+  const newLogin = await request(app)
+    .post('/api/auth/login')
+    .send({ email: EMAIL, authHash: authHash.toString('base64') });
+
+  assert.strictEqual(newLogin.status, 200);
+
+  const recoveredDek = unwrapDEK(newLogin.body.wrappedDek, kek);
+  assert.deepStrictEqual(recoveredDek, dek, 'DEK changed during recovery');
+
+  const vault = await request(app)
+    .get('/api/vault')
+    .set('Authorization', `Bearer ${newLogin.body.token}`);
+
+  assert.deepStrictEqual(decryptItem(vault.body.items[0], recoveredDek), secret);
+});
+
+test('the old password stops working after recovery', async () => {
+  const { payload, recoveryKey } = await makeSignupPayload(EMAIL, OLD_PASSWORD);
+  await request(app).post('/api/auth/signup').send(payload);
+
+  const material = await request(app)
+    .get('/api/account/recovery-material')
+    .query({ email: EMAIL });
+
+  const recovery = await buildRecovery(EMAIL, recoveryKey, material.body, NEW_PASSWORD);
+  await request(app).post('/api/account/recover').send(recovery.payload);
+
+  const res = await request(app)
+    .post('/api/auth/login')
+    .send({ email: EMAIL, authHash: payload.authHash });
+
+  assert.strictEqual(res.status, 401);
+});
+
+test('the old recovery key stops working after recovery', async () => {
+  const { payload, recoveryKey } = await makeSignupPayload(EMAIL, OLD_PASSWORD);
+  await request(app).post('/api/auth/signup').send(payload);
+
+  const material = await request(app)
+    .get('/api/account/recovery-material')
+    .query({ email: EMAIL });
+
+  const recovery = await buildRecovery(EMAIL, recoveryKey, material.body, NEW_PASSWORD);
+  await request(app).post('/api/account/recover').send(recovery.payload);
+
+  // The wrapper was replaced, so the old key can no longer unwrap it.
+  const after = await request(app)
+    .get('/api/account/recovery-material')
+    .query({ email: EMAIL });
+
+  const oldKek = deriveRecoveryKek(
+    recoveryKey,
+    Buffer.from(after.body.recoverySalt, 'base64')
+  );
+
+  assert.throws(() => unwrapDEK(after.body.recoveryWrappedDek, oldKek));
+});
+
+test('a wrong recovery key cannot unwrap the DEK', async () => {
+  const { payload } = await makeSignupPayload(EMAIL, OLD_PASSWORD);
+  await request(app).post('/api/auth/signup').send(payload);
+
+  const material = await request(app)
+    .get('/api/account/recovery-material')
+    .query({ email: EMAIL });
+
+  const wrongKek = deriveRecoveryKek(
+    generateRecoveryKey(),
+    Buffer.from(material.body.recoverySalt, 'base64')
+  );
+
+  assert.throws(() => unwrapDEK(material.body.recoveryWrappedDek, wrongKek));
+});
+
+test('recovery material is not available for an unknown account', async () => {
+  const res = await request(app)
+    .get('/api/account/recovery-material')
+    .query({ email: 'nobody@nowhere.com' });
+
+  assert.strictEqual(res.status, 404);
 });
