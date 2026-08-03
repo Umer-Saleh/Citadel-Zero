@@ -3,6 +3,7 @@ const config = require('../config');
 const userRepo = require('../repositories/userRepo');
 const { serverStoreAuth, serverVerifyAuth } = require('../auth');
 const { AppError } = require('../errors/AppError');
+const { needsKdfUpgrade, DEFAULT_KDF_PARAMS } = require('../crypto');
 
 // A real Argon2 hash used when the account does not exist, so the
 // failure path costs the same as a genuine wrong-password attempt.
@@ -50,15 +51,20 @@ async function login({ email, authHash }) {
 
   const token = jwt.sign({ sub: user.id }, config.JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL });
 
-  return { 
-      token, 
-      userId: user.id, 
-      email: user.email, 
-      wrappedDek: {
+  return {
+    token,
+    userId: user.id,
+    email: user.email,
+    wrappedDek: {
       ciphertext: user.wrapped_dek,
       nonce: user.wrapped_dek_nonce,
       authTag: user.wrapped_dek_tag
-    } };
+    },
+    // The client cannot know its stored parameters are stale — only
+    // the server knows the current defaults.
+    kdfUpgradeAvailable: needsKdfUpgrade(user.kdf_params),
+    targetKdfParams: DEFAULT_KDF_PARAMS
+  };
 }
 
 module.exports = { signup, getKdfParams, login };

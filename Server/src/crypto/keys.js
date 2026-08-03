@@ -42,4 +42,17 @@ async function deriveKeys(masterPassword, salt, params = DEFAULT_KDF_PARAMS) {
   };
 }
 
-module.exports = { DEFAULT_KDF_PARAMS, KEY_LENGTH, generateSalt, hkdf, deriveKeys };
+/**
+ * True if the stored parameters are weaker than the target on any
+ * dimension.
+ *
+ * Deliberately conservative: Argon2 cost is not a single comparable
+ * number, so {m: 32768, t: 3} versus {m: 131072, t: 2} has no
+ * obvious ordering without benchmarking. Requiring at-least-equal on
+ * every axis avoids accepting a trade that might be a net weakening.
+ */
+function needsKdfUpgrade(params, target = DEFAULT_KDF_PARAMS) {
+  return params.m < target.m || params.t < target.t;
+}
+
+module.exports = { DEFAULT_KDF_PARAMS, KEY_LENGTH, generateSalt, hkdf, deriveKeys, needsKdfUpgrade };

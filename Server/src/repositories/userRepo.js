@@ -79,5 +79,24 @@ async function findRecoveryByEmail(email) {
   return rows[0] || null;
 }
 
+/**
+ * Raise an account's KDF parameters. Same shape as updateCredentials,
+ * but semantically distinct: the password is unchanged, only the cost
+ * of deriving from it.
+ */
+async function upgradeKdf(userId, { authHash, kdfSalt, kdfParams, wrappedDek }) {
+  return withTransaction(async (client) => {
+    const { rowCount } = await client.query(
+      `UPDATE users
+       SET auth_hash = $1, kdf_salt = $2, kdf_params = $3,
+           wrapped_dek = $4, wrapped_dek_nonce = $5, wrapped_dek_tag = $6
+       WHERE id = $7`,
+      [authHash, kdfSalt, kdfParams,
+       wrappedDek.ciphertext, wrappedDek.nonce, wrappedDek.authTag,
+       userId]
+    );
+    return rowCount > 0;
+  });
+}
 
-module.exports = { findByEmail, findById, create, updateCredentials, updateRecoveryWrapper, findRecoveryByEmail };
+module.exports = { findByEmail, findById, create, updateCredentials, updateRecoveryWrapper, findRecoveryByEmail, upgradeKdf };

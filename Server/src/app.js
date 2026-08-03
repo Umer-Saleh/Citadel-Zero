@@ -10,15 +10,12 @@ const { authLimiter, apiLimiter } = require('./middleware/rateLimit');
 const { validate } = require('./middleware/validate');
 const {
   signupSchema, loginSchema, kdfParamsQuerySchema,
-  vaultItemSchema, uuidParamSchema
+  vaultItemSchema, uuidParamSchema, upgradeKdfSchema, wrappedDekSchema, changePasswordSchema,
+  recoveryMaterialQuerySchema, recoverSchema
 } = require('./routes/schemas');
 
 const accountService = require('./services/accountService');
-const { changePasswordSchema } = require('./routes/schemas');
-
-const { recoveryMaterialQuerySchema, recoverSchema } = require('./routes/schemas');
-
-
+  
 const app = express();
 
 // ---------------------------------------------------------------
@@ -36,7 +33,7 @@ app.use('/api/user/kdf-params', authLimiter);   // also an enumeration oracle
 app.use('/api/account/password', authLimiter);
 app.use('/api/account/recovery-material', authLimiter);
 app.use('/api/account/recover', authLimiter);
-
+app.use('/api/account/kdf-upgrade', authLimiter);
 // ---------------------------------------------------------------
 // ASYNC WRAPPER
 // Forwards rejected promises to the error handler. Without this,
@@ -70,10 +67,11 @@ app.get('/api/user/kdf-params',
   }));
 
 app.post('/api/auth/login', validate(loginSchema), wrap(async (req, res) => {
-  const { token, wrappedDek } = await authService.login(req.body);
+  const { token, wrappedDek, kdfUpgradeAvailable, targetKdfParams } =
+    await authService.login(req.body);
 
   console.log(`[server] login success for ${req.body.email}`);
-  res.status(200).json({ ok: true, token, wrappedDek });
+  res.status(200).json({ ok: true, token, wrappedDek, kdfUpgradeAvailable, targetKdfParams });
 }));
 
 // ---------------------------------------------------------------
@@ -139,6 +137,14 @@ app.post('/api/account/recover',
   validate(recoverSchema),
   wrap(async (req, res) => {
     await accountService.completeRecovery(req.body);
+    res.status(200).json({ ok: true });
+  }));
+
+app.post('/api/account/kdf-upgrade',
+  requireAuth,
+  validate(upgradeKdfSchema),
+  wrap(async (req, res) => {
+    await accountService.upgradeKdf(req.userId, req.body);
     res.status(200).json({ ok: true });
   }));
 

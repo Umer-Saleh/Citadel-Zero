@@ -81,6 +81,14 @@ const recoverSchema = z.object({
   newRecoveryWrappedDek: wrappedDekSchema
 }).strict();
 
+const upgradeKdfSchema = z.object({
+  currentAuthHash: base64(32),
+  newAuthHash: base64(32),
+  newKdfSalt: base64(16),
+  newKdfParams: kdfParams,
+  newWrappedDek: wrappedDekSchema
+}).strict();
+
 module.exports = {
   signupSchema,
   loginSchema,
@@ -90,5 +98,6 @@ module.exports = {
   wrappedDekSchema,
   changePasswordSchema,
   recoveryMaterialQuerySchema,
-  recoverSchema
+  recoverSchema,
+  upgradeKdfSchema
 };
