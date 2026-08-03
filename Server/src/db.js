@@ -8,4 +8,24 @@ async function query(text, params) {
   return pool.query(text, params);
 }
 
-module.exports = { query, pool };
+
+//Run a set of queries in a transaction. Commits on success,
+//rolls back on any error.
+
+async function withTransaction(fn) {
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+    const result = await fn(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();       // always return the connection to the pool
+  }
+}
+
+module.exports = { query, pool, withTransaction };

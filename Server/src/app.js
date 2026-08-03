@@ -13,6 +13,9 @@ const {
   vaultItemSchema, uuidParamSchema
 } = require('./routes/schemas');
 
+const accountService = require('./services/accountService');
+const { changePasswordSchema } = require('./routes/schemas');
+
 const app = express();
 
 // ---------------------------------------------------------------
@@ -27,6 +30,7 @@ app.use('/api/', apiLimiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/signup', authLimiter);
 app.use('/api/user/kdf-params', authLimiter);   // also an enumeration oracle
+app.use('/api/account/password', authLimiter);
 
 // ---------------------------------------------------------------
 // ASYNC WRAPPER
@@ -97,6 +101,14 @@ app.delete('/api/vault/:id',
   validate(uuidParamSchema, 'params'),
   wrap(async (req, res) => {
     await vaultService.remove(req.userId, req.params.id);
+    res.status(200).json({ ok: true });
+  }));
+
+app.post('/api/account/password',
+  requireAuth,
+  validate(changePasswordSchema),
+  wrap(async (req, res) => {
+    await accountService.changePassword(req.userId, req.body);
     res.status(200).json({ ok: true });
   }));
 

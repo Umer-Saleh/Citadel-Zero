@@ -54,11 +54,20 @@ const uuidParamSchema = z.object({
   id: z.string().uuid()
 });
 
+const changePasswordSchema = z.object({
+  currentAuthHash: base64(32),
+  newAuthHash: base64(32),
+  newKdfSalt: base64(16),
+  newKdfParams: kdfParams,
+  newWrappedDek: wrappedDekSchema
+}).strict();
+
 module.exports = {
   signupSchema,
   loginSchema,
   kdfParamsQuerySchema,
   vaultItemSchema,
   uuidParamSchema,
-  wrappedDekSchema
+  wrappedDekSchema,
+  changePasswordSchema
 };
