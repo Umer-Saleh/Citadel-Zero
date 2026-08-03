@@ -10,12 +10,16 @@ const DUMMY_HASH = '$argon2id$v=19$m=65536,p=4,t=3$rm29g6kvVdhtbZxachGdMw$' + 'V
 
 const ACCESS_TOKEN_TTL = '15m';
 
-async function signup({ email, authHash, kdfSalt, kdfParams, wrappedDek }) {
+async function signup({ email, authHash, kdfSalt, kdfParams, wrappedDek,
+                        recoverySalt, recoveryWrappedDek }) {
   try {
     const stored = await serverStoreAuth(authHash);
-    return await userRepo.create({ email, kdfSalt, kdfParams, authHash: stored, wrappedDek });
+    return await userRepo.create({
+      email, kdfSalt, kdfParams, authHash: stored, wrappedDek,
+      recoverySalt, recoveryWrappedDek
+    });
   } catch (err) {
-    if (err.code === '23505') {                     // unique_violation
+    if (err.code === '23505') {
       throw new AppError('EMAIL_TAKEN', 409, 'account already exists');
     }
     throw err;

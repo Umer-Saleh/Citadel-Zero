@@ -16,6 +16,9 @@ const {
 const accountService = require('./services/accountService');
 const { changePasswordSchema } = require('./routes/schemas');
 
+const { recoveryMaterialQuerySchema, recoverSchema } = require('./routes/schemas');
+
+
 const app = express();
 
 // ---------------------------------------------------------------
@@ -31,6 +34,8 @@ app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/signup', authLimiter);
 app.use('/api/user/kdf-params', authLimiter);   // also an enumeration oracle
 app.use('/api/account/password', authLimiter);
+app.use('/api/account/recovery-material', authLimiter);
+app.use('/api/account/recover', authLimiter);
 
 // ---------------------------------------------------------------
 // ASYNC WRAPPER
@@ -104,11 +109,36 @@ app.delete('/api/vault/:id',
     res.status(200).json({ ok: true });
   }));
 
+// ---------------------------------------------------------------
+// ACCOUNT ROUTES
+// Password change is authenticated and re-wraps the DEK under a new
+// KEK. Recovery is deliberately NOT authenticated: the user has
+// forgotten their password and cannot log in. Possession of the
+// recovery key is proved implicitly, since only a client that
+// unwrapped the real DEK can produce a valid new wrapper — someone
+// without it can lock the account out but learns nothing.
+// ---------------------------------------------------------------
+
 app.post('/api/account/password',
   requireAuth,
   validate(changePasswordSchema),
   wrap(async (req, res) => {
     await accountService.changePassword(req.userId, req.body);
+    res.status(200).json({ ok: true });
+  }));
+
+app.get('/api/account/recovery-material',
+  validate(recoveryMaterialQuerySchema, 'query'),
+  wrap(async (req, res) => {
+    res.status(200).json(
+      await accountService.getRecoveryMaterial(req.validated.query.email)
+    );
+  }));
+
+app.post('/api/account/recover',
+  validate(recoverSchema),
+  wrap(async (req, res) => {
+    await accountService.completeRecovery(req.body);
     res.status(200).json({ ok: true });
   }));
 
