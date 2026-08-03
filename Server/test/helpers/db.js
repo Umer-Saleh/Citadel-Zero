@@ -20,9 +20,9 @@ async function closeDatabase() {
 }
 
 /** Build a valid signup payload plus the keys the client would keep. */
-async function makeSignupPayload(email = 'test@example.com', password = 'test-password-123') {
+async function makeSignupPayload(email = 'test@example.com', password = 'test-password-123', kdfParams = FAST_KDF) {
   const salt = generateSalt();
-  const { authHash, kek } = await deriveKeys(password, salt, FAST_KDF);
+  const { authHash, kek } = await deriveKeys(password, salt, kdfParams);
   
   // The client generates a random DEK and wraps it under the KEK.
   // Only the wrapper is ever sent to the server.
@@ -39,7 +39,7 @@ async function makeSignupPayload(email = 'test@example.com', password = 'test-pa
       email,
       authHash: authHash.toString('base64'),
       kdfSalt: salt.toString('base64'),
-      kdfParams: FAST_KDF,
+      kdfParams,
       wrappedDek: wrapDEK(dek, kek),
       recoverySalt: recoverySalt.toString('base64'),
       recoveryWrappedDek: wrapDEK(dek, recoveryKek)

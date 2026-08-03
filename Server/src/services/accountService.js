@@ -1,6 +1,7 @@
 const userRepo = require('../repositories/userRepo');
 const { serverStoreAuth, serverVerifyAuth } = require('../auth');
 const { AppError } = require('../errors/AppError');
+const { needsKdfUpgrade, DEFAULT_KDF_PARAMS } = require('../crypto');
 
 /**
  * Change the master password.
@@ -94,4 +95,48 @@ async function completeRecovery({
   console.log(`[server] recovery completed for ${email}`);
 }
 
-module.exports = { changePassword, getRecoveryMaterial, completeRecovery };
+
+/**
+ * Re-derive credentials under stronger KDF parameters.
+ *
+ * The client does the work: it re-derives the KEK from the same master
+ * password using the new parameters, and re-wraps the same DEK. The
+ * password is unchanged, so no user action is required.
+ *
+ * Login is the only moment this can happen, because it is the only
+ * point at which the client holds the master password.
+ */
+async function upgradeKdf(userId, {
+  currentAuthHash, newAuthHash, newKdfSalt, newKdfParams, newWrappedDek
+}) {
+  const user = await userRepo.findById(userId);
+
+  if (!user) {
+    throw new AppError('NOT_FOUND', 404, 'not found');
+  }
+
+  const valid = await serverVerifyAuth(currentAuthHash, user.auth_hash).catch(() => false);
+
+  if (!valid) {
+    throw new AppError('INVALID_CREDENTIALS', 401, 'invalid credentials');
+  }
+
+  // Refuse a downgrade. The client proposes parameters; the server
+  // must not let a malicious one weaken an existing account.
+  if (needsKdfUpgrade(newKdfParams)) {
+    throw new AppError('WEAK_KDF_PARAMS', 400, 'proposed parameters are below current defaults');
+  }
+
+  const stored = await serverStoreAuth(newAuthHash);
+
+  await userRepo.upgradeKdf(userId, {
+    authHash: stored,
+    kdfSalt: newKdfSalt,
+    kdfParams: newKdfParams,
+    wrappedDek: newWrappedDek
+  });
+
+  console.log(`[server] KDF upgraded for ${user.email}`);
+}
+
+module.exports = { changePassword, getRecoveryMaterial, completeRecovery, upgradeKdf };
