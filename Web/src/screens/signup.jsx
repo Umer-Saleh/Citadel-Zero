@@ -29,7 +29,7 @@ export function Signup({ onComplete, onGoLogin }) {
     setBusy(true);
     try {
       const { recoveryKey } = await signup(email, pw);
-      onComplete(recoveryKey);       // hand the once-only key to the recovery screen
+      onComplete(recoveryKey, email);       
     } catch (e) {
       setError(
         e.code === 'EMAIL_TAKEN' ? 'An account with this email already exists.'
