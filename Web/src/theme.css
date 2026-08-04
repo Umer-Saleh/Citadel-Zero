@@ -1,0 +1,56 @@
+:root {
+  --bg: #111310;
+  --surface: #1A1E17;
+  --raised: #232820;
+  --green: #7CB863;
+  --green-deep: #588E42;
+  --on-green: #12200C;
+  --amber: #D9A84F;
+  --red: #D25A57;
+  --text: #F0E9D6;
+  --muted: #9D9C82;
+  --edge: #353A2A;
+  --shadow: rgba(0, 0, 0, .4);
+  --glow: rgba(124, 184, 99, .18);
+  --grid: rgba(240, 233, 214, .03);
+  --radius: 3px;
+}
+
+body.light {
+  --bg: #F3EDDA;
+  --surface: #FBF6E9;
+  --raised: #FFFEF7;
+  --green: #357E29;
+  --green-deep: #28621F;
+  --on-green: #F8F3E2;
+  --amber: #C67C16;
+  --red: #C0353A;
+  --text: #26261B;
+  --muted: #726B52;
+  --edge: #D6C69C;
+  --shadow: rgba(90, 80, 51, .2);
+  --glow: rgba(53, 126, 41, .22);
+  --grid: rgba(38, 38, 27, .045);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Geist, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  transition: background .3s, color .3s;
+}
+
+::selection { background: var(--green); color: var(--on-green); }
+
+@keyframes blinkCur { 0%, 49% { opacity: 1 } 50%, 100% { opacity: 0 } }
+@keyframes riseIn { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: translateY(0) } }
+@keyframes stampIn { 0% { transform: scale(1.25); opacity: 0 } 55% { transform: scale(.97); opacity: 1 } 100% { transform: scale(1) } }
+@keyframes kglow { 0%, 100% { opacity: 1 } 50% { opacity: .5 } }
+@keyframes pixBlink { 0%, 91% { opacity: 0 } 92%, 96% { opacity: 1 } 97%, 100% { opacity: 0 } }
+@keyframes sprA { 0%, 49% { opacity: 1 } 50%, 100% { opacity: 0 } }
+@keyframes sprB { 0%, 49% { opacity: 0 } 50%, 100% { opacity: 1 } }
+@keyframes gridDrift { from { background-position: 0 0 } to { background-position: 48px 96px } }
