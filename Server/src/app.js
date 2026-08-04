@@ -14,6 +14,9 @@ const {
   recoveryMaterialQuerySchema, recoverSchema
 } = require('./routes/schemas');
 
+const cors = require('cors');
+const config = require('./config');
+
 const accountService = require('./services/accountService');
   
 const app = express();
@@ -23,6 +26,11 @@ const app = express();
 // Order matters: security headers first, then body parsing,
 // then rate limiting before any route work happens.
 // ---------------------------------------------------------------
+app.use(cors({
+  origin: config.CORS_ORIGIN,
+  credentials: true
+}));
+
 app.use(helmet());
 app.use(express.json({ limit: '64kb' }));
 
