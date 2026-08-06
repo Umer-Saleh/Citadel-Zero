@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Signup } from './screens/Signup';
 import { RecoveryKit } from './screens/RecoveryKit';
 import { Unlock } from './screens/Unlock';
+import { AppShell } from './components/AppShell';
+import { Vault } from './screens/Vault';
 
 export default function App() {
   const [screen, setScreen] = useState('unlock');   // start at unlock
@@ -41,10 +43,12 @@ export default function App() {
 
   if (screen === 'vault') {
     return (
-      <div style={{ padding: 40, color: 'var(--text)' }}>
-        <h1>🔓 Vault unlocked</h1>
-        <p style={{ color: 'var(--muted)' }}>The vault screen is next. Your DEK is in memory.</p>
-      </div>
+      <AppShell>
+        <Vault
+          onSelectItem={(id) => console.log('open item', id)}
+          onAddItem={() => console.log('add item')}
+        />
+      </AppShell>
     );
   }
 
