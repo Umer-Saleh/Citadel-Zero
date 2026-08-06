@@ -1,14 +1,16 @@
 import { useState } from 'react';
+import { AppShell } from './components/AppShell';
 import { Signup } from './screens/Signup';
 import { RecoveryKit } from './screens/RecoveryKit';
 import { Unlock } from './screens/Unlock';
-import { AppShell } from './components/AppShell';
 import { Vault } from './screens/Vault';
+import { ItemDetail } from './screens/ItemDetail';
 
 export default function App() {
   const [screen, setScreen] = useState('unlock');   // start at unlock
   const [recoveryKey, setRecoveryKey] = useState(null);
   const [email, setEmail] = useState('');
+  const [editingId, setEditingId] = useState(undefined);   // undefined = not editing, null = new, id = edit
 
   if (screen === 'signup') {
     return (
@@ -42,11 +44,18 @@ export default function App() {
   }
 
   if (screen === 'vault') {
+    if (editingId !== undefined) {
+      return (
+        <AppShell>
+          <ItemDetail itemId={editingId} onDone={() => setEditingId(undefined)} />
+        </AppShell>
+      );
+    }
     return (
       <AppShell>
         <Vault
-          onSelectItem={(id) => console.log('open item', id)}
-          onAddItem={() => console.log('add item')}
+          onSelectItem={(id) => setEditingId(id)}
+          onAddItem={() => setEditingId(null)}
         />
       </AppShell>
     );
