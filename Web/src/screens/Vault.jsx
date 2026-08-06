@@ -3,7 +3,7 @@ import { useVault } from '../context/VaultContext';
 import { Button, Input } from '../components/ui';
 import { Paladin } from '../components/Paladin';
 
-export function Vault({ onSelectItem, onAddItem }) {
+export function Vault({ onSelectItem, onAddItem, onOpenGenerator }) {
   const { items, loadItems } = useVault();
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -31,6 +31,9 @@ export function Vault({ onSelectItem, onAddItem }) {
             mono
           />
         </div>
+        {/* Temporary — proper nav comes in the polish pass. Requires a
+            new onOpenGenerator prop, wired in step 5 below. */}
+        <Button variant="secondary" onClick={onOpenGenerator}>⚒ FORGE</Button>
         <Button onClick={onAddItem}>+ ADD</Button>
       </div>
 
