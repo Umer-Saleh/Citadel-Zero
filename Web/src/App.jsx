@@ -5,6 +5,7 @@ import { RecoveryKit } from './screens/RecoveryKit';
 import { Unlock } from './screens/Unlock';
 import { Vault } from './screens/Vault';
 import { ItemDetail } from './screens/ItemDetail';
+import { Generator } from './screens/Generator';  
 import { AppShell } from './components/AppShell';
 
 /**
@@ -44,11 +45,34 @@ export default function App() {
   //   <id>      -> editing an existing entry
   const [editingId, setEditingId] = useState(undefined);
 
+  // Which top-level view we're on inside the unlocked app.
+  //   'vault'     -> the vault list / item editor
+  //   'generator' -> the password forge
+  const [view, setView] = useState('vault');
+
   // ---------------------------------------------------------------
   // UNLOCKED — the real application.
   // This branch is reachable ONLY while the DEK is in memory.
   // ---------------------------------------------------------------
+// ---------------------------------------------------------------
+  // UNLOCKED — the real application.
+  // Reachable ONLY while the DEK is in memory.
+  // ---------------------------------------------------------------
   if (isUnlocked) {
+
+    // The password forge is a standalone view within the unlocked app.
+    // onBack returns to the vault; onUse isn't passed here because this
+    // is the standalone entry point (not launched from an item form).
+    if (view === 'generator') {
+      return (
+        <AppShell>
+          <Generator onBack={() => setView('vault')} />
+        </AppShell>
+      );
+    }
+
+    // Default unlocked view: the vault list, or the item editor when
+    // an entry is open.
     return (
       <AppShell>
         {editingId !== undefined ? (
@@ -60,6 +84,7 @@ export default function App() {
           <Vault
             onSelectItem={setEditingId}              // open an entry to edit
             onAddItem={() => setEditingId(null)}     // open a blank entry
+            onOpenGenerator={() => setView('generator')} // open the password forge
           />
         )}
       </AppShell>
