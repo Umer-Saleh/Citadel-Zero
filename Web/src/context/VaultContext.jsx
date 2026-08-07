@@ -3,6 +3,7 @@ import * as auth from '../api/auth';
 import { api, clearToken } from '../api/client';
 import { encryptItem, decryptItem } from '../crypto';
 
+
 const VaultContext = createContext(null);
 
 export function useVault() {
@@ -20,7 +21,9 @@ export function VaultProvider({ children }) {
   const [dek, setDek] = useState(null);
   const [items, setItems] = useState([]);
   const [locked, setLocked] = useState(false);
-
+  const [email, setEmail] = useState(null);
+  const [kdfUpgradeAvailable, setKdfUpgradeAvailable] = useState(false);
+  
   const isUnlocked = dek !== null;
 
   const idleTimer = useRef(null);
@@ -35,16 +38,21 @@ export function VaultProvider({ children }) {
       return null;
     });
     setItems([]);
+    setemail(null);
+    setKdfUpgradeAvailable(false);
     setLocked(true);
     clearToken();
   }, []);
 
-  const login = useCallback(async (email, password) => {
-    const { dek: newDek, kdfUpgradeAvailable, targetKdfParams } =
-      await auth.login(email, password);
+
+  const login = useCallback(async (loginEmail, password) => {
+    const { dek: newDek, kdfUpgradeAvailable: upgrade, targetKdfParams } =
+      await auth.login(loginEmail, password);
     setDek(newDek);
+    setEmail(loginEmail);                    // remember who's unlocked
+    setKdfUpgradeAvailable(!!upgrade);       // for the settings "level up" prompt
     setLocked(false);
-    return { kdfUpgradeAvailable, targetKdfParams };
+    return { kdfUpgradeAvailable: upgrade, targetKdfParams };
   }, []);
 
   const signup = useCallback((email, password) => auth.signup(email, password), []);
@@ -81,6 +89,19 @@ export function VaultProvider({ children }) {
     setItems(prev => prev.filter(it => it.id !== id));
   }, []);
 
+    // Change the master password, then lock: the server revokes all
+  // sessions, so the user must sign in again with the new password.
+  const changePassword = useCallback(async (email, currentPassword, newPassword) => {
+    await auth.changePassword(email, currentPassword, newPassword, dek);
+    lock();   // force re-login with the new password
+  }, [dek, lock]);
+
+  // Upgrade KDF params in place. The session stays valid — the DEK is
+  // unchanged, only its wrapper and the account's params moved.
+  const upgradeKdf = useCallback(async (email, password) => {
+    await auth.upgradeKdf(email, password, dek);
+  }, [dek]);
+
   // Idle auto-lock: any activity resets the timer; silence locks the vault.
   useEffect(() => {
     if (!isUnlocked) return;
@@ -102,8 +123,10 @@ export function VaultProvider({ children }) {
 
   const value = {
     isUnlocked, locked, items,
+    email, kdfUpgradeAvailable,
     signup, login, lock, loadItems,
-    addItem, updateItem, deleteItem
+    addItem, updateItem, deleteItem,
+    changePassword, upgradeKdf
   };
 
   return <VaultContext.Provider value={value}>{children}</VaultContext.Provider>;
