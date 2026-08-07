@@ -3,7 +3,7 @@ import { useTheme } from '../context/ThemeContext';
 import { Paladin } from './Paladin';
 import { Meter } from './ui';
 
-export function AppShell({ children, health = 10, pixPose = 'idle' }) {
+export function AppShell({ children, health = 10, pixPose = 'idle', onOpenSettings }) {
   const { lock } = useVault();
   const { theme, toggle } = useTheme();
 
@@ -53,6 +53,21 @@ export function AppShell({ children, health = 10, pixPose = 'idle' }) {
               transition: 'transform .2s, background .2s'
             }} />
           </button>
+
+          {/* settings gear — before the LOCK button */}
+          {onOpenSettings && (
+            <button
+              onClick={onOpenSettings}
+              title="Settings"
+              style={{
+                width: 40, height: 40, border: '1px solid var(--edge)', borderRadius: 'var(--radius)',
+                background: 'transparent', color: 'var(--text)', cursor: 'pointer',
+                boxShadow: '0 2px 0 var(--edge)'
+              }}
+            >
+              ⚙
+            </button>
+          )}
 
           {/* the always-visible LOCK button */}
           <button

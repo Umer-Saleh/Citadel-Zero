@@ -7,6 +7,7 @@ import { Vault } from './screens/Vault';
 import { ItemDetail } from './screens/ItemDetail';
 import { Generator } from './screens/Generator';  
 import { AppShell } from './components/AppShell';
+import { Settings } from './screens/Settings';
 
 /**
  * Top-level router.
@@ -58,23 +59,33 @@ export default function App() {
   // UNLOCKED — the real application.
   // Reachable ONLY while the DEK is in memory.
   // ---------------------------------------------------------------
+
   if (isUnlocked) {
 
-    // The password forge is a standalone view within the unlocked app.
-    // onBack returns to the vault; onUse isn't passed here because this
-    // is the standalone entry point (not launched from an item form).
-    if (view === 'generator') {
+    // Settings view.
+    // No gear here — you're already in settings — so onOpenSettings
+    // isn't passed; the ⚙ button simply won't render on this screen.
+    if (view === 'settings') {
       return (
         <AppShell>
+          <Settings onBack={() => setView('vault')} />
+        </AppShell>
+      );
+    }
+
+    // Generator view. Gear present so you can jump to settings from here.
+    if (view === 'generator') {
+      return (
+        <AppShell onOpenSettings={() => setView('settings')}>
           <Generator onBack={() => setView('vault')} />
         </AppShell>
       );
     }
 
-    // Default unlocked view: the vault list, or the item editor when
-    // an entry is open.
+    // Default: the vault list, or the item editor when an entry is open.
+    // Gear present.
     return (
-      <AppShell>
+      <AppShell onOpenSettings={() => setView('settings')}>
         {editingId !== undefined ? (
           <ItemDetail
             itemId={editingId}                       // null = new, id = edit
@@ -82,9 +93,9 @@ export default function App() {
           />
         ) : (
           <Vault
-            onSelectItem={setEditingId}              // open an entry to edit
-            onAddItem={() => setEditingId(null)}     // open a blank entry
-            onOpenGenerator={() => setView('generator')} // open the password forge
+            onSelectItem={setEditingId}
+            onAddItem={() => setEditingId(null)}
+            onOpenGenerator={() => setView('generator')}
           />
         )}
       </AppShell>
