@@ -14,6 +14,7 @@
   --glow: rgba(124, 184, 99, .18);
   --grid: rgba(240, 233, 214, .03);
   --radius: 3px;
+  --scanop: .03;
 }
 
 body.light {
@@ -54,3 +55,47 @@ body {
 @keyframes sprA { 0%, 49% { opacity: 1 } 50%, 100% { opacity: 0 } }
 @keyframes sprB { 0%, 49% { opacity: 0 } 50%, 100% { opacity: 1 } }
 @keyframes gridDrift { from { background-position: 0 0 } to { background-position: 48px 96px } }
+
+/* ---------------------------------------------------------------
+   Ambient backdrop — three stacked layers that sit behind the whole
+   app and give it the "living arcade cabinet" feel from the design:
+     1. a faint pixel grid
+     2. a CRT scanline overlay
+     3. a soft radial vignette darkening the edges
+   All pointer-events:none so they never intercept clicks.
+   --------------------------------------------------------------- */
+
+/* faint grid, drifts very slowly */
+.vk-grid {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 48px 48px;
+  animation: gridDrift 24s linear infinite;
+}
+
+/* CRT scanlines — very subtle, felt not seen */
+.vk-scan {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: var(--scanop);
+  background: repeating-linear-gradient(0deg, #000 0 1px, transparent 1px 3px);
+}
+
+/* vignette — darkens the corners so content floats */
+.vk-vignette {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background: radial-gradient(120% 90% at 50% 40%, transparent 62%, var(--shadow) 145%);
+}
+
+/* app content sits above the backdrop */
+.vk-content { position: relative; z-index: 2; }
