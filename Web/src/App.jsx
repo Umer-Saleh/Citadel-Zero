@@ -3,8 +3,7 @@ import { useVault } from './context/VaultContext';
 import { Signup } from './screens/Signup';
 import { RecoveryKit } from './screens/RecoveryKit';
 import { Unlock } from './screens/Unlock';
-import { Vault } from './screens/Vault';
-import { ItemDetail } from './screens/ItemDetail';
+import { Vault } from './screens/VaultLayout';
 import { Generator } from './screens/Generator';  
 import { AppShell } from './components/AppShell';
 import { Settings } from './screens/Settings';
@@ -39,12 +38,6 @@ export default function App() {
   // never had it and cannot resend it.
   const [recoveryKey, setRecoveryKey] = useState(null);
   const [email, setEmail] = useState('');
-
-  // Post-auth navigation within the unlocked app.
-  //   undefined -> viewing the vault list
-  //   null      -> creating a new entry
-  //   <id>      -> editing an existing entry
-  const [editingId, setEditingId] = useState(undefined);
 
   // Which top-level view we're on inside the unlocked app.
   //   'vault'     -> the vault list / item editor
@@ -86,18 +79,7 @@ export default function App() {
     // Gear present.
     return (
       <AppShell onOpenSettings={() => setView('settings')}>
-        {editingId !== undefined ? (
-          <ItemDetail
-            itemId={editingId}                       // null = new, id = edit
-            onDone={() => setEditingId(undefined)}   // back to the list
-          />
-        ) : (
-          <Vault
-            onSelectItem={setEditingId}
-            onAddItem={() => setEditingId(null)}
-            onOpenGenerator={() => setView('generator')}
-          />
-        )}
+        <VaultLayout onOpenGenerator={() => setView('generator')} />
       </AppShell>
     );
   }

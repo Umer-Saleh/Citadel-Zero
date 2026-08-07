@@ -99,3 +99,6 @@ body {
 
 /* app content sits above the backdrop */
 .vk-content { position: relative; z-index: 2; }
+
+/* floating idle motion for the empty-state mascot */
+@keyframes floatY { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-8px) } }
