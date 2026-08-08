@@ -149,3 +149,69 @@ export function Meter({ score, max = 10, color }) {
     </div>
   );
 }
+
+// ---------------------------------------------------------------
+// DERIVE BAR — indeterminate activity for Argon2id waits.
+//
+// DELIBERATELY NOT PROGRESS. A lit band sweeps and repeats; it does
+// not track how far the derivation has got, because the derivation
+// doesn't report that. A bar that fills on a timer would finish
+// early on a slow machine and sit full while the user waits.
+//
+// If hash-wasm turns out to expose a progress callback, replace this
+// with real segments driven off it.
+// ---------------------------------------------------------------
+export function DeriveBar({ done }) {
+  return (
+    <div style={{ display: 'flex', gap: 3 }}>
+      {Array.from({ length: 10 }, (_, i) => (
+        <div key={i} style={{
+          width: 16, height: 12, borderRadius: 1,
+          background: done ? 'var(--green)' : 'var(--edge)',
+          transition: 'background .15s',
+          ...(done ? {} : {
+            animation: 'deriveSweep 1.2s ease-in-out infinite',
+            animationDelay: `${i * 0.1}s`
+          })
+        }} />
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------
+// SWITCH — 52x28 pixel toggle with a sliding knob. Replaces stock
+// checkboxes and emoji-labelled buttons for on/off preferences.
+// ---------------------------------------------------------------
+export function Switch({ on, onToggle, label }) {
+  const [down, setDown] = useState(false);
+
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      onClick={onToggle}
+      onMouseDown={() => setDown(true)}
+      onMouseUp={() => setDown(false)}
+      onMouseLeave={() => setDown(false)}
+      style={{
+        width: 52, height: 28, padding: 0, position: 'relative', flexShrink: 0,
+        border: '1px solid var(--edge)', borderRadius: 'var(--radius)',
+        background: 'var(--bg)', cursor: 'pointer',
+        boxShadow: down ? '0 0 0 var(--edge)' : '0 2px 0 var(--edge)',
+        transform: down ? 'translateY(2px)' : 'none',
+        transition: 'transform .05s, box-shadow .05s'
+      }}
+    >
+      <span style={{
+        position: 'absolute', top: 4, left: 4, width: 18, height: 18,
+        borderRadius: 2,
+        background: on ? 'var(--green)' : 'var(--muted)',
+        transform: on ? 'translateX(24px)' : 'translateX(0)',
+        transition: 'transform .2s, background .2s'
+      }} />
+    </button>
+  );
+}

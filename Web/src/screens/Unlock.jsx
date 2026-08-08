@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useVault } from '../context/VaultContext';
-import { Card, Input, Button } from '../components/ui';
+import { Card, Input, Button, DeriveBar } from '../components/ui';
 import { Paladin } from '../components/Paladin';
 
 export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
@@ -116,43 +116,5 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
         </div>
       </div>
     </section>
-  );
-}
-
-/**
- * Ten-segment activity bar shown while Argon2id runs.
- *
- * DELIBERATELY INDETERMINATE. A lit band sweeps across the segments
- * on a loop; it does NOT track how far the derivation has got.
- *
- * The design prototype fills these on a fixed timer because it isn't
- * deriving anything — copying that here would produce a bar that
- * completes before the work does on a slow machine, or sits full
- * while the user waits. A progress bar that doesn't track progress
- * is a lie about how long something will take.
- *
- * If hash-wasm turns out to expose a progress callback, this should
- * be replaced with real segments driven off it.
- *
- * On success every segment lights green at once, which reads as
- * completion without ever having claimed a percentage.
- */
-function DeriveBar({ done }) {
-  return (
-    <div style={{ display: 'flex', gap: 3 }}>
-      {Array.from({ length: 10 }, (_, i) => (
-        <div key={i} style={{
-          width: 16, height: 12, borderRadius: 1,
-          background: done ? 'var(--green)' : 'var(--edge)',
-          transition: 'background .15s',
-          ...(done ? {} : {
-            // staggered pulse: each segment starts 0.1s after the last,
-            // so the lit band travels left to right and repeats
-            animation: 'deriveSweep 1.2s ease-in-out infinite',
-            animationDelay: `${i * 0.1}s`
-          })
-        }} />
-      ))}
-    </div>
   );
 }

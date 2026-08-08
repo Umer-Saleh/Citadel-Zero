@@ -43,13 +43,16 @@ async function deriveKeys(masterPassword, salt, params = DEFAULT_KDF_PARAMS) {
 }
 
 /**
- * True if the stored parameters are weaker than the target on any
- * dimension.
+ * Does this account's KDF configuration fall short of current policy?
  *
- * Deliberately conservative: Argon2 cost is not a single comparable
- * number, so {m: 32768, t: 3} versus {m: 131072, t: 2} has no
- * obvious ordering without benchmarking. Requiring at-least-equal on
- * every axis avoids accepting a trade that might be a net weakening.
+ * Compared on EVERY axis independently rather than as a combined cost
+ * score. A proposal that raises memory while lowering time might look
+ * equivalent on a single number but be a net weakening, so any drop on
+ * any dimension counts as needing an upgrade — and, at the upgrade
+ * endpoint, as grounds to refuse.
+ *
+ * This lives server-side only. The browser has no equivalent: a client
+ * must never be the one deciding what counts as strong enough.
  */
 function needsKdfUpgrade(params, target = DEFAULT_KDF_PARAMS) {
   return params.m < target.m || params.t < target.t;
