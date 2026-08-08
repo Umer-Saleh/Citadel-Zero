@@ -35,10 +35,14 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
   }
 
   return (
-    <section style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: '48px 24px' }}>
+    <section style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: '48px 24px', position: 'relative', zIndex: 1 }}>
       <div style={{ width: 400, maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 32 }}>
 
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+        {/* masthead — gap 16 and the entrance animation come from the prototype */}
+        <div style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16,
+          animation: 'riseIn .5s cubic-bezier(.2,.9,.3,1) both'
+        }}>
           {/* channel while deriving, gate on success, idle otherwise */}
           <Paladin
             pose={phase === 'deriving' ? 'channel' : phase === 'granted' ? 'gate' : 'idle'}
@@ -54,10 +58,16 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
         </div>
 
         {phase === 'form' && (
-          <Card style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <Card style={{
+            display: 'flex', flexDirection: 'column', gap: 20,
+            // card lands just after the masthead, not with it
+            animation: 'riseIn .5s cubic-bezier(.2,.9,.3,1) both',
+            animationDelay: '.12s'
+          }}>
             <Input
               label="Email" type="email" placeholder="you@example.com"
               value={email} onChange={e => setEmail(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleUnlock()}
             />
             <Input
               label="Master password" revealable mono
@@ -66,7 +76,10 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
               onKeyDown={e => e.key === 'Enter' && handleUnlock()}
             />
             {error && <div style={{ fontSize: 13, color: 'var(--red)' }}>{error}</div>}
-            <Button onClick={handleUnlock}>UNLOCK</Button>
+            {/* prototype's unlock button is taller than the default Button */}
+            <Button onClick={handleUnlock} style={{ padding: '14px 24px', letterSpacing: '.12em', justifyContent: 'center' }}>
+              UNLOCK
+            </Button>
             <div style={{ textAlign: 'center', fontSize: 13 }}>
               <a href="#" onClick={e => { e.preventDefault(); onGoRecovery(); }} style={{ color: 'var(--green)' }}>
                 Forgot master password? Recover with your kit
@@ -86,7 +99,10 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
                 DECRYPTING<span style={{ animation: 'blinkCur 1s steps(1) infinite' }}>_</span>
               </div>
             )}
-            <div style={{ fontSize: 13, color: 'var(--muted)', maxWidth: 300 }}>
+
+            <DeriveBar done={phase === 'granted'} />
+
+            <div style={{ fontSize: 13, color: 'var(--muted)', maxWidth: 300, textWrap: 'pretty' }}>
               Deriving your key with Argon2id — the pause is the security working.
             </div>
           </Card>
@@ -100,5 +116,43 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
         </div>
       </div>
     </section>
+  );
+}
+
+/**
+ * Ten-segment activity bar shown while Argon2id runs.
+ *
+ * DELIBERATELY INDETERMINATE. A lit band sweeps across the segments
+ * on a loop; it does NOT track how far the derivation has got.
+ *
+ * The design prototype fills these on a fixed timer because it isn't
+ * deriving anything — copying that here would produce a bar that
+ * completes before the work does on a slow machine, or sits full
+ * while the user waits. A progress bar that doesn't track progress
+ * is a lie about how long something will take.
+ *
+ * If hash-wasm turns out to expose a progress callback, this should
+ * be replaced with real segments driven off it.
+ *
+ * On success every segment lights green at once, which reads as
+ * completion without ever having claimed a percentage.
+ */
+function DeriveBar({ done }) {
+  return (
+    <div style={{ display: 'flex', gap: 3 }}>
+      {Array.from({ length: 10 }, (_, i) => (
+        <div key={i} style={{
+          width: 16, height: 12, borderRadius: 1,
+          background: done ? 'var(--green)' : 'var(--edge)',
+          transition: 'background .15s',
+          ...(done ? {} : {
+            // staggered pulse: each segment starts 0.1s after the last,
+            // so the lit band travels left to right and repeats
+            animation: 'deriveSweep 1.2s ease-in-out infinite',
+            animationDelay: `${i * 0.1}s`
+          })
+        }} />
+      ))}
+    </div>
   );
 }

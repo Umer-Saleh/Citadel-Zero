@@ -21,6 +21,7 @@ export function Signup({ onComplete, onGoLogin }) {
   const pose = mismatch ? 'brace' : strength.score >= 7 ? 'power' : 'idle';
 
   async function handleSubmit() {
+    if (busy) return;                       // Enter can fire while a signup is in flight
     setError('');
     if (!email || !pw) return setError('Email and master password are required.');
     if (pw !== pw2) return setError("Passwords don't match yet.");
@@ -29,7 +30,7 @@ export function Signup({ onComplete, onGoLogin }) {
     setBusy(true);
     try {
       const { recoveryKey } = await signup(email, pw);
-      onComplete(recoveryKey, email);       
+      onComplete(recoveryKey, email);
     } catch (e) {
       setError(
         e.code === 'EMAIL_TAKEN' ? 'An account with this email already exists.'
@@ -40,13 +41,16 @@ export function Signup({ onComplete, onGoLogin }) {
     }
   }
 
+  const onEnter = e => e.key === 'Enter' && handleSubmit();
+
   return (
-    <section style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: '48px 24px' }}>
+    <section style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: '48px 24px', position: 'relative', zIndex: 1 }}>
       <div style={{ width: 420, maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 32 }}>
 
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+        {/* masthead — gap 16 per the prototype (was 12) */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
           <Paladin pose={pose} size={72} />
-          <div style={{ fontFamily: "'Press Start 2P', monospace", fontSize: 21, letterSpacing: 2 }}>
+          <div style={{ fontFamily: "'Press Start 2P', monospace", fontSize: 21, letterSpacing: 2, color: 'var(--text)' }}>
             VAULTKEEP
           </div>
           <div style={{ fontSize: 14, color: 'var(--muted)' }}>
@@ -58,12 +62,14 @@ export function Signup({ onComplete, onGoLogin }) {
           <Input
             label="Email" type="email" placeholder="you@example.com"
             value={email} onChange={e => setEmail(e.target.value)}
+            onKeyDown={onEnter}
           />
 
           <Input
             label="Master password" revealable mono
             placeholder="A long passphrase works best"
             value={pw} onChange={e => setPw(e.target.value)}
+            onKeyDown={onEnter}
           />
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -73,21 +79,34 @@ export function Signup({ onComplete, onGoLogin }) {
                 {strength.label}
               </span>
             </div>
-            <div style={{ fontSize: 13, color: 'var(--muted)' }}>{strength.tip}</div>
+            <div style={{ fontSize: 13, color: 'var(--muted)', textWrap: 'pretty' }}>{strength.tip}</div>
           </div>
 
+          {/* No reveal toggle here, matching the prototype. Confirming
+              means retyping from memory — if you can reveal both fields
+              the check stops catching anything. */}
           <Input
-            label="Confirm master password" revealable mono
+            label="Confirm master password" mono
+            type="password"
             placeholder="Once more"
             value={pw2} onChange={e => setPw2(e.target.value)}
+            onKeyDown={onEnter}
             error={mismatch ? "Passwords don't match yet." : ''}
           />
 
           {error && <div style={{ fontSize: 13, color: 'var(--red)' }}>{error}</div>}
 
-          <Button onClick={handleSubmit} disabled={busy}>
+          {/* prototype's create button is taller than the default Button */}
+          <Button onClick={handleSubmit} disabled={busy} style={{ padding: '14px 24px', letterSpacing: '.12em', justifyContent: 'center' }}>
             {busy ? 'CREATING VAULT…' : 'CREATE VAULT'}
           </Button>
+
+          {/* The product claim, at the moment the user decides whether
+              to trust it. This is literally true of the code above:
+              signup() derives locally and sends only wrapped material. */}
+          <div style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'center', textWrap: 'pretty' }}>
+            We never see your master password. It never leaves this device.
+          </div>
         </Card>
 
         <div style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)' }}>
