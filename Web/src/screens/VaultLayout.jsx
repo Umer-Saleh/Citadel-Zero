@@ -1,18 +1,26 @@
-import { useState } from 'react';
+import { useEffect } from 'react';
 import { Vault } from './Vault';
 import { ItemDetail } from './ItemDetail';
 
 /**
  * The two-column vault: list on the left, detail/edit panel on the
- * right (380px), matching the design prototype. Selection state lives
- * here so the list stays mounted while the panel changes.
+ * right (380px), matching the design prototype.
  *
- *   selected === undefined -> panel shows a hint / nothing
+ * Selection is controlled by App rather than held here, because this
+ * component unmounts when you switch to the generator or settings.
+ *
+ *   selected === undefined -> panel shows a hint
  *   selected === null      -> panel is a blank "new entry" form
  *   selected === <id>      -> panel edits that entry
  */
-export function VaultLayout({ onOpenGenerator }) {
-  const [selected, setSelected] = useState(undefined);
+export function VaultLayout({ onOpenGenerator, selected, onSelect, forgedPassword, onForgedConsumed }) {
+
+  // A password came back from the forge with no panel open, so open a
+  // blank entry to put it in. If a panel is already open — new or
+  // existing — the password goes into that one instead.
+  useEffect(() => {
+    if (forgedPassword != null && selected === undefined) onSelect(null);
+  }, [forgedPassword, selected, onSelect]);
 
   return (
     <div style={{
@@ -22,8 +30,8 @@ export function VaultLayout({ onOpenGenerator }) {
       alignItems: 'start'
     }}>
       <Vault
-        onSelectItem={setSelected}
-        onAddItem={() => setSelected(null)}
+        onSelectItem={onSelect}
+        onAddItem={() => onSelect(null)}
         onOpenGenerator={onOpenGenerator}
         selectedId={selected}
       />
@@ -34,7 +42,9 @@ export function VaultLayout({ onOpenGenerator }) {
         ) : (
           <ItemDetail
             itemId={selected}
-            onDone={() => setSelected(undefined)}
+            onDone={() => onSelect(undefined)}
+            injectedPassword={forgedPassword}
+            onInjected={onForgedConsumed}
             key={selected ?? 'new'}   // remount when switching entries so form state resets
           />
         )}
