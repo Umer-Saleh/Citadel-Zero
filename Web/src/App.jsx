@@ -44,38 +44,59 @@ export default function App() {
   //   'generator' -> the password forge
   const [view, setView] = useState('vault');
 
+  // A password handed over from the generator. Held only long enough
+  // for the detail panel to take it, then cleared — same as
+  // recoveryKey above.
+  const [forgedPassword, setForgedPassword] = useState(null);
+
+  // Which vault entry the detail panel is showing.
+  //   undefined -> hint       null -> new entry       <id> -> editing
+  //
+  // This lives here, not in VaultLayout, because VaultLayout unmounts
+  // whenever you switch to the generator or settings — its state would
+  // be lost on the way back.
+  const [selected, setSelected] = useState(undefined);
+
   // ---------------------------------------------------------------
   // UNLOCKED — the real application.
   // This branch is reachable ONLY while the DEK is in memory.
   // ---------------------------------------------------------------
 
   if (isUnlocked) {
-
-    // Settings view.
-    // No gear here — you're already in settings — so onOpenSettings
-    // isn't passed; the ⚙ button simply won't render on this screen.
-    if (view === 'settings') {
-      return (
-        <AppShell>
-          <Settings onBack={() => setView('vault')} />
-        </AppShell>
-      );
-    }
-
-    // Generator view. Gear present so you can jump to settings from here.
-    if (view === 'generator') {
-      return (
-        <AppShell onOpenSettings={() => setView('settings')}>
-          <Generator onBack={() => setView('vault')} />
-        </AppShell>
-      );
-    }
-
-    // Default: the vault list, or the item editor when an entry is open.
-    // Gear present.
     return (
-      <AppShell onOpenSettings={() => setView('settings')}>
-        <VaultLayout onOpenGenerator={() => setView('generator')} />
+      // No gear while you're already in settings.
+      <AppShell onOpenSettings={view === 'settings' ? undefined : () => setView('settings')}>
+
+        {/*
+          The vault stays MOUNTED whatever view we're on, and is only
+          hidden with CSS. Switching to the generator used to unmount
+          it, which threw away the selected entry and any half-typed
+          draft in the detail panel — so going to the forge mid-entry
+          silently erased the fields you'd already filled in.
+
+          display:none also removes it from the accessibility tree, so
+          hidden content isn't reachable by tab or screen reader.
+        */}
+        <div style={{ display: view === 'vault' ? 'block' : 'none' }}>
+          <VaultLayout
+            onOpenGenerator={() => setView('generator')}
+            selected={selected}
+            onSelect={setSelected}
+            forgedPassword={forgedPassword}
+            onForgedConsumed={() => setForgedPassword(null)}
+          />
+        </div>
+
+        {view === 'generator' && (
+          <Generator
+            onBack={() => setView('vault')}
+            onUse={pw => { setForgedPassword(pw); setView('vault'); }}
+          />
+        )}
+
+        {view === 'settings' && (
+          <Settings onBack={() => setView('vault')} />
+        )}
       </AppShell>
     );
   }

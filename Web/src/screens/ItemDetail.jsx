@@ -4,7 +4,7 @@ import { copySecret } from '../lib/clipboard';
 
 const EMPTY = { site: '', username: '', password: '', url: '', notes: '' };
 
-export function ItemDetail({ itemId, onDone }) {
+export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
   const { items, addItem, updateItem, deleteItem } = useVault();
 
   const existing = itemId ? items.find(it => it.id === itemId) : null;
@@ -55,6 +55,20 @@ export function ItemDetail({ itemId, onDone }) {
   // Detach UI updates only. Do NOT cancel — if the user navigates
   // away right after copying, the clear must still happen.
   useEffect(() => () => detachClip.current?.(), []);
+
+  // A password arrived from the forge. Fill it in and reveal it — the
+  // user hasn't seen this value yet, and a row of dots would give them
+  // no way to know it landed.
+  //
+  // This can't be a useState initialiser: the panel may already be
+  // mounted and editing an entry when the value arrives, so there's no
+  // fresh render to seed. onInjected() tells App to drop its copy.
+  useEffect(() => {
+    if (injectedPassword == null) return;
+    setForm(f => ({ ...f, password: injectedPassword }));
+    setRevealed(true);
+    onInjected?.();
+  }, [injectedPassword, onInjected]);
 
   const title = form.site || (itemId ? 'Untitled' : 'New entry');
   const letter = form.site ? form.site.charAt(0).toUpperCase() : '+';
