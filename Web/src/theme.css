@@ -109,3 +109,13 @@ body {
 
 /* floating idle motion for the empty-state mascot */
 @keyframes floatY { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-8px) } }
+
+/* #root previously came from Vite's template stylesheet, which also
+   set text-align:center, a 1126px width cap, and its own h1/h2 sizes
+   in a purple system theme. That file is gone; this is the only part
+   worth keeping. */
+#root {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
