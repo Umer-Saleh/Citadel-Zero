@@ -1,4 +1,3 @@
-import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { VaultProvider } from './context/VaultContext';
 import { ThemeProvider } from './context/ThemeContext';

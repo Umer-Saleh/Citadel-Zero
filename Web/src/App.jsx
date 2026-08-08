@@ -3,7 +3,7 @@ import { useVault } from './context/VaultContext';
 import { Signup } from './screens/Signup';
 import { RecoveryKit } from './screens/RecoveryKit';
 import { Unlock } from './screens/Unlock';
-import { Vault } from './screens/VaultLayout';
+import { VaultLayout } from './screens/VaultLayout';
 import { Generator } from './screens/Generator';  
 import { AppShell } from './components/AppShell';
 import { Settings } from './screens/Settings';
@@ -47,10 +47,6 @@ export default function App() {
   // ---------------------------------------------------------------
   // UNLOCKED — the real application.
   // This branch is reachable ONLY while the DEK is in memory.
-  // ---------------------------------------------------------------
-// ---------------------------------------------------------------
-  // UNLOCKED — the real application.
-  // Reachable ONLY while the DEK is in memory.
   // ---------------------------------------------------------------
 
   if (isUnlocked) {

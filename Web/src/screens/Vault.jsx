@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useVault } from '../context/VaultContext';
 import { Paladin } from '../components/Paladin';
 import { calcStrength } from '../lib/strength';
+import { copySecret } from '../lib/clipboard';
 
 /**
  * Vault list. Matches the design prototype: a search field with an
@@ -13,6 +14,7 @@ export function Vault({ onSelectItem, onAddItem, onOpenGenerator, selectedId }) 
   const { items, loadItems } = useVault();
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [searchFocus, setSearchFocus] = useState(false);
 
   useEffect(() => {
     loadItems().finally(() => setLoading(false));
@@ -35,13 +37,20 @@ export function Vault({ onSelectItem, onAddItem, onOpenGenerator, selectedId }) 
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
+            onFocus={() => setSearchFocus(true)}
+            onBlur={() => setSearchFocus(false)}
             placeholder="Search vault…"
             style={{
               width: '100%', boxSizing: 'border-box',
-              background: 'var(--surface)', border: '1px solid var(--edge)', borderRadius: 'var(--radius)',
+              background: 'var(--surface)',
+              // Focus ring, matching every other input in the app.
+              border: `1px solid ${searchFocus ? 'var(--green)' : 'var(--edge)'}`,
+              boxShadow: searchFocus ? '0 0 0 3px var(--glow)' : 'none',
+              borderRadius: 'var(--radius)',
               padding: '12px 14px 12px 40px',
               font: "500 13px 'Geist Mono', monospace", letterSpacing: '.1em',
-              color: 'var(--text)', caretColor: 'var(--green)', outline: 'none'
+              color: 'var(--text)', caretColor: 'var(--green)', outline: 'none',
+              transition: 'border-color .15s, box-shadow .15s'
             }}
           />
         </div>
@@ -53,7 +62,7 @@ export function Vault({ onSelectItem, onAddItem, onOpenGenerator, selectedId }) 
       {loading ? (
         <div style={{ color: 'var(--muted)', padding: 24, font: "500 13px 'Geist Mono', monospace" }}>Decrypting your vault…</div>
       ) : items.length === 0 ? (
-        <EmptyState onAdd={onAddItem} />
+        <EmptyState />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {filtered.map((it, i) => (
@@ -75,7 +84,8 @@ export function Vault({ onSelectItem, onAddItem, onOpenGenerator, selectedId }) 
 function ItemRow({ item, index, onClick, selected }) {
   const [hover, setHover] = useState(false);
   const [copied, setCopied] = useState(null);
-  const timer = useRef(null);
+  const labelTimer = useRef(null);
+  const detachClip = useRef(null);
 
   const site = item.data.site || 'Untitled';
   const letter = site.charAt(0).toUpperCase();
@@ -83,13 +93,22 @@ function ItemRow({ item, index, onClick, selected }) {
 
   function copy(field, value, e) {
     e.stopPropagation();                 // don't open the item
-    navigator.clipboard.writeText(value || '').catch(() => {});
+
+    // No cancellation here: copySecret supersedes any pending clear
+    // itself, app-wide. Doing it locally could only ever cover rows
+    // that share this component instance — i.e. one row.
+    detachClip.current?.();
+    detachClip.current = copySecret(value);
+
     setCopied(field);
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => setCopied(null), 1400);
+    clearTimeout(labelTimer.current);
+    labelTimer.current = setTimeout(() => setCopied(null), 1400);   // checkmark only
   }
 
-  useEffect(() => () => clearTimeout(timer.current), []);
+  useEffect(() => () => {
+    clearTimeout(labelTimer.current);
+    detachClip.current?.();            // stop UI updates; the clear still fires
+  }, []);
 
   return (
     <div
@@ -125,7 +144,8 @@ function ItemRow({ item, index, onClick, selected }) {
         </span>
       </div>
 
-      {/* per-item strength meter */}
+      {/* per-item strength meter — calcStrength returns score 1..10,
+          halved here to fill 5 segments */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, marginRight: 6 }}>
         <div style={{ display: 'flex', gap: 2 }}>
           {Array.from({ length: 5 }, (_, i) => (
@@ -155,7 +175,7 @@ function ItemRow({ item, index, onClick, selected }) {
   );
 }
 
-function EmptyState({ onAdd }) {
+function EmptyState() {
   return (
     <div style={{
       border: '1px dashed var(--edge)', borderRadius: 'var(--radius)', background: 'var(--surface)',

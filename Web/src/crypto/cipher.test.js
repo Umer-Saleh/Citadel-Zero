@@ -1,7 +1,7 @@
 import { describe, test, expect } from 'vitest';
 import vectors from './vectors/crypto-vectors.json';
-import { encryptItem, decryptItem, encryptBytes, decryptBytes } from './cipher';
-import { fromHex, fromBase64, toHex } from './bytes';
+import { encryptItem, decryptItem } from './cipher';
+import { fromHex, fromBase64 } from './bytes';
 
 const DEK = fromHex(vectors.decryption.dekHex);
 

@@ -3,10 +3,8 @@ import vectors from './vectors/crypto-vectors.json';
 import { generateDEK, wrapDEK, unwrapDEK } from './envelope';
 import { deriveRecoveryKek, generateRecoveryKey } from './recovery';
 import { deriveKeys } from './keys';
-import { decryptItem } from './cipher';
 import { fromHex, toHex } from './bytes';
 
-const DEK = fromHex(vectors.decryption.dekHex);
 
 describe('envelope encryption interoperates with Node', () => {
   test('unwraps a DEK wrapped by Node', async () => {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Card, Button } from '../components/ui';
 import { Paladin } from '../components/Paladin';
 
@@ -8,6 +8,11 @@ const SETS = {
   number: '0123456789',
   symbol: '!@#$%^&*()-_=+[]{};:,.<>?'
 };
+
+// Defaults live at module scope so the lazy useState initialiser below
+// can generate the first password during the very first render.
+const DEFAULT_LENGTH = 20;
+const DEFAULT_SETS = { lower: true, upper: true, number: true, symbol: true };
 
 /**
  * Cryptographically secure random integer in [0, max), free of modulo
@@ -40,19 +45,52 @@ function entropyBits(length, sets) {
 }
 
 export function Generator({ onUse, onBack }) {
-  const [length, setLength] = useState(20);
-  const [sets, setSets] = useState({ lower: true, upper: true, number: true, symbol: true });
-  const [pw, setPw] = useState('');
+  const [length, setLength] = useState(DEFAULT_LENGTH);
+  const [sets, setSets] = useState(DEFAULT_SETS);
+
+  // Lazy initialiser: runs exactly once, during the first render.
+  // This replaces the old `useEffect(() => roll(), [])`, which set
+  // state inside an effect and so forced a second render on mount.
+  const [pw, setPw] = useState(() => generate(DEFAULT_LENGTH, DEFAULT_SETS));
+
   const [smithing, setSmithing] = useState(false);
+  const anvilTimer = useRef(null);
 
-  const roll = useCallback(() => {
-    setPw(generate(length, sets));
+  /**
+   * Generate from EXPLICIT values rather than from the component's
+   * current state.
+   *
+   * This is the whole point. React batches state updates, so after
+   * setLength(21) the `length` variable in this render is still 20.
+   * A roll() that read state would always be one change behind the
+   * slider. Passing the new values in sidesteps that entirely.
+   */
+  function rollWith(len, s) {
+    setPw(generate(len, s));
     setSmithing(true);
-    setTimeout(() => setSmithing(false), 400);   // brief anvil animation
-  }, [length, sets]);
+    clearTimeout(anvilTimer.current);
+    anvilTimer.current = setTimeout(() => setSmithing(false), 400);   // brief anvil animation
+  }
 
-  // Generate on mount and whenever the options change.
-  useEffect(() => { roll(); }, [roll]);
+  // Convenience wrapper for the REGENERATE button, where current
+  // state IS the right input.
+  const roll = () => rollWith(length, sets);
+
+  // Cleanup only — no setState in the effect body, so this doesn't
+  // trip the cascading-render rule. Without it, the 400ms anvil timer
+  // can fire after the user navigates away.
+  useEffect(() => () => clearTimeout(anvilTimer.current), []);
+
+  function changeLength(next) {
+    setLength(next);
+    rollWith(next, sets);          // pass the NEW length, not the stale one
+  }
+
+  function toggleSet(k) {
+    const next = { ...sets, [k]: !sets[k] };
+    setSets(next);
+    rollWith(length, next);        // pass the NEW set map
+  }
 
   const bits = entropyBits(length, sets);
   const rating = bits < 60 ? 'WEAK' : bits < 90 ? 'GOOD' : bits < 128 ? 'STRONG' : 'FORTRESS';
@@ -107,7 +145,7 @@ export function Generator({ onUse, onBack }) {
           </div>
           <input
             type="range" min={8} max={64} value={length}
-            onChange={e => setLength(Number(e.target.value))}
+            onChange={e => changeLength(Number(e.target.value))}
             style={{ accentColor: 'var(--green)', width: '100%' }}
           />
         </div>
@@ -117,7 +155,7 @@ export function Generator({ onUse, onBack }) {
           {Object.keys(SETS).map(k => (
             <button
               key={k}
-              onClick={() => setSets(s => ({ ...s, [k]: !s[k] }))}
+              onClick={() => toggleSet(k)}
               style={{
                 font: "600 12px Geist, sans-serif", letterSpacing: '.06em',
                 padding: '10px 16px', borderRadius: 'var(--radius)', cursor: 'pointer',
