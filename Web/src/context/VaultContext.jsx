@@ -38,7 +38,7 @@ export function VaultProvider({ children }) {
       return null;
     });
     setItems([]);
-    setemail(null);
+    setEmail(null);
     setKdfUpgradeAvailable(false);
     setLocked(true);
     clearToken();
