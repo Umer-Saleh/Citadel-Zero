@@ -56,6 +56,15 @@ async function getKdfParams(email) {
  *                transaction (the recovery flow).
  */
 async function issueSession(userId, client) {
+
+  // Opportunistic cleanup. There's no scheduler in this project, so
+  // expired rows are swept on the one path that scales with usage.
+  // Fire-and-forget: a failed sweep must never fail a login, and the
+  // caller shouldn't wait on housekeeping.
+  refreshTokenRepo.deleteExpired().catch(err => {
+    console.warn('[server] refresh token sweep failed:', err.message);
+  });
+
   const familyId = crypto.randomUUID();
   const refreshToken = generateToken();
   const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_DAYS * 86400_000);
