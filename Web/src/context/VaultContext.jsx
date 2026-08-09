@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import * as auth from '../api/auth';
-import { api, clearToken } from '../api/client';
+import { api, clearToken, setSessionLostHandler } from '../api/client';
 import { encryptItem, decryptItem } from '../crypto';
 
 
@@ -28,11 +28,12 @@ export function VaultProvider({ children }) {
 
   const idleTimer = useRef(null);
 
-  /** Wipe every trace of the unlocked session from memory. */
+/** Wipe every trace of the unlocked session from memory. */
   const lock = useCallback(() => {
-    // Zero the DEK buffer before dropping the reference. JavaScript
-    // cannot guarantee erasure (see README limitations), but this is
-    // the most we can do.
+    // Local teardown FIRST, and synchronously. auth.logout() is a
+    // network call that can hang or fail; if the local clear waited on
+    // it, a dead server would leave the vault unlocked on screen. The
+    // user pressed LOCK — that must be immediate and unconditional.
     setDek(prev => {
       if (prev) prev.fill(0);
       return null;
@@ -41,7 +42,14 @@ export function VaultProvider({ children }) {
     setEmail(null);
     setKdfUpgradeAvailable(false);
     setLocked(true);
-    clearToken();
+
+    // Then tell the server to revoke the session. Fire-and-forget:
+    // auth.logout() never throws and clears the tokens itself, so
+    // there is nothing here to await or handle.
+    //
+    // Without this, LOCK only made the browser forget its tokens —
+    // the session stayed alive server-side until it expired.
+    auth.logout();
   }, []);
 
 
