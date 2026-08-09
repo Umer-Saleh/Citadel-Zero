@@ -11,7 +11,7 @@ const { validate } = require('./middleware/validate');
 const {
   signupSchema, loginSchema, kdfParamsQuerySchema,
   vaultItemSchema, uuidParamSchema, upgradeKdfSchema, wrappedDekSchema, changePasswordSchema,
-  recoveryMaterialQuerySchema, recoverSchema
+  recoveryMaterialQuerySchema, recoverSchema, refreshSchema, logoutSchema
 } = require('./routes/schemas');
 
 const cors = require('cors');
@@ -35,6 +35,7 @@ app.use(helmet());
 app.use(express.json({ limit: '64kb' }));
 
 app.use('/api/', apiLimiter);
+app.use('/api/auth/refresh', authLimiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/signup', authLimiter);
 app.use('/api/user/kdf-params', authLimiter);   // also an enumeration oracle
@@ -75,13 +76,46 @@ app.get('/api/user/kdf-params',
   }));
 
 app.post('/api/auth/login', validate(loginSchema), wrap(async (req, res) => {
-  const { token, wrappedDek, kdfUpgradeAvailable, targetKdfParams } =
+  const { token, refreshToken, refreshExpiresAt,
+          wrappedDek, kdfUpgradeAvailable, targetKdfParams } =
     await authService.login(req.body);
 
   console.log(`[server] login success for ${req.body.email}`);
-  res.status(200).json({ ok: true, token, wrappedDek, kdfUpgradeAvailable, targetKdfParams });
+
+  // Named explicitly rather than spread: the service result also
+  // carries userId and email, and a route should decide what goes
+  // over the wire rather than forwarding whatever a service happens
+  // to return today.
+  res.status(200).json({
+    ok: true,
+    token, refreshToken, refreshExpiresAt,
+    wrappedDek, kdfUpgradeAvailable, targetKdfParams
+  });
 }));
 
+// Rate limit the refresh endpoint too — it's unauthenticated and hits
+// the database on every call.
+
+app.post('/api/auth/refresh',
+  validate(refreshSchema),
+  wrap(async (req, res) => {
+    // No requireAuth. The whole point is to be usable when the access
+    // token has already expired — the refresh token IS the credential
+    // being presented here.
+    const session = await authService.refresh(req.body.refreshToken);
+    res.status(200).json(session);
+  }));
+
+app.post('/api/auth/logout',
+  validate(logoutSchema),
+  wrap(async (req, res) => {
+    // Also no requireAuth, and always 204 whether or not the token
+    // was real. Logout must work with an expired access token, and a
+    // different response for an unknown token would confirm to an
+    // attacker that a token they hold was once genuine.
+    await authService.logout(req.body.refreshToken);
+    res.status(204).end();
+  }));
 // ---------------------------------------------------------------
 // VAULT ROUTES
 // Ciphertext in, ciphertext out. Ownership is enforced in the
