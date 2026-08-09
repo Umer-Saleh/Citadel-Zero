@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { useVault } from '../context/VaultContext';
 import { Card, Input, Button, Meter } from '../components/ui';
 import { Paladin } from '../components/Paladin';
+import { Icon } from '../components/Icon';
 import { calcStrength } from '../lib/strength';
+import { checkPolicy } from '../lib/policy';
 
 export function Signup({ onComplete, onGoLogin }) {
   const { signup } = useVault();
@@ -13,19 +15,22 @@ export function Signup({ onComplete, onGoLogin }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const strength = calcStrength(pw);
+  const policy = checkPolicy(pw, [email]);
+  const strength = policy.strength;
   const mismatch = pw2.length > 0 && pw2 !== pw;
 
   // PIX reacts to the form state: braces on mismatch, powers up on a
   // strong password, otherwise idles.
   const pose = mismatch ? 'brace' : strength.score >= 7 ? 'power' : 'idle';
 
+  const [revealed, setRevealed] = useState(false);
+
   async function handleSubmit() {
     if (busy) return;                       // Enter can fire while a signup is in flight
     setError('');
     if (!email || !pw) return setError('Email and master password are required.');
     if (pw !== pw2) return setError("Passwords don't match yet.");
-    if (strength.score < 4) return setError('Please choose a stronger master password.');
+    if (!policy.passed) return setError('Your master password does not meet the requirements below.');
 
     setBusy(true);
     try {
@@ -67,6 +72,7 @@ export function Signup({ onComplete, onGoLogin }) {
 
           <Input
             label="Master password" revealable mono
+            revealed={revealed} onToggleReveal={() => setRevealed(r => !r)}
             placeholder="A long passphrase works best"
             value={pw} onChange={e => setPw(e.target.value)}
             onKeyDown={onEnter}
@@ -79,15 +85,29 @@ export function Signup({ onComplete, onGoLogin }) {
                 {strength.label}
               </span>
             </div>
-            <div style={{ fontSize: 13, color: 'var(--muted)', textWrap: 'pretty' }}>{strength.tip}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+             {policy.rules.map(r => (
+                <div key={r.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                  <Icon name={r.ok ? 'check' : 'plus'} size={12}
+                    style={{ marginTop: 3, opacity: r.ok ? 1 : 0.4, color: r.ok ? 'var(--green)' : 'var(--muted)' }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <span style={{ fontSize: 13, color: r.ok ? 'var(--green)' : 'var(--muted)', transition: 'color .2s' }}>
+                      {r.label}
+                    </span>
+                    {r.hint && (
+                      <span style={{ fontSize: 12, color: 'var(--muted)', textWrap: 'pretty' }}>{r.hint}</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
-          {/* No reveal toggle here, matching the prototype. Confirming
-              means retyping from memory — if you can reveal both fields
-              the check stops catching anything. */}
+          {/* No eye of its own — the toggle above governs both, so
+              they can't disagree about what's visible. */}
           <Input
             label="Confirm master password" mono
-            type="password"
+            type={revealed ? 'text' : 'password'}
             placeholder="Once more"
             value={pw2} onChange={e => setPw2(e.target.value)}
             onKeyDown={onEnter}
