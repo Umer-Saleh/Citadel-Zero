@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Card, Button, Meter } from '../components/ui';
 import { Paladin } from '../components/Paladin';
+import { Icon } from '../components/Icon';
 
 const SETS = {
   lower: 'abcdefghijklmnopqrstuvwxyz',
@@ -48,7 +49,7 @@ function entropyBits(length, sets) {
   return poolSize ? Math.round(length * Math.log2(poolSize)) : 0;
 }
 
-export function Generator({ onUse, onBack }) {
+export function Generator({ onUse }) {
   const [length, setLength] = useState(DEFAULT_LENGTH);
   const [sets, setSets] = useState(DEFAULT_SETS);
 
@@ -100,11 +101,6 @@ export function Generator({ onUse, onBack }) {
       maxWidth: 680, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24,
       animation: 'riseIn .4s cubic-bezier(.2,.9,.3,1) both'
     }}>
-      {onBack && (
-        <button onClick={onBack} style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', font: '500 14px Geist', padding: 0, alignSelf: 'flex-start' }}>
-          ← Back to vault
-        </button>
-      )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
         <Paladin pose={smithing ? 'smith' : 'smithIdle'} size={56} />
@@ -157,7 +153,7 @@ export function Generator({ onUse, onBack }) {
 
         <div style={{ display: 'flex', gap: 12 }}>
           <Button variant="secondary" onClick={roll} disabled={noSet} style={{ flex: 1, justifyContent: 'center', font: '600 12px Geist, sans-serif', padding: '13px 16px' }}>
-            ⟳ REGENERATE
+            <Icon name="dice" /> REGENERATE
           </Button>
           {onUse && (
             <Button onClick={() => onUse(pw)} disabled={noSet} style={{ flex: 1, justifyContent: 'center', padding: '13px 16px', letterSpacing: '.12em' }}>

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Icon } from './Icon';
 
 const radius = 'var(--radius)';
 
@@ -10,6 +11,13 @@ export function Button({ variant = 'primary', children, style, ...props }) {
   const [active, setActive] = useState(false);
 
   const base = {
+    // Flex so an icon and its label centre against each other rather
+    // than sitting on the text baseline. Every button in the app is
+    // either icon+label or label-only, so this is safe globally.
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
     font: "600 13px Geist, sans-serif",
     letterSpacing: '.1em',
     padding: '13px 22px',
@@ -45,6 +53,11 @@ export function Button({ variant = 'primary', children, style, ...props }) {
 
   return (
     <button
+      // Before the spread, so a caller can still pass type="submit".
+      // Without it, <button> defaults to submit — harmless while there
+      // are no forms in the app, but it would turn every button into a
+      // submit button the day one appears.
+      type="button"
       {...props}
       onMouseDown={() => setActive(true)}
       onMouseUp={() => setActive(false)}
@@ -63,6 +76,7 @@ export function Button({ variant = 'primary', children, style, ...props }) {
 export function Input({ label, error, revealable, value, onChange, mono, ...props }) {
   const [focused, setFocused] = useState(false);
   const [revealed, setRevealed] = useState(false);
+  const [eyeDown, setEyeDown] = useState(false);
 
   const inputStyle = {
     flex: 1, minWidth: 0, width: '100%',
@@ -76,7 +90,8 @@ export function Input({ label, error, revealable, value, onChange, mono, ...prop
     caretColor: 'var(--green)',
     boxShadow: focused ? '0 0 0 3px var(--glow)' : 'none',
     outline: 'none',
-    boxSizing: 'border-box'
+    boxSizing: 'border-box',
+    transition: 'border-color .15s, box-shadow .15s'
   };
 
   return (
@@ -100,10 +115,23 @@ export function Input({ label, error, revealable, value, onChange, mono, ...prop
           <button
             type="button"
             onClick={() => setRevealed(r => !r)}
+            onMouseDown={() => setEyeDown(true)}
+            onMouseUp={() => setEyeDown(false)}
+            onMouseLeave={() => setEyeDown(false)}
             title={revealed ? 'Hide' : 'Show'}
-            style={{ background: 'none', border: '1px solid var(--edge)', borderRadius: radius, padding: '0 12px', color: 'var(--muted)', cursor: 'pointer' }}
+            // Matches ItemDetail's IconButton: centred, with the same
+            // depth shadow and press-down. Without them it read as a
+            // flat, dead control beside its siblings.
+            style={{
+              display: 'grid', placeItems: 'center',
+              background: 'none', border: '1px solid var(--edge)', borderRadius: radius,
+              padding: '0 12px', color: 'var(--muted)', cursor: 'pointer',
+              boxShadow: eyeDown ? '0 0 0 var(--edge)' : '0 2px 0 var(--edge)',
+              transform: eyeDown ? 'translateY(2px)' : 'none',
+              transition: 'transform .05s, box-shadow .05s'
+            }}
           >
-            {revealed ? '🙈' : '👁'}
+            <Icon name={revealed ? 'eyeoff' : 'eye'} size={15} />
           </button>
         )}
       </div>
@@ -131,8 +159,10 @@ export function Card({ children, style }) {
 }
 
 // ---------------------------------------------------------------
-// METER — the reusable segmented pixel bar. Strength, entropy,
-// vault health, copy-countdown all use this.
+// METER — segmented pixel bar at 14x10. Used for password strength
+// and generator entropy. The clipboard countdown (11x8) and the
+// header health HUD (7x8) draw their own at different sizes, so this
+// is not the one place segments live.
 // ---------------------------------------------------------------
 export function Meter({ score, max = 10, color }) {
   const fill = color || (score < 4 ? 'var(--red)' : score < 7 ? 'var(--amber)' : 'var(--green)');

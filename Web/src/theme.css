@@ -119,3 +119,18 @@ body {
   display: flex;
   flex-direction: column;
 }
+
+/* Chrome paints autofilled inputs with its own near-white background
+   and dark text, which ignores `background` entirely. The only way
+   to beat it is a huge inset box-shadow. The absurd transition delay
+   stops the colour flashing through on focus. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--text);
+  -webkit-box-shadow: 0 0 0 1000px var(--bg) inset;
+  -webkit-box-shadow: 0 0 0 1000px var(--bg) inset !important;
+  caret-color: var(--green);
+  transition: background-color 9999s ease-out;
+}

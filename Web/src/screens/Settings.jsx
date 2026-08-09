@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { useVault } from '../context/VaultContext';
 import { useTheme } from '../context/ThemeContext';
 import { Card, Input, Button, Meter, Switch, DeriveBar } from '../components/ui';
-import { Paladin } from '../components/Paladin';
 import { calcStrength } from '../lib/strength';
+import { Icon } from '../components/Icon';
 
-export function Settings({ onBack }) {
+export function Settings() {
   const { email, kdfUpgradeAvailable, changePassword, upgradeKdf } = useVault();
   const { theme, toggle } = useTheme();
 
@@ -14,11 +14,6 @@ export function Settings({ onBack }) {
       maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24,
       animation: 'riseIn .4s cubic-bezier(.2,.9,.3,1) both'
     }}>
-      {onBack && (
-        <button onClick={onBack} style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', font: '500 14px Geist', padding: 0, alignSelf: 'flex-start' }}>
-          ← Back to vault
-        </button>
-      )}
 
       <h1 style={{ margin: 0, font: '700 26px Geist, sans-serif', color: 'var(--text)' }}>Account settings</h1>
 
@@ -55,9 +50,12 @@ export function Settings({ onBack }) {
 }
 
 // ---------------------------------------------------------------
-// KDF UPGRADE — the "LEVEL UP" moment. PIX celebrates on success.
-// Requires the master password, since we can only re-derive while
-// the user proves they hold it.
+// KDF UPGRADE — requires the master password, since we can only
+// re-derive while the user proves they hold it.
+//
+// The prototype leads this banner with a shield, not the mascot.
+// PIX's level-up reaction belongs in the header's pixSays line
+// ("LEVEL UP!"), which is where the prototype puts it.
 // ---------------------------------------------------------------
 function KdfUpgrade({ email, upgradeKdf }) {
   const [pw, setPw] = useState('');
@@ -87,18 +85,22 @@ function KdfUpgrade({ email, upgradeKdf }) {
     }
   }
 
-  // Banner, not a card: an amber-bordered row that sits above the
-  // real settings rather than competing with them.
+  const done = phase === 'done';
+
+  // Banner, not a card: a bordered row that sits above the real
+  // settings rather than competing with them.
   return (
     <div style={{
-      border: '1px solid color-mix(in srgb, var(--amber) 55%, var(--edge))',
+      border: `1px solid color-mix(in srgb, ${done ? 'var(--green)' : 'var(--amber)'} 55%, var(--edge))`,
       borderRadius: 'var(--radius)', background: 'var(--surface)',
       padding: '20px 24px', display: 'flex', gap: 16, alignItems: 'center'
     }}>
-      <Paladin pose={phase === 'done' ? 'levelup' : 'power'} size={40} />
+      <span style={{ color: done ? 'var(--green)' : 'var(--amber)' }}>
+        <Icon name="shield" size={24} />
+      </span>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {phase === 'done' ? (
+        {done ? (
           <>
             <span style={{ font: "600 11px 'Geist Mono', monospace", letterSpacing: '.16em', color: 'var(--green)' }}>
               SECURITY UPGRADED
@@ -126,6 +128,7 @@ function KdfUpgrade({ email, upgradeKdf }) {
             {phase === 'confirm' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 }}>
                 <Input label="Confirm master password" mono type="password"
+                  autoComplete="current-password"
                   value={pw} onChange={e => setPw(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && run()} />
                 {error && <span style={{ fontSize: 13, color: 'var(--red)' }}>{error}</span>}
@@ -168,6 +171,12 @@ function ChangePassword({ email, changePassword }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
+  // One toggle for the whole section. Input's own `revealable` eye is
+  // deliberately unused here — three of them, or one floating between
+  // two columns, both read as broken.
+  const [revealed, setRevealed] = useState(false);
+  const pwType = revealed ? 'text' : 'password';
+
   const strength = calcStrength(next);
   const mismatch = confirm.length > 0 && confirm !== next;
 
@@ -195,21 +204,26 @@ function ChangePassword({ email, changePassword }) {
 
   return (
     <Card style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <h2 style={{ margin: 0, font: '600 19px Geist, sans-serif', color: 'var(--text)' }}>Change master password</h2>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <h2 style={{ margin: 0, flex: 1, font: '600 19px Geist, sans-serif', color: 'var(--text)' }}>
+          Change master password
+        </h2>
+        <RevealToggle on={revealed} onToggle={() => setRevealed(r => !r)} />
+      </div>
+
       <div style={{ fontSize: 13, color: 'var(--muted)', textWrap: 'pretty' }}>
         Your vault key is re-wrapped under the new password — your entries are never
         re-encrypted. You'll be signed out and need to unlock again.
       </div>
 
-      {/* Reveal is offered on the NEW password only. Current and
-          Confirm are retyped from memory; being able to reveal them
-          turns the check into a copy-check that catches nothing.
-          Same principle as the signup confirm field. */}
-      <Input label="Current" mono type="password" value={cur} onChange={e => setCur(e.target.value)} />
+      <Input label="Current" mono type={pwType} autoComplete="current-password"
+        value={cur} onChange={e => setCur(e.target.value)} />
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <Input label="New" revealable mono value={next} onChange={e => setNext(e.target.value)} />
-        <Input label="Confirm" mono type="password" value={confirm} onChange={e => setConfirm(e.target.value)}
+        <Input label="New" mono type={pwType} autoComplete="new-password"
+          value={next} onChange={e => setNext(e.target.value)} />
+        <Input label="Confirm" mono type={pwType} autoComplete="new-password"
+          value={confirm} onChange={e => setConfirm(e.target.value)}
           error={mismatch ? "Doesn't match yet." : ''} />
       </div>
 
@@ -230,5 +244,37 @@ function ChangePassword({ email, changePassword }) {
         </Button>
       </div>
     </Card>
+  );
+}
+
+/**
+ * Section-level reveal. Labelled rather than a bare eye, because a
+ * lone icon by a heading doesn't say what it applies to.
+ */
+function RevealToggle({ on, onToggle }) {
+  const [down, setDown] = useState(false);
+
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      onClick={onToggle}
+      onMouseDown={() => setDown(true)}
+      onMouseUp={() => setDown(false)}
+      onMouseLeave={() => setDown(false)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0,
+        font: '600 11px Geist, sans-serif', letterSpacing: '.1em',
+        padding: '8px 12px', borderRadius: 'var(--radius)',
+        border: '1px solid var(--edge)', background: 'transparent',
+        color: on ? 'var(--green)' : 'var(--muted)', cursor: 'pointer',
+        boxShadow: down ? '0 0 0 var(--edge)' : '0 2px 0 var(--edge)',
+        transform: down ? 'translateY(2px)' : 'none',
+        transition: 'transform .05s, box-shadow .05s, color .15s'
+      }}
+    >
+      <Icon name={on ? 'eyeoff' : 'eye'} size={15} />
+      {on ? 'HIDE' : 'SHOW'}
+    </button>
   );
 }
