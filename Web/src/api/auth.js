@@ -3,7 +3,7 @@ import {
   generateRecoveryKey, deriveRecoveryKek,
   DEFAULT_KDF_PARAMS, toBase64, fromBase64
 } from '../crypto';
-import { api, setToken } from './client';
+import { api, setToken, setRefreshToken, getRefreshToken, clearToken } from './client';
 
 /**
  * Sign up. Does all crypto client-side, sends only wrapped material.
@@ -51,6 +51,7 @@ export async function login(email, password) {
   });
 
   setToken(res.token);
+  setRefreshToken(res.refreshToken);   // in memory only, same as the DEK
   const dek = await unwrapDEK(res.wrappedDek, kek);
 
   return {
@@ -124,4 +125,29 @@ export async function upgradeKdf(email, password, dek) {
     newKdfParams: DEFAULT_KDF_PARAMS,
     newWrappedDek: await wrapDEK(dek, newKek)
   });
+}
+
+/**
+ * End the session server-side.
+ *
+ * Clearing tokens from memory only makes THIS tab forget them — the
+ * session stays alive on the server until it expires. Logout revokes
+ * the whole family, so a token captured earlier is dead immediately.
+ *
+ * Never throws: if the server is unreachable we still drop our own
+ * tokens. A logout that fails because the network is down must not
+ * leave the user logged in locally.
+ */
+export async function logout() {
+  const refreshToken = getRefreshToken();
+
+  if (refreshToken) {
+    try {
+      await api.post('/api/auth/logout', { refreshToken });
+    } catch {
+      // Best effort. The local clear below is what the user sees.
+    }
+  }
+
+  clearToken();
 }
