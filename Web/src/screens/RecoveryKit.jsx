@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Card, Button } from '../components/ui';
 import { Paladin } from '../components/Paladin';
 import { copySecret } from '../lib/clipboard';
+import { Icon } from '../components/Icon';
 
 export function RecoveryKit({ recoveryKey, email, onContinue }) {
   const [saved, setSaved] = useState(false);
@@ -85,13 +86,13 @@ export function RecoveryKit({ recoveryKey, email, onContinue }) {
               12px type, 11px 16px padding */}
           <div style={{ display: 'flex', gap: 12 }}>
             <Button variant="secondary" onClick={copy} style={kitBtn}>
-              {copied ? '✓ COPIED' : 'COPY'}
+              {copied ? <><Icon name="check" /> COPIED</> : <><Icon name="copy" /> COPY</>}
             </Button>
             <Button variant="secondary" onClick={download} style={kitBtn}>
-              DOWNLOAD
+              <Icon name="download" /> DOWNLOAD
             </Button>
             <Button variant="secondary" onClick={() => window.print()} style={kitBtn}>
-              PRINT
+              <Icon name="printer" /> PRINT
             </Button>
           </div>
 
@@ -101,7 +102,7 @@ export function RecoveryKit({ recoveryKey, email, onContinue }) {
             borderRadius: 'var(--radius)', padding: '16px 20px',
             display: 'flex', gap: 14, alignItems: 'flex-start'
           }}>
-            <span style={{ color: 'var(--amber)', fontSize: 18, marginTop: 2 }}>⚠</span>
+            <span style={{ color: 'var(--amber)', marginTop: 2 }}><Icon name="shield" size={18} /></span>
             <div style={{ fontSize: 14, lineHeight: 1.55, textWrap: 'pretty' }}>
               <strong>If you lose both your master password and this key, your vault is gone.</strong>
               <br />
@@ -166,7 +167,7 @@ function PixelCheckbox({ checked, onChange, children }) {
         boxShadow: '0 2px 0 var(--edge)',
         transition: 'background .15s, border-color .15s'
       }}>
-        {checked ? '✓' : ''}
+        {checked ? <Icon name="check" size={14} /> : ''}
       </span>
       <span style={{ fontSize: 15 }}>{children}</span>
     </label>

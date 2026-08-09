@@ -3,6 +3,7 @@ import { useVault } from '../context/VaultContext';
 import { Paladin } from '../components/Paladin';
 import { calcStrength } from '../lib/strength';
 import { copySecret } from '../lib/clipboard';
+import { Icon } from '../components/Icon';
 
 /**
  * Vault list. Matches the design prototype: a search field with an
@@ -10,7 +11,7 @@ import { copySecret } from '../lib/clipboard';
  * a per-item strength meter plus quick-copy buttons, and a dashed
  * empty state with a floating mascot.
  */
-export function Vault({ onSelectItem, onAddItem, onOpenGenerator, selectedId }) {
+export function Vault({ onSelectItem, onAddItem, selectedId }) {
   const { items, loadItems } = useVault();
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -33,7 +34,9 @@ export function Vault({ onSelectItem, onAddItem, onOpenGenerator, selectedId }) 
       {/* search + actions */}
       <div style={{ display: 'flex', gap: 12 }}>
         <div style={{ position: 'relative', flex: 1 }}>
-          <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', pointerEvents: 'none' }}>⌕</span>
+          <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', pointerEvents: 'none', display: 'flex' }}>
+            <Icon name="search" />
+          </span>
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -55,8 +58,9 @@ export function Vault({ onSelectItem, onAddItem, onOpenGenerator, selectedId }) 
           />
         </div>
 
-        <button onClick={onOpenGenerator} style={secondaryBtn}>⚒ FORGE</button>
-        <button onClick={onAddItem} style={primaryBtn}>+ ADD</button>
+        <button onClick={onAddItem} style={primaryBtn}>
+          <Icon name="plus" size={12} /> ADD
+        </button>
       </div>
 
       {loading ? (
@@ -164,10 +168,10 @@ function ItemRow({ item, index, onClick, selected }) {
       {hover && (
         <div style={{ display: 'flex', gap: 6 }}>
           <button onClick={e => copy('user', item.data.username, e)} style={copyChip}>
-            {copied === 'user' ? '✓' : 'USER'}
+            {copied === 'user' ? <Icon name="check" size={12} /> : 'USER'}
           </button>
           <button onClick={e => copy('pass', item.data.password, e)} style={copyChip}>
-            {copied === 'pass' ? '✓' : 'PASS'}
+            {copied === 'pass' ? <Icon name="check" size={12} /> : 'PASS'}
           </button>
         </div>
       )}
@@ -203,13 +207,6 @@ const primaryBtn = {
   cursor: 'pointer', boxShadow: '0 3px 0 var(--green-deep), 0 14px 28px -10px var(--glow)'
 };
 
-const secondaryBtn = {
-  display: 'flex', alignItems: 'center', gap: 8,
-  font: '600 13px Geist, sans-serif', letterSpacing: '.1em',
-  padding: '0 18px', borderRadius: 'var(--radius)',
-  border: '1px solid var(--edge)', background: 'transparent', color: 'var(--text)',
-  cursor: 'pointer', boxShadow: '0 2px 0 var(--edge)'
-};
 
 const copyChip = {
   background: 'var(--raised)', border: '1px solid var(--edge)', borderRadius: 'var(--radius)',

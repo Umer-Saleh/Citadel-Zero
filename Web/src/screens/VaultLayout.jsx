@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Vault } from './Vault';
 import { ItemDetail } from './ItemDetail';
+import { Icon } from '../components/Icon';
 
 /**
  * The two-column vault: list on the left, detail/edit panel on the
@@ -13,7 +14,7 @@ import { ItemDetail } from './ItemDetail';
  *   selected === null      -> panel is a blank "new entry" form
  *   selected === <id>      -> panel edits that entry
  */
-export function VaultLayout({ onOpenGenerator, selected, onSelect, forgedPassword, onForgedConsumed }) {
+export function VaultLayout({selected, onSelect, forgedPassword, onForgedConsumed }) {
 
   // A password came back from the forge with no panel open, so open a
   // blank entry to put it in. If a panel is already open — new or
@@ -32,7 +33,6 @@ export function VaultLayout({ onOpenGenerator, selected, onSelect, forgedPasswor
       <Vault
         onSelectItem={onSelect}
         onAddItem={() => onSelect(null)}
-        onOpenGenerator={onOpenGenerator}
         selectedId={selected}
       />
 
@@ -45,7 +45,11 @@ export function VaultLayout({ onOpenGenerator, selected, onSelect, forgedPasswor
             onDone={() => onSelect(undefined)}
             injectedPassword={forgedPassword}
             onInjected={onForgedConsumed}
-            key={selected ?? 'new'}   // remount when switching entries so form state resets
+            // Remounts when you switch entries, AND when a password
+            // arrives from the forge — that remount is what lets
+            // ItemDetail seed the field in useState instead of
+            // syncing it in an effect afterwards.
+            key={`${selected ?? 'new'}:${forgedPassword ? 'forged' : ''}`}
           />
         )}
       </div>
@@ -57,11 +61,14 @@ function PanelHint() {
   return (
     <div style={{
       border: '1px dashed var(--edge)', borderRadius: 'var(--radius)',
-      padding: '48px 24px', textAlign: 'center',
-      font: "500 12px 'Geist Mono', monospace", letterSpacing: '.14em', color: 'var(--muted)',
+      padding: '64px 24px', display: 'flex', flexDirection: 'column',
+      alignItems: 'center', gap: 16, color: 'var(--muted)',
       animation: 'riseIn .4s cubic-bezier(.2,.9,.3,1) both'
     }}>
-      SELECT AN ENTRY<br />OR PRESS + ADD
+      <Icon name="key" size={24} />
+      <span style={{ font: "500 12px 'Geist Mono', monospace", letterSpacing: '.16em' }}>
+        SELECT AN ENTRY
+      </span>
     </div>
   );
 }

@@ -63,23 +63,16 @@ export default function App() {
   // ---------------------------------------------------------------
 
   if (isUnlocked) {
-    return (
-      // No gear while you're already in settings.
-      <AppShell onOpenSettings={view === 'settings' ? undefined : () => setView('settings')}>
+  return (
+      <AppShell view={view} onNavigate={setView}>
 
         {/*
           The vault stays MOUNTED whatever view we're on, and is only
-          hidden with CSS. Switching to the generator used to unmount
-          it, which threw away the selected entry and any half-typed
-          draft in the detail panel — so going to the forge mid-entry
-          silently erased the fields you'd already filled in.
-
-          display:none also removes it from the accessibility tree, so
-          hidden content isn't reachable by tab or screen reader.
+          hidden with CSS. Unmounting it would throw away the selected
+          entry and any half-typed draft in the detail panel.
         */}
         <div style={{ display: view === 'vault' ? 'block' : 'none' }}>
           <VaultLayout
-            onOpenGenerator={() => setView('generator')}
             selected={selected}
             onSelect={setSelected}
             forgedPassword={forgedPassword}
@@ -88,15 +81,10 @@ export default function App() {
         </div>
 
         {view === 'generator' && (
-          <Generator
-            onBack={() => setView('vault')}
-            onUse={pw => { setForgedPassword(pw); setView('vault'); }}
-          />
+          <Generator onUse={pw => { setForgedPassword(pw); setView('vault'); }} />
         )}
 
-        {view === 'settings' && (
-          <Settings onBack={() => setView('vault')} />
-        )}
+        {view === 'settings' && <Settings />}
       </AppShell>
     );
   }

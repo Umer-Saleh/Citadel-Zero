@@ -1,22 +1,35 @@
 import { useState, useEffect, useRef } from 'react';
 import { useVault } from '../context/VaultContext';
 import { copySecret } from '../lib/clipboard';
+import { Icon } from '../components/Icon';
 
 const EMPTY = { site: '', username: '', password: '', url: '', notes: '' };
 
-export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
+export function ItemDetail({ itemId, onDone, injectedPassword }) {
   const { items, addItem, updateItem, deleteItem } = useVault();
 
   const existing = itemId ? items.find(it => it.id === itemId) : null;
-  const [form, setForm] = useState(existing ? existing.data : EMPTY);
+  const base = existing ? existing.data : EMPTY;
+
+  // A password handed over from the forge is seeded here, at mount,
+  // rather than copied in by an effect afterwards. VaultLayout's key
+  // includes the forged value, so this component remounts when one
+  // arrives and this initialiser runs with it.
+  const [form, setForm] = useState(
+    injectedPassword ? { ...base, password: injectedPassword } : base
+  );
+
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [revealed, setRevealed] = useState(false);
 
-  // Seconds left before the clipboard is wiped. null = nothing of
-  // ours is on the clipboard, so the meter stays hidden.
+  // Reveal a forged password: the user hasn't seen this value yet, and
+  // a row of dots gives them no way to know it landed.
+  const [revealed, setRevealed] = useState(Boolean(injectedPassword));
+
+  // Seconds left before the clipboard is wiped, and which field is on
+  // it. null = nothing of ours is there, so no meter renders.
   const [copyLeft, setCopyLeft] = useState(null);
-  const [copyField, setCopyField] = useState('');    // NEW — "PASSWORD" / "USERNAME"
+  const [copyField, setCopyField] = useState('');
   const detachClip = useRef(null);
 
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
@@ -44,31 +57,17 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
     }
   }
 
-  // The clear is guaranteed by copySecret; this component only
-  // renders the countdown it reports.
-  function copy(label, value) {
+  // The 30s clear is guaranteed app-wide by copySecret; this component
+  // only renders the countdown it reports.
+  function copy(field, value) {
     detachClip.current?.();
-    setCopyField(label);
+    setCopyField(field);
     detachClip.current = copySecret(value, setCopyLeft);
   }
 
-  // Detach UI updates only. Do NOT cancel — if the user navigates
-  // away right after copying, the clear must still happen.
+  // Detach UI updates only. Do NOT cancel — if the user navigates away
+  // right after copying, the clear must still happen.
   useEffect(() => () => detachClip.current?.(), []);
-
-  // A password arrived from the forge. Fill it in and reveal it — the
-  // user hasn't seen this value yet, and a row of dots would give them
-  // no way to know it landed.
-  //
-  // This can't be a useState initialiser: the panel may already be
-  // mounted and editing an entry when the value arrives, so there's no
-  // fresh render to seed. onInjected() tells App to drop its copy.
-  useEffect(() => {
-    if (injectedPassword == null) return;
-    setForm(f => ({ ...f, password: injectedPassword }));
-    setRevealed(true);
-    onInjected?.();
-  }, [injectedPassword, onInjected]);
 
   const title = form.site || (itemId ? 'Untitled' : 'New entry');
   const letter = form.site ? form.site.charAt(0).toUpperCase() : '+';
@@ -119,7 +118,9 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
                 value={form.username} onChange={set('username')} placeholder="you@example.com"
                 font="400 14px 'Geist Mono', monospace"
               />
-              <IconButton title="Copy username" onClick={() => copy('username', form.username)}>⧉</IconButton>
+              <IconButton title="Copy username" onClick={() => copy('username', form.username)}>
+                <Icon name="copy" />
+              </IconButton>
             </div>
             <ClipMeter left={copyField === 'username' ? copyLeft : null} />
           </div>
@@ -135,9 +136,11 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
                 font="500 16px 'Geist Mono', monospace" tracking=".08em"
               />
               <IconButton title="Show / hide" onClick={() => setRevealed(r => !r)}>
-                {revealed ? '🙈' : '👁'}
+                <Icon name={revealed ? 'eyeoff' : 'eye'} size={15} />
               </IconButton>
-              <IconButton title="Copy password" onClick={() => copy('password', form.password)}>⧉</IconButton>
+              <IconButton title="Copy password" onClick={() => copy('password', form.password)}>
+                <Icon name="copy" />
+              </IconButton>
             </div>
             <ClipMeter left={copyField === 'password' ? copyLeft : null} />
           </div>
@@ -169,7 +172,7 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
                 boxShadow: '0 2px 0 var(--edge)'
               }}
             >
-              ✖ DELETE
+              <Icon name="trash" /> DELETE
             </PressButton>
           )}
           <div style={{ flex: 1 }} />
@@ -221,8 +224,8 @@ function Field({ label, children }) {
 }
 
 /**
- * Clipboard countdown. Rendered under whichever field is currently
- * on the clipboard — and only that one. There is a single system
+ * Clipboard countdown. Rendered under whichever field is currently on
+ * the clipboard — and only that one. There is a single system
  * clipboard, so only a single meter can ever be truthful. Copying a
  * second field moves this meter rather than starting a second one.
  */
@@ -309,6 +312,7 @@ function IconButton({ children, ...props }) {
       onMouseUp={() => setDown(false)}
       onMouseLeave={() => setDown(false)}
       style={{
+        display: 'grid', placeItems: 'center',
         background: 'none', border: '1px solid var(--edge)',
         borderRadius: 'var(--radius)', padding: '0 12px',
         color: 'var(--muted)', cursor: 'pointer',
