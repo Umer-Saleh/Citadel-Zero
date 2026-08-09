@@ -73,10 +73,16 @@ export function Button({ variant = 'primary', children, style, ...props }) {
 // INPUT — labelled, pixel-bordered, green focus glow. Optional
 // secret type with a reveal toggle.
 // ---------------------------------------------------------------
-export function Input({ label, error, revealable, value, onChange, mono, ...props }) {
+export function Input({ label, error, revealable, revealed: revealedProp, onToggleReveal, value, onChange, mono, ...props }) {
   const [focused, setFocused] = useState(false);
-  const [revealed, setRevealed] = useState(false);
+  const [ownRevealed, setOwnRevealed] = useState(false);
   const [eyeDown, setEyeDown] = useState(false);
+
+  // Controlled when the caller passes `revealed`, so one toggle can
+  // govern several fields. Uncontrolled otherwise.
+  const controlled = revealedProp !== undefined;
+  const revealed = controlled ? revealedProp : ownRevealed;
+  const toggle = () => (controlled ? onToggleReveal() : setOwnRevealed(r => !r));
 
   const inputStyle = {
     flex: 1, minWidth: 0, width: '100%',
@@ -114,7 +120,7 @@ export function Input({ label, error, revealable, value, onChange, mono, ...prop
         {revealable && (
           <button
             type="button"
-            onClick={() => setRevealed(r => !r)}
+            onClick={toggle}
             onMouseDown={() => setEyeDown(true)}
             onMouseUp={() => setEyeDown(false)}
             onMouseLeave={() => setEyeDown(false)}
