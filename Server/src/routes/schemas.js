@@ -89,6 +89,17 @@ const upgradeKdfSchema = z.object({
   newWrappedDek: wrappedDekSchema
 }).strict();
 
+// The refresh token is 32 random bytes as base64url — 43 chars, no
+// padding. Pinning the length and alphabet means a malformed token is
+// rejected by validation before it ever reaches a database query.
+const refreshSchema = z.object({
+  refreshToken: z.string().regex(/^[A-Za-z0-9_-]{43}$/, 'malformed refresh token')
+}).strict();
+
+// Same shape, separate name: logout and refresh mean different things
+// and shouldn't share a schema just because they look alike today.
+const logoutSchema = refreshSchema;
+
 module.exports = {
   signupSchema,
   loginSchema,
@@ -99,5 +110,7 @@ module.exports = {
   changePasswordSchema,
   recoveryMaterialQuerySchema,
   recoverSchema,
-  upgradeKdfSchema
+  upgradeKdfSchema,
+  refreshSchema,
+  logoutSchema
 };

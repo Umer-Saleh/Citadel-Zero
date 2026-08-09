@@ -1,4 +1,6 @@
 const userRepo = require('../repositories/userRepo');
+const refreshTokenRepo = require('../repositories/refreshTokenRepo');
+const { withTransaction } = require('../db')
 const { serverStoreAuth, serverVerifyAuth } = require('../auth');
 const { AppError } = require('../errors/AppError');
 const { needsKdfUpgrade, DEFAULT_KDF_PARAMS } = require('../crypto');
@@ -27,13 +29,24 @@ async function changePassword(userId, {
     throw new AppError('INVALID_CREDENTIALS', 401, 'current password is incorrect');
   }
 
+  // Argon2 is slow, so hash BEFORE opening the transaction — holding
+  // a connection and a row lock open across a ~1s hash would block
+  // other writers for no reason.
   const stored = await serverStoreAuth(newAuthHash);
 
-  await userRepo.updateCredentials(userId, {
-    authHash: stored,
-    kdfSalt: newKdfSalt,
-    kdfParams: newKdfParams,
-    wrappedDek: newWrappedDek
+  // The credential change and the session revocation must land
+  // together. If the process died between them, the password would
+  // be new while every old session stayed live — precisely the state
+  // changing a password is supposed to end.
+  await withTransaction(async (client) => {
+    await userRepo.updateCredentials(userId, {
+      authHash: stored,
+      kdfSalt: newKdfSalt,
+      kdfParams: newKdfParams,
+      wrappedDek: newWrappedDek
+    }, client);
+
+    await refreshTokenRepo.revokeAllForUser(userId, client);
   });
 
   console.log(`[server] password changed for ${user.email}`);
@@ -80,16 +93,26 @@ async function completeRecovery({
 
   const stored = await serverStoreAuth(newAuthHash);
 
-  await userRepo.updateCredentials(user.id, {
-    authHash: stored,
-    kdfSalt: newKdfSalt,
-    kdfParams: newKdfParams,
-    wrappedDek: newWrappedDek
-  });
+  // All three must land together. A partial write would leave the
+  // account with a new password wrapper and a stale recovery wrapper
+  // — the DEK still sealed under the OLD recovery key. The user could
+  // log in, but their recovery kit would no longer open their vault.
+  await withTransaction(async (client) => {
+    await userRepo.updateCredentials(user.id, {
+      authHash: stored,
+      kdfSalt: newKdfSalt,
+      kdfParams: newKdfParams,
+      wrappedDek: newWrappedDek
+    }, client);
 
-  await userRepo.updateRecoveryWrapper(user.id, {
-    recoverySalt: newRecoverySalt,
-    recoveryWrappedDek: newRecoveryWrappedDek
+    await userRepo.updateRecoveryWrapper(user.id, {
+      recoverySalt: newRecoverySalt,
+      recoveryWrappedDek: newRecoveryWrappedDek
+    }, client);
+
+    // Recovery means the old credentials are presumed lost or
+    // compromised. Any session still running under them dies.
+    await refreshTokenRepo.revokeAllForUser(user.id, client);
   });
 
   console.log(`[server] recovery completed for ${email}`);
