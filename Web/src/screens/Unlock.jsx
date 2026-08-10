@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useVault } from '../context/VaultContext';
 import { Card, Input, Button, DeriveBar } from '../components/ui';
 import { Paladin } from '../components/Paladin';
@@ -8,37 +8,70 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
 
   const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
+  const [code, setCode] = useState('');
   const [error, setError] = useState('');
+
+  // Revealed only after the server tells us this account has 2FA on.
+  // Showing it to everyone would be noise; asking up front would need
+  // an extra round trip before the user has typed anything.
+  const [needsCode, setNeedsCode] = useState(false);
+  const codeRef = useRef(null);
 
   // 'form' | 'deriving' | 'granted'
   const [phase, setPhase] = useState('form');
 
+  // Move focus to the code field the moment it appears, so the user
+  // can type straight from their phone without reaching for the mouse.
+  useEffect(() => {
+    if (needsCode) codeRef.current?.focus();
+  }, [needsCode]);
+
   async function handleUnlock() {
     setError('');
     if (!email || !pw) return setError('Enter your email and master password.');
+    if (needsCode && !code) return setError('Enter the code from your authenticator app.');
 
     setPhase('deriving');
     try {
-      const result = await login(email, pw);   // real Argon2id runs here
+      const result = await login(email, pw, code || undefined);   // real Argon2id runs here
       setPhase('granted');
       // brief beat on the triumphant "gate" pose before entering
       setTimeout(() => onUnlocked(result), 700);
     } catch (e) {
       setPhase('form');
+
+      if (e.code === 'TOTP_REQUIRED') {
+        // Thrown client-side before deriving. Not an error the user
+        // caused — just the next step.
+        setNeedsCode(true);
+        return;
+      }
+
       setError(
-        e.code === 'INVALID_CREDENTIALS' ? 'Wrong email or master password.'
+        e.code === 'INVALID_CREDENTIALS'
+          // The server deliberately can't tell us WHICH was wrong —
+          // saying "the code was wrong" would confirm the password
+          // is live. So the message covers both.
+          ? (needsCode
+              ? 'Wrong password or code. Codes expire every 30 seconds — try the current one.'
+              : 'Wrong email or master password.')
         : e.code === 'NOT_FOUND' ? 'No vault found for that email.'
         : e.code === 'NETWORK_ERROR' ? 'Cannot reach the server.'
-        : 'Could not unlock. Please try again.'
+        : `Could not unlock${e.code ? ` (${e.code})` : ''}.`
       );
+
+      // A used code can never work again, so clear it rather than
+      // letting the user retry the same six digits.
+      setCode('');
     }
   }
+
+  const onEnter = e => e.key === 'Enter' && handleUnlock();
 
   return (
     <section style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: '48px 24px', position: 'relative', zIndex: 1 }}>
       <div style={{ width: 400, maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 32 }}>
 
-        {/* masthead — gap 16 and the entrance animation come from the prototype */}
         <div style={{
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16,
           animation: 'riseIn .5s cubic-bezier(.2,.9,.3,1) both'
@@ -60,26 +93,48 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
         {phase === 'form' && (
           <Card style={{
             display: 'flex', flexDirection: 'column', gap: 20,
-            // card lands just after the masthead, not with it
             animation: 'riseIn .5s cubic-bezier(.2,.9,.3,1) both',
             animationDelay: '.12s'
           }}>
             <Input
               label="Email" type="email" placeholder="you@example.com"
               value={email} onChange={e => setEmail(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleUnlock()}
+              onKeyDown={onEnter}
             />
             <Input
               label="Master password" revealable mono
               placeholder="············"
               value={pw} onChange={e => setPw(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleUnlock()}
+              onKeyDown={onEnter}
             />
+
+            {needsCode && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, animation: 'riseIn .3s cubic-bezier(.2,.9,.3,1) both' }}>
+                <Input
+                  ref={codeRef}
+                  label="Authenticator code" mono
+                  placeholder="000000"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={10}
+                  value={code}
+                  // Strip spaces and dashes as they type — people copy
+                  // backup codes off paper with separators.
+                  onChange={e => setCode(e.target.value.replace(/[\s-]/g, ''))}
+                  onKeyDown={onEnter}
+                />
+                <span style={{ fontSize: 12, color: 'var(--muted)', textWrap: 'pretty' }}>
+                  Six digits from your authenticator app, or one of your backup codes.
+                </span>
+              </div>
+            )}
+
             {error && <div style={{ fontSize: 13, color: 'var(--red)' }}>{error}</div>}
-            {/* prototype's unlock button is taller than the default Button */}
-            <Button onClick={handleUnlock} style={{ padding: '14px 24px', letterSpacing: '.12em', justifyContent: 'center' }}>
+
+            <Button onClick={handleUnlock} style={{ padding: '14px 24px', letterSpacing: '.12em' }}>
               UNLOCK
             </Button>
+
             <div style={{ textAlign: 'center', fontSize: 13 }}>
               <a href="#" onClick={e => { e.preventDefault(); onGoRecovery(); }} style={{ color: 'var(--green)' }}>
                 Forgot master password? Recover with your kit

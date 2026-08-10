@@ -53,9 +53,9 @@ export function VaultProvider({ children }) {
   }, []);
 
 
-  const login = useCallback(async (loginEmail, password) => {
+  const login = useCallback(async (loginEmail, password, totpCode) => {
     const { dek: newDek, kdfUpgradeAvailable: upgrade, targetKdfParams } =
-      await auth.login(loginEmail, password);
+      await auth.login(loginEmail, password, totpCode);
     setDek(newDek);
     setEmail(loginEmail);                    // remember who's unlocked
     setKdfUpgradeAvailable(!!upgrade);       // for the settings "level up" prompt
