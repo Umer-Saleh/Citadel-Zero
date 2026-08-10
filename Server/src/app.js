@@ -11,7 +11,7 @@ const { validate } = require('./middleware/validate');
 const {
   signupSchema, loginSchema, kdfParamsQuerySchema,
   vaultItemSchema, uuidParamSchema, upgradeKdfSchema, wrappedDekSchema, changePasswordSchema,
-  recoveryMaterialQuerySchema, recoverSchema, refreshSchema, logoutSchema
+  recoveryMaterialQuerySchema, recoverSchema, refreshSchema, logoutSchema, totpConfirmSchema, totpDisableSchema
 } = require('./routes/schemas');
 
 const cors = require('cors');
@@ -43,6 +43,9 @@ app.use('/api/account/password', authLimiter);
 app.use('/api/account/recovery-material', authLimiter);
 app.use('/api/account/recover', authLimiter);
 app.use('/api/account/kdf-upgrade', authLimiter);
+app.use('/api/account/totp/confirm', authLimiter);
+app.use('/api/account/totp/disable', authLimiter);
+
 // ---------------------------------------------------------------
 // ASYNC WRAPPER
 // Forwards rejected promises to the error handler. Without this,
@@ -188,6 +191,27 @@ app.post('/api/account/kdf-upgrade',
   wrap(async (req, res) => {
     await accountService.upgradeKdf(req.userId, req.body);
     res.status(200).json({ ok: true });
+  }));
+
+app.post('/api/account/totp/begin',
+  requireAuth,
+  wrap(async (req, res) => {
+    res.status(200).json(await authService.beginTotpEnrolment(req.userId));
+  }));
+
+app.post('/api/account/totp/confirm',
+  requireAuth,
+  validate(totpConfirmSchema),
+  wrap(async (req, res) => {
+    res.status(200).json(await authService.confirmTotpEnrolment(req.userId, req.body.code));
+  }));
+
+app.post('/api/account/totp/disable',
+  requireAuth,
+  validate(totpDisableSchema),
+  wrap(async (req, res) => {
+    await authService.disableTotp(req.userId, req.body.code);
+    res.status(204).end();
   }));
 
 // ---------------------------------------------------------------

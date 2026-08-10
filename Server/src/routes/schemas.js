@@ -35,9 +35,21 @@ const signupSchema = z.object({
   recoveryWrappedDek: wrappedDekSchema
 }).strict();
 
+// Six digits for TOTP, or a 10-char hex backup code. One field, two
+// shapes: the server tries it as a TOTP code first and falls back to
+// a backup code, so the client doesn't have to know which it holds.
+const totpCodeField = z.string().regex(/^(\d{6}|[0-9a-fA-F]{10})$/, 'invalid code format');
+
+const totpConfirmSchema = z.object({ code: totpCodeField }).strict();
+const totpDisableSchema = z.object({ code: totpCodeField }).strict();
+
+
 const loginSchema = z.object({
   email: z.string().email().max(254),
-  authHash: base64(32)
+  authHash: base64(32),
+  // Optional: only accounts with 2FA on need it. The server decides
+  // whether it was required, not the client.
+  totpCode: totpCodeField.optional()
 }).strict();
 
 const kdfParamsQuerySchema = z.object({
@@ -112,5 +124,8 @@ module.exports = {
   recoverSchema,
   upgradeKdfSchema,
   refreshSchema,
-  logoutSchema
+  logoutSchema,
+  totpCodeField,
+  totpConfirmSchema,
+  totpDisableSchema
 };
