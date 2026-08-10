@@ -36,18 +36,30 @@ export async function signup(email, password) {
 /**
  * Log in. Returns the in-memory DEK and whether a KDF upgrade is
  * available. The DEK is the caller's to hold in memory only.
+ *
+ * If the account has 2FA on and no code was given, this throws
+ * TOTP_REQUIRED *before* deriving — Argon2 takes a second or two and
+ * there's no point spending it on a request the server will reject.
+ * The caller catches that, shows a code field, and calls again.
  */
-export async function login(email, password) {
-  const { kdfSalt, kdfParams } = await api.get(
+export async function login(email, password, totpCode) {
+  const { kdfSalt, kdfParams, totpEnabled } = await api.get(
     `/api/user/kdf-params?email=${encodeURIComponent(email)}`
   );
+
+  if (totpEnabled && !totpCode) {
+    const err = new Error('TOTP_REQUIRED');
+    err.code = 'TOTP_REQUIRED';
+    throw err;
+  }
 
   const salt = fromBase64(kdfSalt);
   const { authHash, kek } = await deriveKeys(password, salt, kdfParams);
 
   const res = await api.post('/api/auth/login', {
     email,
-    authHash: toBase64(authHash)
+    authHash: toBase64(authHash),
+    ...(totpCode ? { totpCode } : {})    // omit entirely when not needed
   });
 
   setToken(res.token);
