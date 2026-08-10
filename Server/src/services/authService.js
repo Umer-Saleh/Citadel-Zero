@@ -3,9 +3,13 @@ const jwt = require('jsonwebtoken');
 const config = require('../config');
 const userRepo = require('../repositories/userRepo');
 const refreshTokenRepo = require('../repositories/refreshTokenRepo');
+const totpRepo = require('../repositories/totpRepo');
 const { serverStoreAuth, serverVerifyAuth } = require('../auth');
 const { AppError } = require('../errors/AppError');
-const { needsKdfUpgrade, DEFAULT_KDF_PARAMS, generateToken, hashToken } = require('../crypto');
+const {
+  needsKdfUpgrade, DEFAULT_KDF_PARAMS, generateToken, hashToken,
+  generateSecret, buildUri, verifyCode, generateBackupCodes, hashBackupCode
+} = require('../crypto');
 const { withTransaction } = require('../db');
 
 // A real Argon2 hash used when the account does not exist, so the
@@ -44,7 +48,13 @@ async function getKdfParams(email) {
     throw new AppError('NOT_FOUND', 404, 'not found');
   }
 
-  return { kdfSalt: user.kdf_salt, kdfParams: user.kdf_params };
+  return {
+    kdfSalt: user.kdf_salt,
+    kdfParams: user.kdf_params,
+    // The unlock screen needs this before it can render — it decides
+    // whether to show a TOTP field alongside the password.
+    totpEnabled: user.totp_enabled
+  };
 }
 
 /**
@@ -163,7 +173,124 @@ async function logout(refreshToken) {
   if (row) await refreshTokenRepo.revokeFamily(row.family_id);
 }
 
-async function login({ email, authHash }) {
+// ---------------------------------------------------------------
+// TOTP
+//
+// WHAT THIS PROTECTS: the API, not the vault. The vault is sealed
+// under a key derived from the master password, which the server
+// never sees — a server-side check cannot gate a key that never
+// arrives. What it gates is the ENCRYPTED BLOBS: a stolen password
+// alone can no longer pull down wrappedDek and the vault items, and
+// without the ciphertext the password is useless.
+// ---------------------------------------------------------------
+
+/**
+ * Begin enrolment: generate a secret and return the URI to scan.
+ *
+ * Does NOT enable 2FA. The user has to prove they scanned it by
+ * entering a valid code first — enabling here would lock out anyone
+ * who closed the tab before finishing.
+ */
+async function beginTotpEnrolment(userId) {
+  const user = await totpRepo.findTotpById(userId);
+  if (!user) throw new AppError('NOT_FOUND', 404, 'not found');
+
+  if (user.totp_enabled) {
+    throw new AppError('TOTP_ALREADY_ENABLED', 409, 'two-factor is already on');
+  }
+
+  const secret = generateSecret();
+  await totpRepo.setSecret(userId, secret);
+
+  return {
+    secret,                              // shown as text, for manual entry
+    uri: buildUri(secret, user.email)    // for the QR code
+  };
+}
+
+/**
+ * Finish enrolment: verify a code, enable 2FA, issue backup codes.
+ * The codes are returned ONCE; only their hashes are kept, exactly
+ * like the recovery key at signup.
+ */
+async function confirmTotpEnrolment(userId, code) {
+  const user = await totpRepo.findTotpById(userId);
+  if (!user) throw new AppError('NOT_FOUND', 404, 'not found');
+
+  if (user.totp_enabled) {
+    throw new AppError('TOTP_ALREADY_ENABLED', 409, 'two-factor is already on');
+  }
+  if (!user.totp_secret) {
+    throw new AppError('TOTP_NOT_STARTED', 409, 'no enrolment in progress');
+  }
+
+  const step = verifyCode(user.totp_secret, code);
+  if (step === null) {
+    throw new AppError('INVALID_TOTP_CODE', 401, 'invalid code');
+  }
+
+  const codes = generateBackupCodes();
+
+  // Enabling and issuing backup codes must land together. Enabling
+  // without codes leaves no way back from a lost phone; codes without
+  // enabling are meaningless.
+  await withTransaction(async (client) => {
+    await totpRepo.enable(userId, step, client);
+    await totpRepo.replaceBackupCodes(userId, codes.map(hashBackupCode), client);
+  });
+
+  console.log(`[server] TOTP enabled for ${user.email}`);
+
+  return { backupCodes: codes };   // shown once, then gone
+}
+
+/**
+ * Turn 2FA off. Requires a current code — otherwise anyone who
+ * borrowed an unlocked session could quietly remove the second factor.
+ */
+async function disableTotp(userId, code) {
+  const user = await totpRepo.findTotpById(userId);
+  if (!user) throw new AppError('NOT_FOUND', 404, 'not found');
+
+  if (!user.totp_enabled) {
+    throw new AppError('TOTP_NOT_ENABLED', 409, 'two-factor is not on');
+  }
+
+  const ok = await checkTotp(user, code);
+  if (!ok) throw new AppError('INVALID_TOTP_CODE', 401, 'invalid code');
+
+  await withTransaction(async (client) => {
+    await totpRepo.disable(userId, client);
+    await totpRepo.replaceBackupCodes(userId, [], client);
+  });
+
+  console.log(`[server] TOTP disabled for ${user.email}`);
+}
+
+/**
+ * Verify a TOTP code OR a backup code, consuming whichever matched.
+ *
+ * Not exported — used by login and disableTotp within this module.
+ * Returns a boolean so the caller picks the error, letting login keep
+ * its single INVALID_CREDENTIALS response.
+ */
+async function checkTotp(user, code) {
+  if (!code) return false;
+
+  const step = verifyCode(user.totp_secret, code);
+
+  if (step !== null) {
+    // consumeStep is a conditional UPDATE, so a code that already
+    // advanced last_step is refused even though it's still inside its
+    // 90-second window. That's what makes each code single-use.
+    return totpRepo.consumeStep(user.id, step);
+  }
+
+  // Not a TOTP code — try it as a backup code.
+  return totpRepo.consumeBackupCode(user.id, hashBackupCode(code));
+}
+
+async function login({ email, authHash, totpCode }) {
   const user = await userRepo.findByEmail(email);
 
   // Always verify, even for unknown accounts, so response time does
@@ -173,6 +300,18 @@ async function login({ email, authHash }) {
   if (!user || !valid) {
     console.warn(`[server] failed login for ${email}`);
     throw new AppError('INVALID_CREDENTIALS', 401, 'invalid credentials');
+  }
+
+  if (user.totp_enabled) {
+    const ok = await checkTotp(user, totpCode);
+
+    if (!ok) {
+      console.warn(`[server] failed TOTP for ${email}`);
+      // Deliberately the SAME error as a wrong password. A distinct
+      // code would confirm to an attacker that the password they hold
+      // is live, letting them focus phishing on exactly those accounts.
+      throw new AppError('INVALID_CREDENTIALS', 401, 'invalid credentials');
+    }
   }
 
   const session = await issueSession(user.id);
@@ -193,4 +332,7 @@ async function login({ email, authHash }) {
   };
 }
 
-module.exports = { signup, getKdfParams, login, issueSession, refresh, logout };
+module.exports = {
+  signup, getKdfParams, login, issueSession, refresh, logout,
+  beginTotpEnrolment, confirmTotpEnrolment, disableTotp
+};

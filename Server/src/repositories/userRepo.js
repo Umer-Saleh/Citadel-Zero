@@ -17,7 +17,8 @@ function q(client) {
 async function findByEmail(email, client) {
   const { rows } = await q(client).query(
     `SELECT id, email, kdf_salt, kdf_params, auth_hash,
-            wrapped_dek, wrapped_dek_nonce, wrapped_dek_tag
+            wrapped_dek, wrapped_dek_nonce, wrapped_dek_tag,
+            totp_secret, totp_enabled, totp_last_step
      FROM users WHERE email = $1`,
     [email]
   );
