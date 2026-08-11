@@ -166,7 +166,13 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
         )}
 
         {phase !== 'form' && (
-          <Card style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24, padding: '40px 32px', textAlign: 'center' }}>
+          <Card style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24,
+            padding: '40px 32px', textAlign: 'center',
+            // Starts at 400ms so ACCESS GRANTED is legible first, and
+            // finishes as the 700ms handover to the vault fires.
+            ...(phase === 'granted' ? { animation: 'handOff .3s ease-in .4s both' } : {})
+          }}>
             {phase === 'granted' ? (
               <div style={{ fontFamily: "'Press Start 2P', monospace", fontSize: 13, color: 'var(--green)', letterSpacing: 1 }}>
                 ACCESS GRANTED

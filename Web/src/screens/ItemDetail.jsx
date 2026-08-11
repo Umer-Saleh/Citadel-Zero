@@ -86,7 +86,7 @@ export function ItemDetail({ itemId, onDone, injectedPassword }) {
   const letter = form.site ? form.site.charAt(0).toUpperCase() : '+';
 
   return (
-    <div style={{ animation: 'riseIn .5s cubic-bezier(.2,.9,.3,1) both', animationDelay: '.1s' }}>
+    <div style={{ animation: 'riseIn .22s cubic-bezier(.2,.9,.3,1) both'}}>
       <div style={panel}>
 
         {/* ---- HEADER: 48px avatar + name + url, divider beneath ---- */}

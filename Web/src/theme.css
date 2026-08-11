@@ -134,3 +134,9 @@ input:-webkit-autofill:active {
   caret-color: var(--green);
   transition: background-color 9999s ease-out;
 }
+
+/* Unlock hand-off: the granted card recedes as the vault takes over,
+   so the two screens read as one motion rather than a cut. */
+@keyframes handOff {
+  to { opacity: 0; transform: translateY(-8px); }
+}
