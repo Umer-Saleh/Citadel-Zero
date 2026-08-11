@@ -4,6 +4,7 @@ import { Paladin } from './Paladin';
 import { Switch } from './ui';
 import { Icon } from './Icon';
 import { vaultHealth } from '../lib/health';
+import { usePix } from '../context/PixContext';
 
 const TABS = [
   ['vault', 'VAULT'],
@@ -17,9 +18,10 @@ const TABS = [
  * @param pixSays   short shout beside the wordmark ('SEALED.', 'GOT IT.')
  *                  Not wired to anything yet; the moments come later.
  */
-export function AppShell({ children, view = 'vault', onNavigate, pixPose = 'idle', pixSays }) {
+export function AppShell({ children, view = 'vault', onNavigate }) {
   const { lock, items } = useVault();
   const { theme, toggle } = useTheme();
+  const { pose, says } = usePix();
 
   // Derived from the vault itself, never passed in — a hardcoded
   // default meant this read 100% regardless of what was stored.
@@ -37,16 +39,16 @@ export function AppShell({ children, view = 'vault', onNavigate, pixPose = 'idle
         }}>
           {/* PIX + wordmark */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <Paladin pose={pixPose} size={32} />
+            <Paladin pose={pose} size={32} />
             <span style={{ fontFamily: "'Press Start 2P', monospace", fontSize: 12, letterSpacing: 1, color: 'var(--text)' }}>
               VAULTKEEP
             </span>
-            {pixSays && (
+            {says && (
               <span style={{
                 font: "500 10px 'Geist Mono', monospace", letterSpacing: '.12em',
                 color: 'var(--muted)', whiteSpace: 'nowrap', animation: 'riseIn .25s both'
               }}>
-                {pixSays}
+                {says}
               </span>
             )}
           </div>
