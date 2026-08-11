@@ -63,6 +63,18 @@ export default function App() {
   // levels up and a sibling of all of them.
   const { react } = usePix();
 
+
+  // The vault waits a beat after isUnlocked flips, so Unlock can show
+  // ACCESS GRANTED and fade out. Without this, App swaps the screen in
+  // the same render that login() resolves — the granted card and its
+  // animation are torn out before a single frame draws.
+  const [entered, setEntered] = useState(false);
+    useEffect(() => {
+    if (!isUnlocked) { setEntered(false); return; }
+    const t = setTimeout(() => setEntered(true), 700);
+    return () => clearTimeout(t);
+  }, [isUnlocked]);
+  
   // Unlock and lock fire here rather than in VaultContext, because
   // VaultProvider wraps PixProvider and so can't use the hook.
   // Watching isUnlocked catches every path in: password, recovery,
@@ -78,7 +90,7 @@ export default function App() {
   // This branch is reachable ONLY while the DEK is in memory.
   // ---------------------------------------------------------------
 
-  if (isUnlocked) {
+  if (isUnlocked && entered) {
   return (
       <AppShell view={view} onNavigate={setView}>
 
