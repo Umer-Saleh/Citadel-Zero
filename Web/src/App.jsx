@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useVault } from './context/VaultContext';
 import { Signup } from './screens/Signup';
 import { RecoveryKit } from './screens/RecoveryKit';
@@ -7,6 +7,7 @@ import { VaultLayout } from './screens/VaultLayout';
 import { Generator } from './screens/Generator';  
 import { AppShell } from './components/AppShell';
 import { Settings } from './screens/Settings';
+import { usePix } from './context/PixContext';
 
 /**
  * Top-level router.
@@ -56,6 +57,21 @@ export default function App() {
   // whenever you switch to the generator or settings — its state would
   // be lost on the way back.
   const [selected, setSelected] = useState(undefined);
+
+  // PIX reacts to saves, copies, and deletes. The context is provided
+  // at the top level, but the reactions happen in the header, three
+  // levels up and a sibling of all of them.
+  const { react } = usePix();
+
+  // Unlock and lock fire here rather than in VaultContext, because
+  // VaultProvider wraps PixProvider and so can't use the hook.
+  // Watching isUnlocked catches every path in: password, recovery,
+  // and every path out: LOCK, idle timeout, a dead refresh token.
+  const firstRender = useRef(true);
+  useEffect(() => {
+    if (firstRender.current) { firstRender.current = false; return; }
+    react(isUnlocked ? 'unlock' : 'lock');
+  }, [isUnlocked, react]);
 
   // ---------------------------------------------------------------
   // UNLOCKED — the real application.

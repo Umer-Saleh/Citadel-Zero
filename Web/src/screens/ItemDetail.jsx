@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useVault } from '../context/VaultContext';
+import { usePix } from '../context/PixContext';
 import { copySecret } from '../lib/clipboard';
 import { Icon } from '../components/Icon';
 
@@ -7,6 +8,7 @@ const EMPTY = { site: '', username: '', password: '', url: '', notes: '' };
 
 export function ItemDetail({ itemId, onDone, injectedPassword }) {
   const { items, addItem, updateItem, deleteItem } = useVault();
+  const { react } = usePix();
 
   const existing = itemId ? items.find(it => it.id === itemId) : null;
   const base = existing ? existing.data : EMPTY;
@@ -41,6 +43,7 @@ export function ItemDetail({ itemId, onDone, injectedPassword }) {
       // using the in-memory DEK. Plaintext never leaves this function.
       if (itemId) await updateItem(itemId, form);
       else await addItem(form);
+      react('save');
       onDone();
     } catch {
       setBusy(false);
@@ -51,6 +54,9 @@ export function ItemDetail({ itemId, onDone, injectedPassword }) {
     setBusy(true);
     try {
       await deleteItem(itemId);
+      // Solemn, not celebratory — an acknowledgement that something
+      // irreversible happened, which is worth more here than anywhere.
+      react('remove');
       onDone();
     } catch {
       setBusy(false);
@@ -62,7 +68,14 @@ export function ItemDetail({ itemId, onDone, injectedPassword }) {
   function copy(field, value) {
     detachClip.current?.();
     setCopyField(field);
-    detachClip.current = copySecret(value, setCopyLeft);
+    react('copy');
+
+    detachClip.current = copySecret(value, (left) => {
+      setCopyLeft(left);
+      // null means the clipboard was just wiped. The one moment where
+      // the clear becomes visible rather than merely promised.
+      if (left === null) react('clipClear');
+    });
   }
 
   // Detach UI updates only. Do NOT cancel — if the user navigates away

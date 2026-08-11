@@ -2,9 +2,11 @@ import { useState, useRef, useEffect } from 'react';
 import { useVault } from '../context/VaultContext';
 import { Card, Input, Button, DeriveBar } from '../components/ui';
 import { Paladin } from '../components/Paladin';
+import { usePix } from '../context/PixContext';
 
 export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
   const { login } = useVault();
+  const { pose: pixPose, says: pixSays } = usePix();
 
   const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
@@ -76,9 +78,17 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16,
           animation: 'riseIn .5s cubic-bezier(.2,.9,.3,1) both'
         }}>
-          {/* channel while deriving, gate on success, idle otherwise */}
+          {/* channel while deriving, gate on success. Otherwise defer
+              to PIX's context pose — so arriving here straight after
+              a lock shows him standing guard for a beat, which is the
+              moment the header can't display because it unmounts. */}
           <Paladin
-            pose={phase === 'deriving' ? 'channel' : phase === 'granted' ? 'gate' : 'idle'}
+            pose={
+              phase === 'deriving' ? 'channel'
+              : phase === 'granted' ? 'gate'
+              : pixPose === 'guard' ? 'guard'
+              : 'idle'
+            }
             size={72}
             ring={phase === 'deriving' ? 0.7 : null}
           />
@@ -88,6 +98,18 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
           <div style={{ font: "500 12px 'Geist Mono', monospace", letterSpacing: '.16em', color: 'var(--muted)' }}>
             ZERO-KNOWLEDGE VAULT
           </div>
+
+          {/* PIX's line, shown here because the header that normally
+              carries it unmounts the instant the vault locks. */}
+          {phase === 'form' && pixSays && (
+            <div style={{
+              font: "500 11px 'Geist Mono', monospace", letterSpacing: '.16em',
+              color: 'var(--green)', animation: 'riseIn .25s both'
+            }}>
+              {pixSays}
+            </div>
+          )}
+
         </div>
 
         {phase === 'form' && (

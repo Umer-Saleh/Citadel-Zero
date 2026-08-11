@@ -4,6 +4,7 @@ import { useTheme } from '../context/ThemeContext';
 import { Card, Input, Button, Meter, Switch, DeriveBar } from '../components/ui';
 import { calcStrength } from '../lib/strength';
 import { Icon } from '../components/Icon';
+import { usePix } from '../context/PixContext';
 import QRCode from 'qrcode';
 import * as totpApi from '../api/totp';
 
@@ -65,6 +66,7 @@ function KdfUpgrade({ email, upgradeKdf }) {
   const [pw, setPw] = useState('');
   const [phase, setPhase] = useState('prompt');   // 'prompt' | 'confirm' | 'working' | 'done'
   const [error, setError] = useState('');
+  const { react } = usePix();
 
   async function run() {
     setError('');
