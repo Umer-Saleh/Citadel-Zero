@@ -1,5 +1,7 @@
 # Zero-Knowledge Password Manager
 
+[![CI](https://github.com/Umer-Saleh/Zero-Knowledge-Password-Manager/actions/workflows/ci.yml/badge.svg)](https://github.com/Umer-Saleh/Zero-Knowledge-Password-Manager/actions/workflows/ci.yml)
+
 A password manager where **the server never receives the master password, any
 encryption key, or any plaintext vault data.** If the database, the server
 process, and all network traffic were handed to an attacker, they could not read
