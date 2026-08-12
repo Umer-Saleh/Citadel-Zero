@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
+import QRCode from 'qrcode';
 import { useVault } from '../context/VaultContext';
 import { useTheme } from '../context/ThemeContext';
+import { usePix } from '../context/PixContext';
 import { Card, Input, Button, Meter, Switch, DeriveBar } from '../components/ui';
 import { calcStrength } from '../lib/strength';
 import { Icon } from '../components/Icon';
-import { usePix } from '../context/PixContext';
-import QRCode from 'qrcode';
 import * as totpApi from '../api/totp';
 
 export function Settings() {
@@ -59,8 +59,7 @@ export function Settings() {
 // re-derive while the user proves they hold it.
 //
 // The prototype leads this banner with a shield, not the mascot.
-// PIX's level-up reaction belongs in the header's pixSays line
-// ("LEVEL UP!"), which is where the prototype puts it.
+// PIX's level-up reaction goes to the header's pixSays line.
 // ---------------------------------------------------------------
 function KdfUpgrade({ email, upgradeKdf }) {
   const [pw, setPw] = useState('');
@@ -75,6 +74,7 @@ function KdfUpgrade({ email, upgradeKdf }) {
     try {
       await upgradeKdf(email, pw);
       setPhase('done');
+      react('levelup');
     } catch (e) {
       setPhase('confirm');
       setError(
@@ -298,8 +298,8 @@ function TwoFactor({ email }) {
     try {
       const { secret: s, uri } = await totpApi.beginEnrolment();
       setSecret(s);
-      // Fixed light-on-dark colours regardless of theme. A QR needs
-      // real contrast to scan in poor light, and the dark palette's
+      // Fixed dark-on-white regardless of theme. A QR needs real
+      // contrast to scan in poor light, and the dark palette's
       // --bg/--text pair is too close for comfort.
       setQr(await QRCode.toDataURL(uri, {
         margin: 2, width: 200,
@@ -408,7 +408,7 @@ function TwoFactor({ email }) {
         <>
           <div style={{ fontSize: 13, color: 'var(--muted)', textWrap: 'pretty' }}>
             Scan this with Google Authenticator, Authy, or any TOTP app, then enter
-            the code it shows.
+            the code it shows, or scan the qr code. If you lose your phone, you'll need one of the backup codes to log in.
           </div>
 
           <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
@@ -448,35 +448,46 @@ function TwoFactor({ email }) {
       {/* ---- BACKUP CODES — shown once ---- */}
       {phase === 'codes' && (
         <>
-          <div style={{
-            border: '1px solid color-mix(in srgb, var(--amber) 55%, var(--edge))',
-            borderRadius: 'var(--radius)', padding: '16px 20px',
-            display: 'flex', gap: 14, alignItems: 'flex-start'
-          }}>
-            <span style={{ color: 'var(--amber)', marginTop: 2 }}><Icon name="shield" size={18} /></span>
-            <div style={{ fontSize: 14, lineHeight: 1.55, textWrap: 'pretty' }}>
-              <strong>Save these now — they are shown once.</strong>
-              <br />
-              <span style={{ color: 'var(--muted)' }}>
-                Each works once, in place of a code from your app. Without them, losing
-                your phone means losing access to this account.
-              </span>
+          {/* Everything inside vk-print goes on paper together. A sheet
+              of ten hex strings with no heading is unidentifiable in a
+              drawer a year later. */}
+          <div className="vk-print" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+            <div className="vk-printonly" style={{ display: 'none' }}>
+              <h2 style={{ margin: 0, font: '700 18px Geist, sans-serif' }}>VaultKeep backup codes</h2>
+              <p style={{ margin: '4px 0 0', fontSize: 13 }}>{email}</p>
+            </div>
+
+            <div style={{
+              border: '1px solid color-mix(in srgb, var(--amber) 55%, var(--edge))',
+              borderRadius: 'var(--radius)', padding: '16px 20px',
+              display: 'flex', gap: 14, alignItems: 'flex-start'
+            }}>
+              <span style={{ color: 'var(--amber)', marginTop: 2 }}><Icon name="shield" size={18} /></span>
+              <div style={{ fontSize: 14, lineHeight: 1.55, textWrap: 'pretty' }}>
+                <strong>Save these now — they are shown once.</strong>
+                <br />
+                <span style={{ color: 'var(--muted)' }}>
+                  Each works once, in place of a code from your app. Without them, losing
+                  your phone means losing access to this account.
+                </span>
+              </div>
+            </div>
+
+            <div className="vk-secret" style={{
+              display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8,
+              background: 'var(--bg)', border: '1px solid var(--edge)',
+              borderRadius: 'var(--radius)', padding: 16
+            }}>
+              {backupCodes.map(c => (
+                <span key={c} style={{ font: "500 14px 'Geist Mono', monospace", letterSpacing: '.08em', color: 'var(--text)' }}>
+                  {c}
+                </span>
+              ))}
             </div>
           </div>
 
-          <div style={{
-            display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8,
-            background: 'var(--bg)', border: '1px solid var(--edge)',
-            borderRadius: 'var(--radius)', padding: 16
-          }}>
-            {backupCodes.map(c => (
-              <span key={c} style={{ font: "500 14px 'Geist Mono', monospace", letterSpacing: '.08em', color: 'var(--text)' }}>
-                {c}
-              </span>
-            ))}
-          </div>
-
-          <div style={{ display: 'flex', gap: 12 }}>
+          <div className="vk-noprint" style={{ display: 'flex', gap: 12 }}>
             <Button variant="secondary" onClick={downloadCodes}
               style={{ font: '600 12px Geist, sans-serif', padding: '11px 18px' }}>
               <Icon name="download" /> DOWNLOAD
@@ -487,7 +498,7 @@ function TwoFactor({ email }) {
             </Button>
           </div>
 
-          <label style={{ display: 'flex', gap: 14, alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}>
+          <label className="vk-noprint" style={{ display: 'flex', gap: 14, alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}>
             <input type="checkbox" checked={saved} onChange={e => setSaved(e.target.checked)}
               style={{ position: 'absolute', opacity: 0, width: 24, height: 24, margin: 0, cursor: 'pointer' }} />
             <span style={{
@@ -502,7 +513,7 @@ function TwoFactor({ email }) {
             <span style={{ fontSize: 15 }}>I've saved my backup codes somewhere safe.</span>
           </label>
 
-          <div>
+          <div className="vk-noprint">
             {/* No glow: this is a warning screen, not a celebration —
                 the same reason PIX kneels on the recovery kit. */}
             <Button onClick={() => { setBackupCodes([]); setSaved(false); setPhase('on'); }}

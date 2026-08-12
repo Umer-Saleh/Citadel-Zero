@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { Card, Button } from '../components/ui';
 import { Paladin } from '../components/Paladin';
-import { copySecret } from '../lib/clipboard';
 import { Icon } from '../components/Icon';
+import { copySecret } from '../lib/clipboard';
 
 export function RecoveryKit({ recoveryKey, email, onContinue }) {
   const [saved, setSaved] = useState(false);
@@ -47,7 +47,6 @@ export function RecoveryKit({ recoveryKey, email, onContinue }) {
 
     // Revoking synchronously after click() can race the download in
     // some browsers — the URL dies before the fetch for it starts.
-    // One tick is enough for the download to be handed off.
     setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
@@ -56,7 +55,7 @@ export function RecoveryKit({ recoveryKey, email, onContinue }) {
       <div style={{ width: 560, maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 24 }}>
 
         {/* PIX kneels in his solemn oath — this is the weighty moment */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+        <div className="vk-noprint" style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
           <Paladin pose="oath" size={64} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <h1 style={{ margin: 0, font: '700 26px Geist, sans-serif', color: 'var(--text)' }}>Your recovery kit</h1>
@@ -67,12 +66,21 @@ export function RecoveryKit({ recoveryKey, email, onContinue }) {
           </div>
         </div>
 
-        <Card style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+        <Card className="vk-print" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+          {/* Paper only. On screen this context is already carried by
+              the heading above; on paper that heading isn't printed,
+              and a bare key in a drawer is unidentifiable. */}
+          <div className="vk-printonly" style={{ display: 'none' }}>
+            <h2 style={{ margin: 0, font: '700 18px Geist, sans-serif' }}>VaultKeep recovery key</h2>
+            <p style={{ margin: '4px 0 0', fontSize: 13 }}>{email}</p>
+          </div>
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <span style={{ font: "600 12px Geist, sans-serif", letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--muted)' }}>
               Recovery key
             </span>
-            <div style={{
+            <div className="vk-secret" style={{
               background: 'var(--bg)', border: '1px solid var(--edge)', borderRadius: 'var(--radius)',
               padding: '28px 20px', textAlign: 'center',
               font: "600 19px 'Geist Mono', monospace", letterSpacing: '.2em', color: 'var(--text)',
@@ -84,7 +92,7 @@ export function RecoveryKit({ recoveryKey, email, onContinue }) {
 
           {/* prototype's kit buttons are smaller than the default:
               12px type, 11px 16px padding */}
-          <div style={{ display: 'flex', gap: 12 }}>
+          <div className="vk-noprint" style={{ display: 'flex', gap: 12 }}>
             <Button variant="secondary" onClick={copy} style={kitBtn}>
               {copied ? <><Icon name="check" /> COPIED</> : <><Icon name="copy" /> COPY</>}
             </Button>
@@ -96,7 +104,8 @@ export function RecoveryKit({ recoveryKey, email, onContinue }) {
             </Button>
           </div>
 
-          {/* The unmissable warning */}
+          {/* The unmissable warning — printed too: it's the part that
+              explains what the sheet is and why it matters. */}
           <div style={{
             border: '1px solid color-mix(in srgb, var(--amber) 55%, var(--edge))',
             borderRadius: 'var(--radius)', padding: '16px 20px',
@@ -114,23 +123,27 @@ export function RecoveryKit({ recoveryKey, email, onContinue }) {
           </div>
 
           {/* Required confirmation gates the continue button */}
-          <PixelCheckbox checked={saved} onChange={setSaved}>
-            I've saved my recovery key somewhere safe.
-          </PixelCheckbox>
+          <div className="vk-noprint">
+            <PixelCheckbox checked={saved} onChange={setSaved}>
+              I've saved my recovery key somewhere safe.
+            </PixelCheckbox>
+          </div>
 
           {/* No glow on this button, unlike every other primary action.
               This screen is a warning, not a celebration — the same
               reason PIX kneels instead of cheering. */}
-          <Button
-            onClick={onContinue}
-            disabled={!saved}
-            style={{
-              padding: '14px 24px', letterSpacing: '.12em', justifyContent: 'center',
-              boxShadow: '0 3px 0 var(--green-deep)'
-            }}
-          >
-            CONTINUE TO MY VAULT
-          </Button>
+          <div className="vk-noprint">
+            <Button
+              onClick={onContinue}
+              disabled={!saved}
+              style={{
+                width: '100%', padding: '14px 24px', letterSpacing: '.12em',
+                boxShadow: '0 3px 0 var(--green-deep)'
+              }}
+            >
+              CONTINUE TO MY VAULT
+            </Button>
+          </div>
         </Card>
       </div>
     </section>
@@ -163,7 +176,7 @@ function PixelCheckbox({ checked, onChange, children }) {
         borderRadius: 2,
         background: checked ? 'var(--green)' : 'var(--bg)',
         display: 'grid', placeItems: 'center',
-        color: 'var(--on-green)', fontSize: 14,
+        color: 'var(--on-green)',
         boxShadow: '0 2px 0 var(--edge)',
         transition: 'background .15s, border-color .15s'
       }}>
