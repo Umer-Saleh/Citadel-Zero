@@ -149,9 +149,9 @@ export function Input({ label, error, revealable, revealed: revealedProp, onTogg
 // ---------------------------------------------------------------
 // CARD — soft shadow + crisp pixel border, the signature hybrid.
 // ---------------------------------------------------------------
-export function Card({ children, style }) {
+export function Card({ children, style, className }) {
   return (
-    <div style={{
+    <div className={className} style={{
       background: 'var(--surface)',
       border: '1px solid var(--edge)',
       borderRadius: radius,
