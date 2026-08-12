@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import * as auth from '../api/auth';
-import { api, clearToken, setSessionLostHandler } from '../api/client';
+import { api, setSessionLostHandler } from '../api/client';
 import { encryptItem, decryptItem } from '../crypto';
 
 
@@ -109,6 +109,13 @@ export function VaultProvider({ children }) {
   const upgradeKdf = useCallback(async (email, password) => {
     await auth.upgradeKdf(email, password, dek);
   }, [dek]);
+
+  // A failed refresh means the session is gone — expired, revoked, or
+  // killed server-side by reuse detection. The UI must not keep
+  // showing a vault it can no longer reach, so we drop to unlock.
+  useEffect(() => {
+    setSessionLostHandler(lock);
+  }, [lock]);
 
   // Idle auto-lock: any activity resets the timer; silence locks the vault.
   useEffect(() => {

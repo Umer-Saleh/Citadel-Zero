@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  server:
+    name: Server tests
+    runs-on: ubuntu-latest
+
+    services:
+      # A real Postgres, not a mock. The tests exercise transactions,
+      # conditional UPDATEs and unique constraints — the exact things
+      # a fake would get wrong without telling you.
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: password_manager_test
+        ports:
+          - 5432:5432
+        # Without this the job races the database and the first
+        # migration fails on a connection refused.
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: Server/package-lock.json
+
+      - name: Install
+        working-directory: Server
+        run: npm ci
+
+      - name: Run migrations
+        working-directory: Server
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/password_manager_test
+        run: npx node-pg-migrate up -m migrations
+
+      - name: Test
+        working-directory: Server
+        env:
+          # test/helpers/setup.js reads this, exits if it's missing,
+          # and copies it over DATABASE_URL before src/db loads — so
+          # setting DATABASE_URL here would do nothing.
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/password_manager_test
+          
+          # Throwaway, and it never leaves the runner. A CI secret
+          # would imply this value matters — it doesn't, the tests
+          # only need config validation to pass.
+          JWT_SECRET: ci-only-secret-at-least-32-characters-long
+          NODE_ENV: test
+          RATE_LIMIT_ENABLED: 'false'
+        run: npm test
+
+  web:
+    name: Web tests and build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: Web/package-lock.json
+
+      - name: Install
+        working-directory: Web
+        run: npm ci
+
+      - name: Lint
+        working-directory: Web
+        run: npm run lint
+
+      - name: Test
+        working-directory: Web
+        run: npm test -- --run
+
+      # Catches what lint and tests can't: a broken import, a missing
+      # dependency, anything that only surfaces when Vite actually
+      # resolves the module graph.
+      - name: Build
+        working-directory: Web
+        run: npm run build
+
+  docker:
+    name: Docker images build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Building on Linux is the point. The signup.jsx casing bug
+      # would have been caught here — Windows resolves ./Signup to
+      # signup.jsx, Linux doesn't.
+      - name: Build server image
+        run: docker build -t vaultkeep-server ./Server
+
+      - name: Build web image
+        run: docker build -t vaultkeep-web ./Web
