@@ -3,7 +3,6 @@ import { useVault } from '../context/VaultContext';
 import { Card, Input, Button, Meter } from '../components/ui';
 import { Paladin } from '../components/Paladin';
 import { Icon } from '../components/Icon';
-import { calcStrength } from '../lib/strength';
 import { checkPolicy } from '../lib/policy';
 
 export function Signup({ onComplete, onGoLogin }) {

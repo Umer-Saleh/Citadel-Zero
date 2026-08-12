@@ -69,10 +69,14 @@ export default function App() {
   // the same render that login() resolves — the granted card and its
   // animation are torn out before a single frame draws.
   const [entered, setEntered] = useState(false);
-    useEffect(() => {
-    if (!isUnlocked) { setEntered(false); return; }
+
+  useEffect(() => {
+    if (!isUnlocked) return;
     const t = setTimeout(() => setEntered(true), 700);
-    return () => clearTimeout(t);
+    // Reset on the way OUT rather than on the way in: cleanup runs
+    // when isUnlocked flips false, which is exactly when `entered`
+    // should go stale. No synchronous setState in the effect body.
+    return () => { clearTimeout(t); setEntered(false); };
   }, [isUnlocked]);
   
   // Unlock and lock fire here rather than in VaultContext, because
