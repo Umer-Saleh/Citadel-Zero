@@ -1,0 +1,81 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      # No default. Compose fails loudly if it's missing rather than
+      # starting a database with a password that's in a public repo.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: password_manager
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Nothing outside this compose network needs to reach Postgres.
+    # Publishing 5432 would expose the database to your whole LAN for
+    # no reason — uncomment only if you want to connect with psql.
+    # ports:
+    #   - "5432:5432"
+    healthcheck:
+      # `depends_on` alone only waits for the container to START, not
+      # for Postgres to accept connections. Without this, migrations
+      # race the database and fail on a cold start.
+      test: ["CMD-SHELL", "pg_isready -U postgres -d password_manager"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    build: ./Server
+    environment:
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/password_manager
+      # config/index.js validates the whole env on import, and
+      # node-pg-migrate loads it, so these have to be present even
+      # though migrations don't use them.
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      NODE_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+    # Runs once and exits. A separate one-shot service rather than
+    # migrations-on-startup, so schema changes are a distinct step
+    # that can fail visibly instead of being buried in boot logs.
+    command: npx node-pg-migrate up -m migrations
+    restart: "no"
+
+  server:
+    build: ./Server
+    environment:
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/password_manager
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      PORT: 3000
+      NODE_ENV: production
+      CORS_ORIGIN: http://localhost:8080
+    ports:
+      # Overridable, because 3000 is a common port to already have
+      # something on — including this project's own dev server.
+      - "${SERVER_PORT:-3000}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        # Wait for migrations to finish, not just to start. The server
+        # would otherwise come up against a schema that doesn't exist.
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./Web
+      args:
+        # Vite inlines this at BUILD time, so it's baked into the
+        # bundle. The browser talks to the server on the host's
+        # published port, not the compose-internal hostname — this
+        # runs in the user's browser, not in the container.
+        VITE_API_URL: http://localhost:3000
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      - server
+    restart: unless-stopped
+
+volumes:
+  pgdata:
