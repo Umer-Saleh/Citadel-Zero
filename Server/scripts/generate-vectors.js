@@ -79,6 +79,15 @@ async function main() {
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, JSON.stringify(vectors, null, 2));
 
+  // The browser suite reads its own copy, so write both. A manual
+  // copy step gets forgotten, and then the test that exists to prove
+  // the two implementations agree is comparing against a stale
+  // snapshot instead — which defeats the whole point of having it.
+  const webPath = path.join(
+    __dirname, '..', '..', 'Web', 'src', 'crypto', 'vectors', 'crypto-vectors.json'
+  );
+  fs.writeFileSync(webPath, JSON.stringify(vectors, null, 2));
+
   // Sanity check: our own implementation must satisfy its own vectors.
   const roundTripped = decryptItem(encryptedItem, dek);
   if (JSON.stringify(roundTripped) !== JSON.stringify(ITEM)) {
@@ -91,6 +100,7 @@ async function main() {
   console.log('Vectors written to', outPath);
   console.log('  authHash:', authHash.toString('hex').slice(0, 32) + '...');
   console.log('  kek     :', kek.toString('hex').slice(0, 32) + '...');
+  console.log('Vectors written to', webPath);
 }
 
 main().catch(err => { console.error(err); process.exit(1); });

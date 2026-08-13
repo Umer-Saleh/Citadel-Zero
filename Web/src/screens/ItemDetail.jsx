@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useVault } from '../context/VaultContext';
 import { usePix } from '../context/PixContext';
 import { copySecret } from '../lib/clipboard';
@@ -51,6 +52,10 @@ export function ItemDetail({ itemId, onDone, injectedPassword }) {
   }
 
   async function remove() {
+    // Nothing to delete on an unsaved entry. The button is already
+    // gated on itemId, but a stale id reaching here would send a
+    // DELETE for someone else's row.
+    if (!itemId) { setConfirmDelete(false); return; }
     setBusy(true);
     try {
       await deleteItem(itemId);
@@ -204,13 +209,18 @@ export function ItemDetail({ itemId, onDone, injectedPassword }) {
         </div>
       </div>
 
-      {confirmDelete && (
+      {/* Portalled to body. A transformed ancestor — riseIn's animation
+          on the wrapper above — makes itself the containing block for
+          position:fixed, so the modal was centring on the 380px panel
+          instead of the viewport. */}
+      {confirmDelete && createPortal(
         <DeleteModal
           site={form.site}
           onCancel={() => setConfirmDelete(false)}
           onConfirm={remove}
           busy={busy}
-        />
+        />,
+        document.body
       )}
     </div>
   );

@@ -9,6 +9,13 @@ services:
       POSTGRES_DB: password_manager
     volumes:
       - pgdata:/var/lib/postgresql/data
+      # Anything in this directory runs once, on first initialisation
+      # of an empty data volume. Creating the role needs superuser, so
+      # it happens here rather than in a migration.
+      - ./Server/migrations/sql:/docker-entrypoint-initdb.d:ro
+
+      # (leave the volumes block unchanged)
+
     # Nothing outside this compose network needs to reach Postgres.
     # Publishing 5432 would expose the database to your whole LAN for
     # no reason — uncomment only if you want to connect with psql.

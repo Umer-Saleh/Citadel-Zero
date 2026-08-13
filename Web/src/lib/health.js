@@ -10,8 +10,17 @@ import { calcStrength } from './strength';
  * An empty vault reports 10. There is nothing weak in it, and showing
  * a new user 0% for having no entries would be alarming and wrong.
  */
+
+/**
+ * @returns 0-10, or null when there's nothing to measure.
+ *
+ * An empty vault is not 100% healthy — that's a claim about data that
+ * doesn't exist. It's also not 0%, which would alarm a new user for
+ * no reason. The honest answer is "not applicable", and the caller
+ * renders nothing.
+ */
 export function vaultHealth(items) {
-  if (!items.length) return 10;
+  if (!items.length) return null;
 
   const total = items.reduce(
     (sum, it) => sum + calcStrength(it.data.password || '').score,

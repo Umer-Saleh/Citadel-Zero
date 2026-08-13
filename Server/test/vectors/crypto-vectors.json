@@ -23,19 +23,19 @@
   "decryption": {
     "dekHex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "wrappedDek": {
-      "ciphertext": "vgx9FE18IF2B/rRH1WivbRCnrcKjDL6gFhmdwjld/xY=",
-      "nonce": "2ibD97r4C9wE3FYi",
-      "authTag": "wNVePE7yoPTDuW7QYxZwiw=="
+      "ciphertext": "YueFc3rOp43L/mVh5R6CvSgY0Pubcuk0J7wfUApGsFg=",
+      "nonce": "p9TsY1NN5zcra81M",
+      "authTag": "FDx/w7HhWNFtvE7yN2LWdg=="
     },
     "encryptedItem": {
-      "ciphertext": "tGLDHks5KGSmjtVwAvk70vKOnDb2MudRVkZ/AazhchP0+K0rDRAfRDbTDxxHXqVADWu0Q72Gnt6aj0KK9g+txNRw5ng9ng==",
-      "nonce": "JJ49OjXjzswkwHMx",
-      "authTag": "3IlSfUsOHcXzvqpoezc3Ag=="
+      "ciphertext": "iy3aRmd154bT9aFDhC07eShrlrY4hcRqBaP6Z1jRastgqJDqA6ncSTNvCqeO+2KA0pu1PTt+hm/pHpF+f4s0DIOWfcYQStZt4Fl0WWLKN8AYurhpnFHpmAsRyhZ6gwJDCAzqKPGqULYx/GO9M2PJnS34fSpnI5diIginyeI3L9EsT+sxhHbbHFu9wXlCtcGmu/H1lbJNCZEe69ij1b/dAy8pRqVbFSfh02SVHxXp5y+3OWpsIqXR0Pb1JF/nk97CnpJ26YWYd9Wh7GsBkpoeCgEIjVZtK2WapMvnaT12DNxf+ynI6AcNLRrQpoXHbvNZKC5X0yRwoXnzaweb58BvJQ==",
+      "nonce": "KDKb+u4ZYkKNjF/t",
+      "authTag": "v2nM0bQhyCWHduygZThQDg=="
     },
     "recoveryWrapped": {
-      "ciphertext": "LA9HNcuPunhtGCLHI2qUgCp1+vL/ATZcgiP0UhCA/bk=",
-      "nonce": "L5wJAeR0IPbz/eIh",
-      "authTag": "9bymay8xdS4FVdnMENehqQ=="
+      "ciphertext": "DIpxBOK6AvWVRHNwtsx5aaqsyijQ7II1ZALKWnO4fSU=",
+      "nonce": "u1TI8oM8Qm60lo1Z",
+      "authTag": "C9gti4VgErcFO5d8ILNLHQ=="
     },
     "expectedItem": {
       "site": "github.com",
