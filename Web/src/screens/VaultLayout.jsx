@@ -41,15 +41,17 @@ export function VaultLayout({selected, onSelect, forgedPassword, onForgedConsume
           <PanelHint />
         ) : (
           <ItemDetail
-            itemId={selected}
+            // Explicitly null for a new entry. `selected` is undefined
+            // when nothing is picked and null when ADD was pressed —
+            // passing it through raw let an id survive into what the
+            // user sees as a blank form, which then offered DELETE.
+            itemId={selected ?? null}
             onDone={() => onSelect(undefined)}
             injectedPassword={forgedPassword}
             onInjected={onForgedConsumed}
-            // Remounts when you switch entries, AND when a password
-            // arrives from the forge — that remount is what lets
-            // ItemDetail seed the field in useState instead of
-            // syncing it in an effect afterwards.
-            key={`${selected ?? 'new'}:${forgedPassword ? 'forged' : ''}`}
+            // `??` treats null and undefined alike, so both states
+            // produced the same key and React reused the instance.
+            key={`${selected === null ? 'new' : selected}:${forgedPassword ? 'forged' : ''}`}
           />
         )}
       </div>

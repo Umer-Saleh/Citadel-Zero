@@ -65,6 +65,7 @@ export function AppShell({ children, view = 'vault', onNavigate }) {
 
           {/* vault health HUD — 7x8 segments, smaller than the Meter
               used elsewhere, so it sits inside a 64px bar */}
+          {health !== null && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }} title="Average password strength across your vault">
             <span style={{ font: "600 10px 'Geist Mono', monospace", letterSpacing: '.14em', color: 'var(--muted)' }}>
               VAULT
@@ -82,6 +83,7 @@ export function AppShell({ children, view = 'vault', onNavigate }) {
               {health * 10}%
             </span>
           </div>
+          )}
 
           <Switch on={theme === 'dark'} onToggle={toggle} label="Dark theme" />
 
