@@ -83,6 +83,25 @@ async function buildRecovery(email, recoveryKey, recoveryMaterial, newPassword) 
   };
 }
 
+/**
+ * Build the client-side half of a kit regeneration: a fresh recovery
+ * key wrapping the SAME dek. Nothing password-derived is touched.
+ */
+function buildKitRegeneration(dek, currentAuthHash) {
+  const newRecoveryKey = generateRecoveryKey();
+  const newRecoverySalt = generateSalt();
+  const newRecoveryKek = deriveRecoveryKek(newRecoveryKey, newRecoverySalt);
+
+  return {
+    newRecoveryKey,
+    payload: {
+      currentAuthHash,
+      newRecoverySalt: newRecoverySalt.toString('base64'),
+      newRecoveryWrappedDek: wrapDEK(dek, newRecoveryKek)
+    }
+  };
+}
+
 
 // ---------- THE POINT ----------
 
@@ -382,4 +401,148 @@ test('recovery material is not available for an unknown account', async () => {
     .query({ email: 'nobody@nowhere.com' });
 
   assert.strictEqual(res.status, 404);
+});
+
+// ---------- KIT REGENERATION ----------
+//
+// Recovery rotates the kit as a side effect, but there was no way to
+// rotate it on its own — so a user who knew their key was exposed had
+// to go through a full recovery to replace it. This is that.
+
+test('regenerating the kit issues a working new recovery wrapper', async () => {
+  const { payload, dek, recoveryKey: oldKey } = await makeSignupPayload(EMAIL, OLD_PASSWORD);
+  await request(app).post('/api/auth/signup').send(payload);
+
+  const login = await request(app)
+    .post('/api/auth/login')
+    .send({ email: EMAIL, authHash: payload.authHash });
+
+  const regen = buildKitRegeneration(dek, payload.authHash);
+
+  const res = await request(app)
+    .post('/api/account/recovery-kit')
+    .set('Authorization', `Bearer ${login.body.token}`)
+    .send(regen.payload);
+
+  assert.strictEqual(res.status, 200);
+
+  const material = await request(app)
+    .get('/api/account/recovery-material')
+    .query({ email: EMAIL });
+
+  // The NEW key opens the vault...
+  const newKek = deriveRecoveryKek(
+    regen.newRecoveryKey,
+    Buffer.from(material.body.recoverySalt, 'base64')
+  );
+  assert.deepStrictEqual(
+    unwrapDEK(material.body.recoveryWrappedDek, newKek), dek,
+    'the new recovery key does not unwrap the same DEK'
+  );
+
+  // ...and the OLD one is dead. That is the whole point: a key you
+  // know was exposed can be retired without a full recovery.
+  const oldKek = deriveRecoveryKek(
+    oldKey,
+    Buffer.from(material.body.recoverySalt, 'base64')
+  );
+  assert.throws(() => unwrapDEK(material.body.recoveryWrappedDek, oldKek),
+                'the old recovery key still works');
+});
+
+test('regenerating leaves the master password working', async () => {
+  const { payload, dek } = await makeSignupPayload(EMAIL, OLD_PASSWORD);
+  await request(app).post('/api/auth/signup').send(payload);
+
+  const login = await request(app)
+    .post('/api/auth/login')
+    .send({ email: EMAIL, authHash: payload.authHash });
+
+  await request(app)
+    .post('/api/account/recovery-kit')
+    .set('Authorization', `Bearer ${login.body.token}`)
+    .send(buildKitRegeneration(dek, payload.authHash).payload);
+
+  // Unlike recovery, this must NOT touch the password path.
+  const after = await request(app)
+    .post('/api/auth/login')
+    .send({ email: EMAIL, authHash: payload.authHash });
+
+  assert.strictEqual(after.status, 200, 'the master password stopped working');
+
+  const { kek } = await deriveKeys(
+    OLD_PASSWORD, Buffer.from(payload.kdfSalt, 'base64'), FAST_KDF
+  );
+  assert.deepStrictEqual(unwrapDEK(after.body.wrappedDek, kek), dek);
+});
+
+test('regenerating requires the master password', async () => {
+  const { payload, dek, recoveryKey: oldKey } = await makeSignupPayload(EMAIL, OLD_PASSWORD);
+  await request(app).post('/api/auth/signup').send(payload);
+
+  const login = await request(app)
+    .post('/api/auth/login')
+    .send({ email: EMAIL, authHash: payload.authHash });
+
+  const wrongCurrent = Buffer.alloc(32, 7).toString('base64');
+
+  const res = await request(app)
+    .post('/api/account/recovery-kit')
+    .set('Authorization', `Bearer ${login.body.token}`)
+    .send(buildKitRegeneration(dek, wrongCurrent).payload);
+
+  // A valid session is not enough. Someone who borrowed an unlocked
+  // laptop must not be able to mint a permanent key to the vault.
+  assert.strictEqual(res.status, 401);
+
+  // And the existing kit is untouched.
+  const material = await request(app)
+    .get('/api/account/recovery-material')
+    .query({ email: EMAIL });
+
+  const oldKek = deriveRecoveryKek(
+    oldKey, Buffer.from(material.body.recoverySalt, 'base64')
+  );
+  assert.deepStrictEqual(unwrapDEK(material.body.recoveryWrappedDek, oldKek), dek);
+});
+
+test('regenerating does not touch vault ciphertext', async () => {
+  const { payload, dek } = await makeSignupPayload(EMAIL, OLD_PASSWORD);
+  await request(app).post('/api/auth/signup').send(payload);
+
+  const login = await request(app)
+    .post('/api/auth/login')
+    .send({ email: EMAIL, authHash: payload.authHash });
+
+  await request(app)
+    .post('/api/vault')
+    .set('Authorization', `Bearer ${login.body.token}`)
+    .send(encryptItem({ site: 'github.com' }, dek));
+
+  const before = await request(app)
+    .get('/api/vault')
+    .set('Authorization', `Bearer ${login.body.token}`);
+
+  await request(app)
+    .post('/api/account/recovery-kit')
+    .set('Authorization', `Bearer ${login.body.token}`)
+    .send(buildKitRegeneration(dek, payload.authHash).payload);
+
+  const after = await request(app)
+    .get('/api/vault')
+    .set('Authorization', `Bearer ${login.body.token}`);
+
+  assert.strictEqual(after.body.items[0].ciphertext, before.body.items[0].ciphertext,
+                     'vault items were re-encrypted');
+});
+
+test('regenerating requires authentication', async () => {
+  const { payload, dek } = await makeSignupPayload(EMAIL, OLD_PASSWORD);
+  await request(app).post('/api/auth/signup').send(payload);
+
+  const res = await request(app)
+    .post('/api/account/recovery-kit')
+    .send(buildKitRegeneration(dek, payload.authHash).payload);
+
+  assert.strictEqual(res.status, 401);
 });

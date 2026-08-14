@@ -162,4 +162,42 @@ async function upgradeKdf(userId, {
   console.log(`[server] KDF upgraded for ${user.email}`);
 }
 
-module.exports = { changePassword, getRecoveryMaterial, completeRecovery, upgradeKdf };
+/**
+ * Issue a new recovery kit without changing the master password.
+ *
+ * Recovery rotates the kit as a side effect, but there's no way to
+ * rotate it on its own — so a user who knows their key was exposed
+ * has to go through a full recovery to replace it. This is that.
+ *
+ * Requires the master password despite the session being valid: a new
+ * recovery key is a permanent credential to the vault, and someone
+ * who borrowed an unlocked laptop shouldn't be able to mint one.
+ */
+async function regenerateRecoveryKit(userId, {
+  currentAuthHash, newRecoverySalt, newRecoveryWrappedDek
+}) {
+  const user = await userRepo.findById(userId);
+
+  if (!user) {
+    throw new AppError('NOT_FOUND', 404, 'not found');
+  }
+
+  const valid = await serverVerifyAuth(currentAuthHash, user.auth_hash).catch(() => false);
+
+  if (!valid) {
+    console.warn(`[server] failed kit regeneration for ${user.email}`);
+    throw new AppError('INVALID_CREDENTIALS', 401, 'invalid credentials');
+  }
+
+  // Single write, so no transaction needed — and deliberately NOT
+  // touching auth_hash, kdf_params or wrapped_dek. The password is
+  // unchanged; only the second door gets a new lock.
+  await userRepo.updateRecoveryWrapper(userId, {
+    recoverySalt: newRecoverySalt,
+    recoveryWrappedDek: newRecoveryWrappedDek
+  });
+
+  console.log(`[server] recovery kit regenerated for ${user.email}`);
+}
+
+module.exports = { changePassword, getRecoveryMaterial, completeRecovery, upgradeKdf, regenerateRecoveryKit };
