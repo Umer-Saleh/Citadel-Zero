@@ -90,9 +90,13 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
   // Reveal it too: this value has never been shown, and a row of dots
   // gives no way to know it landed.
   //
-  // eslint-disable-next-line react-hooks/set-state-in-effect
+  // The rule is right in general and wrong here: this merges an
+  // external value into state built from user input, so there's
+  // nothing to derive it from. The two previous times this fired,
+  // there was a better shape available. This time there isn't.
   useEffect(() => {
     if (injectedPassword == null) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setForm(f => ({ ...f, password: injectedPassword }));
     setRevealed(true);
     onInjected?.();

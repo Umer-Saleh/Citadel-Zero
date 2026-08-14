@@ -22,11 +22,18 @@ export function Vault({ onSelectItem, onAddItem, selectedId }) {
   }, [loadItems]);
 
   const q = search.toLowerCase();
-  const filtered = items.filter(it =>
-    !q
-    || (it.data.site || '').toLowerCase().includes(q)
-    || (it.data.username || '').toLowerCase().includes(q)
-  );
+  const filtered = items
+    .filter(it =>
+      !q
+      || (it.data.site || '').toLowerCase().includes(q)
+      || (it.data.username || '').toLowerCase().includes(q)
+    )
+    // localeCompare, not <, so accented names sort where a reader
+    // expects rather than by code point. `numeric` keeps "Server 2"
+    // before "Server 10".
+    .sort((a, b) => (a.data.site || '').localeCompare(
+      b.data.site || '', undefined, { sensitivity: 'base', numeric: true }
+    ));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'riseIn .4s cubic-bezier(.2,.9,.3,1) both' }}>

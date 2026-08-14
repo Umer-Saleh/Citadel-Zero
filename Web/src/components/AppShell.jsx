@@ -105,6 +105,26 @@ export function AppShell({ children, view = 'vault', onNavigate }) {
       <main style={{ maxWidth: 1120, margin: '0 auto', padding: '32px 24px' }}>
         {children}
       </main>
+
+      <footer className="vk-noprint" style={{
+        maxWidth: 1120, margin: '0 auto', padding: '24px',
+        display: 'flex', alignItems: 'center', gap: 12,
+        borderTop: '1px solid var(--edge)',
+        font: "500 11px 'Geist Mono', monospace",
+        letterSpacing: '.12em', color: 'var(--muted)'
+      }}>
+        <span>VAULTKEEP</span>
+        <span style={{ opacity: .4 }}>·</span>
+        <span>BUILT BY UMER SALEH</span>
+        <div style={{ flex: 1 }} />
+        <a
+          href="https://github.com/Umer-Saleh/Zero-Knowledge-Password-Manager"
+          target="_blank" rel="noreferrer"
+          style={{ color: 'var(--muted)', textDecoration: 'none' }}
+        >
+          SOURCE
+        </a>
+      </footer>
     </div>
   );
 }
