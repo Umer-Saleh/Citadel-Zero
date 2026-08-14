@@ -33,7 +33,28 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
 
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
 
+  // Name uniqueness is enforced client-side, and can only be enforced
+  // there: the server holds ciphertext and has no idea what an entry
+  // is called. Case-insensitive, since "GitHub" and "github" are the
+  // same site to a person looking for it.
+  const nameTaken = items.some(it =>
+    it.id !== itemId &&
+    (it.data.site || '').trim().toLowerCase() === form.site.trim().toLowerCase()
+  );
+
+  // A soft warning, not a rule.
+  //
+  // This can ONLY happen client-side, and only for items currently
+  // loaded. The server stores ciphertext and cannot compare it — two
+  // identical passwords encrypt to completely different bytes, because
+  // every encryption gets a fresh nonce. That's the design working
+  // correctly; it just means reuse detection has to live here.
+  const passwordReused = form.password.length > 0 && items.some(it =>
+    it.id !== itemId && it.data.password === form.password
+  );
+
   async function save() {
+    if (nameTaken) return;   // the button is disabled, but don't rely on that alone
     setSaving(true);
     try {
       // Encryption happens inside addItem/updateItem (VaultContext),
@@ -137,12 +158,20 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
 
         {/* ---- NAME ---- */}
         <Field label="Name">
-          <PanelInput
-            value={form.site} onChange={set('site')} placeholder="e.g. GitHub"
-            font="600 15px Geist, sans-serif"
-            name="vk-entry-name"
-            autoComplete="off"
-          />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <PanelInput
+              value={form.site} onChange={set('site')} placeholder="e.g. GitHub"
+              font="600 15px Geist, sans-serif"
+              name="vk-entry-name"
+              autoComplete="off"
+              invalid={nameTaken}
+            />
+            {nameTaken && (
+              <span style={{ fontSize: 12, color: 'var(--red)' }}>
+                You already have an entry with this name.
+              </span>
+            )}
+          </div>
         </Field>
 
         {/* ---- USERNAME + copy, meter directly beneath ---- */}
@@ -191,6 +220,18 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
               </IconButton>
             </div>
             <ClipMeter left={copyField === 'password' ? copyLeft : null} />
+
+            {passwordReused && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                <span style={{ color: 'var(--amber)', marginTop: 1 }}>
+                  <Icon name="shield" size={14} />
+                </span>
+                <span style={{ fontSize: 12, color: 'var(--amber)', textWrap: 'pretty' }}>
+                  Another entry uses this password. If one site is breached, both
+                  accounts are exposed.
+                </span>
+              </div>
+            )}
           </div>
         </Field>
 
@@ -227,7 +268,7 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
           )}
           <div style={{ flex: 1 }} />
           <PressButton
-            onClick={save} disabled={busy || !form.site}
+            onClick={save} disabled={busy || !form.site.trim() || nameTaken}
             depth={3}
             style={{
               font: '600 13px Geist, sans-serif', letterSpacing: '.12em',
@@ -310,7 +351,7 @@ function ClipMeter({ left }) {
   );
 }
 
-function PanelInput({ font, tracking, ...props }) {
+function PanelInput({ font, tracking, invalid, ...props }) {
   const [focused, setFocused] = useState(false);
   return (
     <input
@@ -320,7 +361,7 @@ function PanelInput({ font, tracking, ...props }) {
       style={{
         flex: 1, minWidth: 0, width: '100%', boxSizing: 'border-box',
         background: 'var(--bg)',
-        border: `1px solid ${focused ? 'var(--green)' : 'var(--edge)'}`,
+        border: `1px solid ${invalid ? 'var(--red)' : focused ? 'var(--green)' : 'var(--edge)'}`,
         borderRadius: 'var(--radius)',
         padding: '11px 13px',
         font,
