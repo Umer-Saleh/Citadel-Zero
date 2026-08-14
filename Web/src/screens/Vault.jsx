@@ -43,6 +43,9 @@ export function Vault({ onSelectItem, onAddItem, selectedId }) {
             onFocus={() => setSearchFocus(true)}
             onBlur={() => setSearchFocus(false)}
             placeholder="Search vault…"
+            type="search"
+            name="vk-search"
+            autoComplete="off"
             style={{
               width: '100%', boxSizing: 'border-box',
               background: 'var(--surface)',

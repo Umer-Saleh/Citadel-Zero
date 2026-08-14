@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { Vault } from './Vault';
 import { ItemDetail } from './ItemDetail';
 import { Icon } from '../components/Icon';
@@ -15,13 +14,6 @@ import { Icon } from '../components/Icon';
  *   selected === <id>      -> panel edits that entry
  */
 export function VaultLayout({selected, onSelect, forgedPassword, onForgedConsumed }) {
-
-  // A password came back from the forge with no panel open, so open a
-  // blank entry to put it in. If a panel is already open — new or
-  // existing — the password goes into that one instead.
-  useEffect(() => {
-    if (forgedPassword != null && selected === undefined) onSelect(null);
-  }, [forgedPassword, selected, onSelect]);
 
   return (
     <div style={{
@@ -48,10 +40,13 @@ export function VaultLayout({selected, onSelect, forgedPassword, onForgedConsume
             itemId={selected ?? null}
             onDone={() => onSelect(undefined)}
             injectedPassword={forgedPassword}
+            // Cleared as soon as the panel has it, so a later close
+            // can't leave a live password sitting in App's state.
             onInjected={onForgedConsumed}
-            // `??` treats null and undefined alike, so both states
-            // produced the same key and React reused the instance.
-            key={`${selected === null ? 'new' : selected}:${forgedPassword ? 'forged' : ''}`}
+            // Keyed on the SELECTION only. Including the forged
+            // password here forced a remount to deliver one field,
+            // and a remount discards everything the user has typed.
+            key={selected === null ? 'new' : selected}
           />
         )}
       </div>

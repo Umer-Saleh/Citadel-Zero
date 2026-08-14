@@ -113,7 +113,16 @@ export default function App() {
         </div>
 
         {view === 'generator' && (
-          <Generator onUse={pw => { setForgedPassword(pw); setView('vault'); }} />
+          <Generator onUse={pw => {
+            // If nothing is open, open a new entry for it. Doing this
+            // HERE rather than in an effect downstream is what breaks
+            // the cycle: an effect that watched forgedPassword would
+            // re-fire every time the panel closed, reopening it
+            // forever with the same password.
+            if (selected === undefined) setSelected(null);
+            setForgedPassword(pw);
+            setView('vault');
+          }} />
         )}
 
         {view === 'settings' && <Settings />}
