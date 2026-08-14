@@ -28,7 +28,10 @@ export function AppShell({ children, view = 'vault', onNavigate }) {
   const health = vaultHealth(items);
 
   return (
-    <div style={{ minHeight: '100vh' }}>
+    // Column flex with the main growing: the footer sits at the
+    // bottom of the viewport on a short page and below the content
+    // on a long one, rather than floating mid-screen.
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <header style={{
         position: 'sticky', top: 0, zIndex: 40,
         background: 'var(--surface)', borderBottom: '1px solid var(--edge)'
@@ -102,7 +105,7 @@ export function AppShell({ children, view = 'vault', onNavigate }) {
         </div>
       </header>
 
-      <main style={{ maxWidth: 1120, margin: '0 auto', padding: '32px 24px' }}>
+      <main style={{ flex: 1, width: '100%', maxWidth: 1120, margin: '0 auto', padding: '32px 24px' }}>
         {children}
       </main>
 

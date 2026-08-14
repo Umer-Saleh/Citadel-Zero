@@ -136,12 +136,18 @@ export function VaultProvider({ children }) {
     };
   }, [isUnlocked, lock]);
 
+  // Session stays valid: the DEK is unchanged, only the recovery
+  // wrapper moved.
+  const regenerateKit = useCallback(async (email, password) => {
+    return auth.regenerateRecoveryKit(email, password, dek);
+  }, [dek]);
+
   const value = {
     isUnlocked, locked, items,
     email, kdfUpgradeAvailable,
     signup, login, lock, loadItems,
     addItem, updateItem, deleteItem,
-    changePassword, upgradeKdf
+    changePassword, upgradeKdf, regenerateKit
   };
 
   return <VaultContext.Provider value={value}>{children}</VaultContext.Provider>;

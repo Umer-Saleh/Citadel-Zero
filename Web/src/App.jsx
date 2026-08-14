@@ -7,6 +7,7 @@ import { VaultLayout } from './screens/VaultLayout';
 import { Generator } from './screens/Generator';  
 import { AppShell } from './components/AppShell';
 import { Settings } from './screens/Settings';
+import { Recover } from './screens/Recover';
 import { usePix } from './context/PixContext';
 
 /**
@@ -87,6 +88,14 @@ export default function App() {
   useEffect(() => {
     if (firstRender.current) { firstRender.current = false; return; }
     react(isUnlocked ? 'unlock' : 'lock');
+
+    // Locking resets the view. Otherwise unlocking drops you back
+    // into Settings or the generator, which is not where anyone
+    // expects to arrive after entering their master password.
+    if (!isUnlocked) {
+      setView('vault');
+      setSelected(undefined);
+    }
   }, [isUnlocked, react]);
 
   // ---------------------------------------------------------------
@@ -166,6 +175,22 @@ export default function App() {
     );
   }
 
+  // Recovery: unwrap with the recovery key, set a new password, and
+  // receive a fresh kit. Hands off to the RecoveryKit screen at the
+  // end — the new key is shown exactly once, same as at signup.
+  if (authScreen === 'recover') {
+    return (
+      <Recover
+        onRecovered={(key, userEmail) => {
+          setRecoveryKey(key);
+          setEmail(userEmail);
+          setAuthScreen('recovery');
+        }}
+        onBack={() => setAuthScreen('unlock')}
+      />
+    );
+  }
+
   // Default: the unlock screen.
   //
   // On success, login() (via VaultContext) stores the DEK, which flips
@@ -175,7 +200,7 @@ export default function App() {
     <Unlock
       onUnlocked={() => { /* isUnlocked flips true; the unlocked branch renders the vault */ }}
       onGoSignup={() => setAuthScreen('signup')}
-      onGoRecovery={() => console.log('recovery flow — screen still to build')}
+      onGoRecovery={() => setAuthScreen('recover')} 
     />
   );
 }

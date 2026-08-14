@@ -27,6 +27,8 @@ export function Settings() {
 
       <TwoFactor email={email} />
 
+      <RecoveryKitSection email={email} />
+
       <Card style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
         <h2 style={{ margin: 0, font: '600 19px Geist, sans-serif', color: 'var(--text)' }}>Preferences</h2>
 
@@ -51,6 +53,175 @@ export function Settings() {
         </div>
       </Card>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------
+// RECOVERY KIT — rotate the key without a full recovery.
+// ---------------------------------------------------------------
+function RecoveryKitSection({ email }) {
+  const { regenerateKit } = useVault();
+  const [phase, setPhase] = useState('idle');   // 'idle' | 'confirm' | 'working' | 'done'
+  const [pw, setPw] = useState('');
+  const [newKey, setNewKey] = useState('');
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
+
+  async function run() {
+    setError('');
+    if (!pw) return setError('Enter your master password.');
+    setPhase('working');
+    try {
+      const { recoveryKey } = await regenerateKit(email, pw);
+      setPw('');
+      setNewKey(recoveryKey);
+      setPhase('done');
+    } catch (e) {
+      setPhase('confirm');
+      setError(
+        e.code === 'INVALID_CREDENTIALS' ? 'Wrong master password.'
+        : e.code === 'NETWORK_ERROR' ? 'Cannot reach the server.'
+        : `Could not issue a new kit${e.code ? ` (${e.code})` : ''}.`
+      );
+    }
+  }
+
+  function download() {
+    const body =
+      `VAULTKEEP RECOVERY KEY\n======================\n\n` +
+      `Account: ${email}\n\nRecovery key:\n${newKey}\n\n` +
+      `This replaces any earlier recovery key, which no longer works.\n` +
+      `It is the ONLY way back into your vault if you forget your\n` +
+      `master password. Store it offline, somewhere safe.\n`;
+    const url = URL.createObjectURL(new Blob([body], { type: 'text/plain' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = 'vaultkeep-recovery-key.txt'; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
+  return (
+    <Card style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <h2 style={{ margin: 0, font: '600 19px Geist, sans-serif', color: 'var(--text)' }}>
+        Recovery kit
+      </h2>
+
+      {phase !== 'done' && (
+        <div style={{ fontSize: 13, color: 'var(--muted)', textWrap: 'pretty' }}>
+          If you think someone has seen your recovery key, replace it. The old key
+          stops working immediately. Your master password and every entry are
+          unchanged — only the second door gets a new lock.
+        </div>
+      )}
+
+      {phase === 'idle' && (
+        <div>
+          <Button onClick={() => setPhase('confirm')}
+            style={{ padding: '12px 28px', letterSpacing: '.12em' }}>
+            ISSUE A NEW KEY
+          </Button>
+        </div>
+      )}
+
+      {phase === 'confirm' && (
+        <>
+          {/* A valid session isn't enough — this mints a permanent
+              credential to the vault. */}
+          <Input label="Confirm master password" mono revealable
+            autoComplete="current-password" name="vk-kit-confirm"
+            value={pw} onChange={e => setPw(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && run()} />
+          {error && <div style={{ fontSize: 13, color: 'var(--red)' }}>{error}</div>}
+          <div style={{ display: 'flex', gap: 12 }}>
+            <Button variant="secondary" onClick={() => { setPhase('idle'); setPw(''); setError(''); }}
+              style={{ font: '600 12px Geist, sans-serif', padding: '11px 18px' }}>
+              CANCEL
+            </Button>
+            <Button onClick={run} style={{ padding: '12px 24px', letterSpacing: '.12em' }}>
+              ISSUE NEW KEY
+            </Button>
+          </div>
+        </>
+      )}
+
+      {phase === 'working' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <span style={{ fontFamily: "'Press Start 2P', monospace", fontSize: 11, color: 'var(--text)' }}>
+            RESEALING<span style={{ animation: 'blinkCur 1s steps(1) infinite' }}>_</span>
+          </span>
+          <DeriveBar />
+        </div>
+      )}
+
+      {phase === 'done' && (
+        <>
+          <div className="vk-print" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div className="vk-printonly" style={{ display: 'none' }}>
+              <h2 style={{ margin: 0, font: '700 18px Geist, sans-serif' }}>VaultKeep recovery key</h2>
+              <p style={{ margin: '4px 0 0', fontSize: 13 }}>{email}</p>
+            </div>
+
+            <div style={{
+              border: '1px solid color-mix(in srgb, var(--amber) 55%, var(--edge))',
+              borderRadius: 'var(--radius)', padding: '16px 20px',
+              display: 'flex', gap: 14, alignItems: 'flex-start'
+            }}>
+              <span style={{ color: 'var(--amber)', marginTop: 2 }}><Icon name="shield" size={18} /></span>
+              <div style={{ fontSize: 14, lineHeight: 1.55, textWrap: 'pretty' }}>
+                <strong>Save this now — it is shown once.</strong>
+                <br />
+                <span style={{ color: 'var(--muted)' }}>
+                  Your previous recovery key no longer works. We hold no copy of this
+                  one and cannot show it again.
+                </span>
+              </div>
+            </div>
+
+            <div className="vk-secret" style={{
+              background: 'var(--bg)', border: '1px solid var(--edge)',
+              borderRadius: 'var(--radius)', padding: '24px 20px', textAlign: 'center',
+              font: "600 17px 'Geist Mono', monospace", letterSpacing: '.18em',
+              color: 'var(--text)', wordBreak: 'break-word'
+            }}>
+              {newKey}
+            </div>
+          </div>
+
+          <div className="vk-noprint" style={{ display: 'flex', gap: 12 }}>
+            <Button variant="secondary" onClick={download}
+              style={{ font: '600 12px Geist, sans-serif', padding: '11px 18px' }}>
+              <Icon name="download" /> DOWNLOAD
+            </Button>
+            <Button variant="secondary" onClick={() => window.print()}
+              style={{ font: '600 12px Geist, sans-serif', padding: '11px 18px' }}>
+              <Icon name="printer" /> PRINT
+            </Button>
+          </div>
+
+          <label className="vk-noprint" style={{ display: 'flex', gap: 14, alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}>
+            <input type="checkbox" checked={saved} onChange={e => setSaved(e.target.checked)}
+              style={{ position: 'absolute', opacity: 0, width: 24, height: 24, margin: 0, cursor: 'pointer' }} />
+            <span style={{
+              width: 24, height: 24, flexShrink: 0,
+              border: `1px solid ${saved ? 'var(--green)' : 'var(--edge)'}`, borderRadius: 2,
+              background: saved ? 'var(--green)' : 'var(--bg)',
+              display: 'grid', placeItems: 'center', color: 'var(--on-green)',
+              boxShadow: '0 2px 0 var(--edge)', transition: 'background .15s, border-color .15s'
+            }}>
+              {saved ? <Icon name="check" size={14} /> : ''}
+            </span>
+            <span style={{ fontSize: 15 }}>I've saved my new recovery key somewhere safe.</span>
+          </label>
+
+          <div className="vk-noprint">
+            <Button onClick={() => { setNewKey(''); setSaved(false); setPhase('idle'); }}
+              disabled={!saved}
+              style={{ padding: '12px 28px', letterSpacing: '.12em', boxShadow: '0 3px 0 var(--green-deep)' }}>
+              DONE
+            </Button>
+          </div>
+        </>
+      )}
+    </Card>
   );
 }
 

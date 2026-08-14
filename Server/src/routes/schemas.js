@@ -112,6 +112,16 @@ const refreshSchema = z.object({
 // and shouldn't share a schema just because they look alike today.
 const logoutSchema = refreshSchema;
 
+// Only the recovery wrapper moves. No newAuthHash, no newKdfSalt, no
+// newKdfParams — the master password is untouched, which is what
+// distinguishes this from recoverSchema. .strict() means sending any
+// of those is a 400 rather than being silently ignored.
+const regenerateKitSchema = z.object({
+  currentAuthHash: base64(32),
+  newRecoverySalt: base64(16),
+  newRecoveryWrappedDek: wrappedDekSchema
+}).strict();
+
 module.exports = {
   signupSchema,
   loginSchema,
@@ -127,5 +137,6 @@ module.exports = {
   logoutSchema,
   totpCodeField,
   totpConfirmSchema,
-  totpDisableSchema
+  totpDisableSchema,
+  regenerateKitSchema
 };

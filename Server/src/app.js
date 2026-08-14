@@ -11,7 +11,8 @@ const { validate } = require('./middleware/validate');
 const {
   signupSchema, loginSchema, kdfParamsQuerySchema,
   vaultItemSchema, uuidParamSchema, upgradeKdfSchema, wrappedDekSchema, changePasswordSchema,
-  recoveryMaterialQuerySchema, recoverSchema, refreshSchema, logoutSchema, totpConfirmSchema, totpDisableSchema
+  recoveryMaterialQuerySchema, recoverSchema, refreshSchema, logoutSchema, totpConfirmSchema, totpDisableSchema,
+  regenerateKitSchema
 } = require('./routes/schemas');
 
 const cors = require('cors');
@@ -45,6 +46,7 @@ app.use('/api/account/recover', authLimiter);
 app.use('/api/account/kdf-upgrade', authLimiter);
 app.use('/api/account/totp/confirm', authLimiter);
 app.use('/api/account/totp/disable', authLimiter);
+app.use('/api/account/recovery-kit', authLimiter);
 
 // ---------------------------------------------------------------
 // ASYNC WRAPPER
@@ -212,6 +214,14 @@ app.post('/api/account/totp/disable',
   wrap(async (req, res) => {
     await authService.disableTotp(req.userId, req.body.code);
     res.status(204).end();
+  }));
+
+app.post('/api/account/recovery-kit',
+  requireAuth,
+  validate(regenerateKitSchema),
+  wrap(async (req, res) => {
+    await accountService.regenerateRecoveryKit(req.userId, req.body);
+    res.status(200).json({ ok: true });
   }));
 
 // ---------------------------------------------------------------

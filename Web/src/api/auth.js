@@ -163,3 +163,99 @@ export async function logout() {
 
   clearToken();
 }
+
+/**
+ * Fetch the material needed to attempt a recovery: the salt the
+ * recovery KEK was derived under, and the DEK wrapped beneath it.
+ *
+ * Public by necessity — the user has forgotten their password, so
+ * there is nothing to authenticate with. Neither value is a secret:
+ * the wrapper is useless without the recovery key.
+ */
+export async function getRecoveryMaterial(email) {
+  return api.get(`/api/account/recovery-material?email=${encodeURIComponent(email)}`);
+}
+
+/**
+ * Unwrap the DEK with a recovery key.
+ *
+ * Throws if the key is wrong — GCM authentication fails, which is the
+ * only verification that exists. The server cannot check a recovery
+ * key; it has never seen one.
+ */
+export async function unwrapWithRecoveryKey(recoveryKey, recoverySalt, recoveryWrappedDek) {
+  const kek = await deriveRecoveryKek(recoveryKey, fromBase64(recoverySalt));
+  return unwrapDEK(recoveryWrappedDek, kek);   // throws on a wrong key
+}
+
+/**
+ * Complete a recovery: set a new password and issue a fresh kit.
+ *
+ * Note what the server cannot verify here. It has no way to check the
+ * client actually holds the recovery key — possession is proved
+ * implicitly, because only someone who unwrapped the REAL DEK can
+ * produce a new wrapper containing it. A client that guessed would
+ * seal a garbage DEK and lock itself out of a vault it could never
+ * read. Denial of service, not disclosure, which is why this endpoint
+ * is heavily rate limited rather than authenticated.
+ *
+ * @param dek  the DEK recovered by unwrapWithRecoveryKey
+ * @returns    the NEW recovery key, shown once. The old one is dead.
+ */
+export async function completeRecovery(email, newPassword, dek) {
+  const newSalt = generateSalt();
+  const { authHash: newAuthHash, kek: newKek } =
+    await deriveKeys(newPassword, newSalt, DEFAULT_KDF_PARAMS);
+
+  // Rotate the kit too, so a recovery key someone else copied stops
+  // working the moment it's used.
+  const newRecoveryKey = generateRecoveryKey();
+  const newRecoverySalt = generateSalt();
+  const newRecoveryKek = await deriveRecoveryKek(newRecoveryKey, newRecoverySalt);
+
+  await api.post('/api/account/recover', {
+    email,
+    newAuthHash: toBase64(newAuthHash),
+    newKdfSalt: toBase64(newSalt),
+    newKdfParams: DEFAULT_KDF_PARAMS,
+    newWrappedDek: await wrapDEK(dek, newKek),
+    newRecoverySalt: toBase64(newRecoverySalt),
+    newRecoveryWrappedDek: await wrapDEK(dek, newRecoveryKek)
+  });
+
+  return { recoveryKey: newRecoveryKey };
+}
+
+/**
+ * Issue a new recovery kit without changing the master password.
+ *
+ * Recovery rotates the kit as a side effect, but there was no way to
+ * rotate it alone — so a user who knew their key was exposed had to
+ * go through a full recovery to replace it.
+ *
+ * Requires the master password despite the session being valid: a new
+ * recovery key is a permanent credential to the vault, and someone
+ * who borrowed an unlocked laptop shouldn't be able to mint one.
+ *
+ * @returns the NEW recovery key, shown once. The old one is dead.
+ */
+export async function regenerateRecoveryKit(email, password, dek) {
+  const { kdfSalt, kdfParams } = await api.get(
+    `/api/user/kdf-params?email=${encodeURIComponent(email)}`
+  );
+  const { authHash: currentAuthHash } = await deriveKeys(
+    password, fromBase64(kdfSalt), kdfParams
+  );
+
+  const newRecoveryKey = generateRecoveryKey();
+  const newRecoverySalt = generateSalt();
+  const newRecoveryKek = await deriveRecoveryKek(newRecoveryKey, newRecoverySalt);
+
+  await api.post('/api/account/recovery-kit', {
+    currentAuthHash: toBase64(currentAuthHash),
+    newRecoverySalt: toBase64(newRecoverySalt),
+    newRecoveryWrappedDek: await wrapDEK(dek, newRecoveryKek)
+  });
+
+  return { recoveryKey: newRecoveryKey };
+}
