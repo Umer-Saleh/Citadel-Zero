@@ -93,6 +93,12 @@ export default function App() {
     // into Settings or the generator, which is not where anyone
     // expects to arrive after entering their master password.
     if (!isUnlocked) {
+      // The rule is right that this is App reacting to its own state,
+      // but the alternatives are worse. Resetting in the LOCK button's
+      // handler would miss the idle timeout and dead-refresh-token
+      // paths, which lock from inside VaultContext. Moving `view` into
+      // VaultContext would give the vault opinions about navigation.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setView('vault');
       setSelected(undefined);
     }
