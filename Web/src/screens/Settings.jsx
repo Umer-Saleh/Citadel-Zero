@@ -222,7 +222,8 @@ function ChangePassword({ email, changePassword }) {
         re-encrypted. You'll be signed out and need to unlock again.
       </div>
 
-      <Input label="Current" mono type={pwType} autoComplete="current-password"
+      <Input label="Current" mono type={pwType} autoComplete="off"
+        name="vk-current-master"
         value={cur} onChange={e => setCur(e.target.value)} />
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>

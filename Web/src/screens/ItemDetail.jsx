@@ -7,27 +7,23 @@ import { Icon } from '../components/Icon';
 
 const EMPTY = { site: '', username: '', password: '', url: '', notes: '' };
 
-export function ItemDetail({ itemId, onDone, injectedPassword }) {
+export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
   const { items, addItem, updateItem, deleteItem } = useVault();
   const { react } = usePix();
 
   const existing = itemId ? items.find(it => it.id === itemId) : null;
   const base = existing ? existing.data : EMPTY;
 
-  // A password handed over from the forge is seeded here, at mount,
-  // rather than copied in by an effect afterwards. VaultLayout's key
-  // includes the forged value, so this component remounts when one
-  // arrives and this initialiser runs with it.
-  const [form, setForm] = useState(
-    injectedPassword ? { ...base, password: injectedPassword } : base
-  );
+  const [form, setForm] = useState(base);
+  const [revealed, setRevealed] = useState(false);
 
-  const [busy, setBusy] = useState(false);
+  // Separate flags: DELETE and SAVE used to share one `busy`, so
+  // confirming a delete made the save button read "SAVING…" too.
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const busy = saving || deleting;
+
   const [confirmDelete, setConfirmDelete] = useState(false);
-
-  // Reveal a forged password: the user hasn't seen this value yet, and
-  // a row of dots gives them no way to know it landed.
-  const [revealed, setRevealed] = useState(Boolean(injectedPassword));
 
   // Seconds left before the clipboard is wiped, and which field is on
   // it. null = nothing of ours is there, so no meter renders.
@@ -38,7 +34,7 @@ export function ItemDetail({ itemId, onDone, injectedPassword }) {
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
 
   async function save() {
-    setBusy(true);
+    setSaving(true);
     try {
       // Encryption happens inside addItem/updateItem (VaultContext),
       // using the in-memory DEK. Plaintext never leaves this function.
@@ -47,7 +43,7 @@ export function ItemDetail({ itemId, onDone, injectedPassword }) {
       react('save');
       onDone();
     } catch {
-      setBusy(false);
+      setSaving(false);
     }
   }
 
@@ -56,7 +52,7 @@ export function ItemDetail({ itemId, onDone, injectedPassword }) {
     // gated on itemId, but a stale id reaching here would send a
     // DELETE for someone else's row.
     if (!itemId) { setConfirmDelete(false); return; }
-    setBusy(true);
+    setDeleting(true);
     try {
       await deleteItem(itemId);
       // Solemn, not celebratory — an acknowledgement that something
@@ -64,7 +60,7 @@ export function ItemDetail({ itemId, onDone, injectedPassword }) {
       react('remove');
       onDone();
     } catch {
-      setBusy(false);
+      setDeleting(false);
     }
   }
 
@@ -87,11 +83,26 @@ export function ItemDetail({ itemId, onDone, injectedPassword }) {
   // right after copying, the clear must still happen.
   useEffect(() => () => detachClip.current?.(), []);
 
+  // A password arrived from the forge. Merge it into whatever the user
+  // has already typed, rather than remounting to seed it — a remount
+  // would deliver the password at the cost of the entire draft.
+  //
+  // Reveal it too: this value has never been shown, and a row of dots
+  // gives no way to know it landed.
+  //
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => {
+    if (injectedPassword == null) return;
+    setForm(f => ({ ...f, password: injectedPassword }));
+    setRevealed(true);
+    onInjected?.();
+  }, [injectedPassword, onInjected]);
+
   const title = form.site || (itemId ? 'Untitled' : 'New entry');
   const letter = form.site ? form.site.charAt(0).toUpperCase() : '+';
 
   return (
-    <div style={{ animation: 'riseIn .22s cubic-bezier(.2,.9,.3,1) both'}}>
+    <div style={{ animation: 'riseIn .22s cubic-bezier(.2,.9,.3,1) both' }}>
       <div style={panel}>
 
         {/* ---- HEADER: 48px avatar + name + url, divider beneath ---- */}
@@ -125,6 +136,8 @@ export function ItemDetail({ itemId, onDone, injectedPassword }) {
           <PanelInput
             value={form.site} onChange={set('site')} placeholder="e.g. GitHub"
             font="600 15px Geist, sans-serif"
+            name="vk-entry-name"
+            autoComplete="off"
           />
         </Field>
 
@@ -135,6 +148,15 @@ export function ItemDetail({ itemId, onDone, injectedPassword }) {
               <PanelInput
                 value={form.username} onChange={set('username')} placeholder="you@example.com"
                 font="400 14px 'Geist Mono', monospace"
+                // Chrome fills anything that looks like a login. These
+                // fields hold OTHER sites' credentials, so a saved
+                // VaultKeep login appearing here is actively wrong.
+                // The unusual name matters as much as the attribute —
+                // Chrome's heuristics key off both.
+                name="vk-entry-username"
+                autoComplete="off"
+                data-lpignore="true"
+                data-1p-ignore="true"
               />
               <IconButton title="Copy username" onClick={() => copy('username', form.username)}>
                 <Icon name="copy" />
@@ -152,6 +174,10 @@ export function ItemDetail({ itemId, onDone, injectedPassword }) {
                 value={form.password} onChange={set('password')}
                 type={revealed ? 'text' : 'password'}
                 font="500 16px 'Geist Mono', monospace" tracking=".08em"
+                name="vk-entry-secret"
+                autoComplete="new-password"
+                data-lpignore="true"
+                data-1p-ignore="true"
               />
               <IconButton title="Show / hide" onClick={() => setRevealed(r => !r)}>
                 <Icon name={revealed ? 'eyeoff' : 'eye'} size={15} />
@@ -169,12 +195,14 @@ export function ItemDetail({ itemId, onDone, injectedPassword }) {
           <PanelInput
             value={form.url} onChange={set('url')} placeholder="https://"
             font="400 14px 'Geist Mono', monospace"
+            name="vk-entry-url"
+            autoComplete="off"
           />
         </Field>
 
         {/* ---- NOTES — sans, not mono: it's prose, not a secret ---- */}
         <Field label="Notes">
-          <PanelTextarea value={form.notes} onChange={set('notes')} />
+          <PanelTextarea value={form.notes} onChange={set('notes')} name="vk-entry-notes" />
         </Field>
 
         {/* ---- ACTIONS: delete left, save right, spacer between ---- */}
@@ -204,7 +232,7 @@ export function ItemDetail({ itemId, onDone, injectedPassword }) {
               boxShadow: '0 3px 0 var(--green-deep), 0 14px 28px -10px var(--glow)'
             }}
           >
-            {busy ? 'SAVING…' : 'SAVE'}
+            {saving ? 'SAVING…' : 'SAVE'}
           </PressButton>
         </div>
       </div>
@@ -218,7 +246,7 @@ export function ItemDetail({ itemId, onDone, injectedPassword }) {
           site={form.site}
           onCancel={() => setConfirmDelete(false)}
           onConfirm={remove}
-          busy={busy}
+          busy={deleting}
         />,
         document.body
       )}
