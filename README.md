@@ -1,6 +1,6 @@
 # Citadel Zero
 
-[![CI](https://github.com/Umer-Saleh/citadel-zero/actions/workflows/ci.yml/badge.svg)](https://github.com/Umer-Saleh/citadel-zero/actions/workflows/ci.yml)
+[![CI](https://github.com/Umer-Saleh/Citadel-Zero/actions/workflows/ci.yml/badge.svg)](https://github.com/Umer-Saleh/Citadel-Zero/actions/workflows/ci.yml)
 
 A password manager where **the server never receives the master password, any
 encryption key, or any plaintext vault data.** If the database, the server
