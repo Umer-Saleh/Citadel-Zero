@@ -111,6 +111,10 @@ export function Paladin({ pose = 'idle', size = 48, ring = null }) {
 
   const frame = (f) => (
     <svg
+      // Decorative. PIX conveys mood, never information — every state
+      // he reacts to is also stated in text nearby.
+      aria-hidden="true"
+      focusable="false"
       key={'f' + f}
       width={size} height={size}
       viewBox={`0 0 ${size} ${size}`}
