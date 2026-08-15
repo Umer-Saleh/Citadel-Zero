@@ -108,7 +108,7 @@ jobs:
       # would have been caught here — Windows resolves ./Signup to
       # signup.jsx, Linux doesn't.
       - name: Build server image
-        run: docker build -t Citadel-Zero-server ./Server
+        run: docker build -t citadel-Zero-server ./Server
 
       - name: Build web image
-        run: docker build -t Citadel-Zero-web ./Web
+        run: docker build -t citadel-Zero-web ./Web
