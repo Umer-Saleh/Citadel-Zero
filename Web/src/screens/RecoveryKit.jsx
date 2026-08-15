@@ -30,19 +30,19 @@ export function RecoveryKit({ recoveryKey, email, onContinue }) {
 
   function download() {
     const body =
-      `VAULTKEEP RECOVERY KEY\n` +
-      `======================\n\n` +
+      `CITADEL ZERO RECOVERY KEY\n` +
+      `=========================\n\n` +
       `Account: ${email}\n\n` +
       `Recovery key:\n${recoveryKey}\n\n` +
       `This key is the ONLY way back into your vault if you forget your\n` +
-      `master password. VaultKeep holds no copy and cannot reset it.\n` +
+      `master password. Citadel Zero holds no copy and cannot reset it.\n` +
       `Store it offline, somewhere safe. Anyone with this key and your\n` +
       `email can take over your vault.\n`;
 
     const url = URL.createObjectURL(new Blob([body], { type: 'text/plain' }));
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'vaultkeep-recovery-key.txt';
+    a.download = 'citadel-zero-recovery-key.txt';
     a.click();
 
     // Revoking synchronously after click() can race the download in
@@ -72,7 +72,7 @@ export function RecoveryKit({ recoveryKey, email, onContinue }) {
               the heading above; on paper that heading isn't printed,
               and a bare key in a drawer is unidentifiable. */}
           <div className="vk-printonly" style={{ display: 'none' }}>
-            <h2 style={{ margin: 0, font: '700 18px Geist, sans-serif' }}>VaultKeep recovery key</h2>
+            <h2 style={{ margin: 0, font: '700 18px Geist, sans-serif' }}>Citadel Zero recovery key</h2>
             <p style={{ margin: '4px 0 0', fontSize: 13 }}>{email}</p>
           </div>
 
