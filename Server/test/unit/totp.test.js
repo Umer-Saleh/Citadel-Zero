@@ -86,7 +86,7 @@ test('buildUri produces a scannable otpauth URI', () => {
   const uri = buildUri(secret, 'test@example.com');
 
   assert.match(uri, /^otpauth:\/\/totp\//);
-  assert.ok(uri.includes('VaultKeep'));
+  assert.ok(uri.includes('Citadel'));
   assert.ok(uri.includes(secret));
 });
 
