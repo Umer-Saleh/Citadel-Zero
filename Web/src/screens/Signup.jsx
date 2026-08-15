@@ -55,7 +55,7 @@ export function Signup({ onComplete, onGoLogin }) {
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
           <Paladin pose={pose} size={72} />
           <div style={{ fontFamily: "'Press Start 2P', monospace", fontSize: 21, letterSpacing: 2, color: 'var(--text)' }}>
-            VAULTKEEP
+            CITADEL<span style={{ color: 'var(--green)' }}>0</span>
           </div>
           <div style={{ fontSize: 14, color: 'var(--muted)' }}>
             One password to keep. Everything else, kept for you.

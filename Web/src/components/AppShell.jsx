@@ -44,7 +44,7 @@ export function AppShell({ children, view = 'vault', onNavigate }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <Paladin pose={pose} size={32} />
             <span style={{ fontFamily: "'Press Start 2P', monospace", fontSize: 12, letterSpacing: 1, color: 'var(--text)' }}>
-              VAULTKEEP
+              CITADEL<span style={{ color: 'var(--green)' }}>ZERO</span>
             </span>
             {says && (
               <span style={{
@@ -116,7 +116,7 @@ export function AppShell({ children, view = 'vault', onNavigate }) {
         font: "500 11px 'Geist Mono', monospace",
         letterSpacing: '.12em', color: 'var(--muted)'
       }}>
-        <span>VAULTKEEP</span>
+        <span>CITADEL ZERO</span>
         <span style={{ opacity: .4 }}>·</span>
         <span>BUILT BY UMER SALEH</span>
         <div style={{ flex: 1 }} />

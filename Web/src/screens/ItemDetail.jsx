@@ -183,7 +183,7 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
                 font="400 14px 'Geist Mono', monospace"
                 // Chrome fills anything that looks like a login. These
                 // fields hold OTHER sites' credentials, so a saved
-                // VaultKeep login appearing here is actively wrong.
+                // Citadel Zero login appearing here is actively wrong.
                 // The unusual name matters as much as the attribute —
                 // Chrome's heuristics key off both.
                 name="vk-entry-username"

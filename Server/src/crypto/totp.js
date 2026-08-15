@@ -30,7 +30,7 @@ const ALGORITHM = 'SHA1';   // what every authenticator app expects
  */
 const WINDOW = 1;
 
-const ISSUER = 'VaultKeep';
+const ISSUER = 'Citadel Zero';
 
 function generateSecret() {
   // 20 bytes = 160 bits, the RFC 4226 recommendation for HMAC-SHA1.

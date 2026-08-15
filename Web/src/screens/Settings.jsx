@@ -88,14 +88,14 @@ function RecoveryKitSection({ email }) {
 
   function download() {
     const body =
-      `VAULTKEEP RECOVERY KEY\n======================\n\n` +
+      `CITADEL ZERO RECOVERY KEY\n=========================\n\n` +
       `Account: ${email}\n\nRecovery key:\n${newKey}\n\n` +
       `This replaces any earlier recovery key, which no longer works.\n` +
       `It is the ONLY way back into your vault if you forget your\n` +
       `master password. Store it offline, somewhere safe.\n`;
     const url = URL.createObjectURL(new Blob([body], { type: 'text/plain' }));
     const a = document.createElement('a');
-    a.href = url; a.download = 'vaultkeep-recovery-key.txt'; a.click();
+    a.href = url; a.download = 'citadel-zero-recovery-key.txt'; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
@@ -156,7 +156,7 @@ function RecoveryKitSection({ email }) {
         <>
           <div className="vk-print" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div className="vk-printonly" style={{ display: 'none' }}>
-              <h2 style={{ margin: 0, font: '700 18px Geist, sans-serif' }}>VaultKeep recovery key</h2>
+              <h2 style={{ margin: 0, font: '700 18px Geist, sans-serif' }}>Citadel Zero recovery key</h2>
               <p style={{ margin: '4px 0 0', fontSize: 13 }}>{email}</p>
             </div>
 
@@ -514,8 +514,8 @@ function TwoFactor({ email }) {
 
   function downloadCodes() {
     const body =
-      `VAULTKEEP BACKUP CODES\n` +
-      `======================\n\n` +
+      `CITADEL ZERO BACKUP CODES\n` +
+      `=========================\n\n` +
       `Account: ${email}\n\n` +
       backupCodes.join('\n') + '\n\n' +
       `Each code works ONCE, in place of a code from your authenticator\n` +
@@ -525,7 +525,7 @@ function TwoFactor({ email }) {
     const url = URL.createObjectURL(new Blob([body], { type: 'text/plain' }));
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'vaultkeep-backup-codes.txt';
+    a.download = 'citadel-zero-backup-codes.txt';
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 0);
   }
@@ -626,7 +626,7 @@ function TwoFactor({ email }) {
           <div className="vk-print" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
             <div className="vk-printonly" style={{ display: 'none' }}>
-              <h2 style={{ margin: 0, font: '700 18px Geist, sans-serif' }}>VaultKeep backup codes</h2>
+              <h2 style={{ margin: 0, font: '700 18px Geist, sans-serif' }}>Citadel Zero backup codes</h2>
               <p style={{ margin: '4px 0 0', fontSize: 13 }}>{email}</p>
             </div>
 

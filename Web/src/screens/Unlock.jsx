@@ -93,7 +93,7 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
             ring={phase === 'deriving' ? 0.7 : null}
           />
           <div style={{ fontFamily: "'Press Start 2P', monospace", fontSize: 21, letterSpacing: 2, color: 'var(--text)' }}>
-            VAULTKEEP
+            CITADEL<span style={{ color: 'var(--green)' }}> ZERO</span>
           </div>
           <div style={{ font: "500 12px 'Geist Mono', monospace", letterSpacing: '.16em', color: 'var(--muted)' }}>
             ZERO-KNOWLEDGE VAULT
