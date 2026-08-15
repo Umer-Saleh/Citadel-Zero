@@ -1,19 +1,22 @@
-# VaultKeep — Zero-Knowledge Password Manager
+# Citadel Zero
 
-[![CI](https://github.com/Umer-Saleh/Zero-Knowledge-Password-Manager/actions/workflows/ci.yml/badge.svg)](https://github.com/Umer-Saleh/Zero-Knowledge-Password-Manager/actions/workflows/ci.yml)
+[![CI](https://github.com/Umer-Saleh/citadel-zero/actions/workflows/ci.yml/badge.svg)](https://github.com/Umer-Saleh/citadel-zero/actions/workflows/ci.yml)
 
 A password manager where **the server never receives the master password, any
 encryption key, or any plaintext vault data.** If the database, the server
 process, and all network traffic were handed to an attacker, they could not read
 a single stored credential.
 
-React · Node.js · Express · PostgreSQL · Argon2id · AES-256-GCM · Docker · 134 tests
+React · Node.js · Express · PostgreSQL · Argon2id · AES-256-GCM · Docker · 143 tests
 
 > **This is an educational implementation.** It has not been independently
 > audited and is not intended to store real credentials.
 
 > **Desktop only.** The interface is built for a desktop viewport and has no
-> responsive layout yet. It will not lay out correctly on a phone.
+> responsive layout. It will not lay out correctly on a phone.
+
+*Citadel for the vault-within-a-vault structure — the data key sealed behind the
+password-derived key. Zero for zero-knowledge.*
 
 ---
 
@@ -37,6 +40,9 @@ Three rules make that true:
 
 Rule 2 is what distinguishes a zero-knowledge password manager from "a password
 manager that happens to use encryption." Rule 3 is what makes it usable.
+
+The reasoning behind each decision, the alternatives that were rejected, and the
+mistakes made along the way are in **[DESIGN.md](docs/DESIGN.md)**.
 
 ---
 
@@ -96,6 +102,11 @@ login endpoint. The server-side cost is deliberately lower than the client-side
 cost: its input is already a 256-bit uniformly random value, not a guessable
 password, so there is nothing brute-forceable to defend against.
 
+**Fixed-size padding.** Vault items are padded into power-of-two buckets from 256
+bytes before encryption, with a 4-byte length prefix inside the ciphertext so the
+padding is removable. GCM output is the same length as its input, so without this
+an observer holding the database learns roughly how long each password is.
+
 ### The same crypto, twice
 
 The client is a browser, so the crypto exists in two implementations: Node's
@@ -104,9 +115,11 @@ must agree byte for byte or a vault encrypted in one cannot be opened by the
 other.
 
 They are verified against shared test vectors rather than assumed compatible.
-That caught a real incompatibility: **WebCrypto appends the GCM authentication
-tag to the ciphertext, while Node returns it separately.** The browser
-implementation splits the last 16 bytes back out to match the wire format.
+That has caught two real incompatibilities: **WebCrypto appends the GCM
+authentication tag to the ciphertext, while Node returns it separately** — the
+browser implementation splits the last 16 bytes back out to match the wire format
+— and later, a padding change to the wire format that the browser suite flagged
+before anything shipped.
 
 ### KDF parameters are per account
 
@@ -160,16 +173,35 @@ Two independent doors, one vault. The server stores both wrappers and can open
 neither. The recovery key is displayed once, at signup, and never transmitted —
 the server cannot re-display it because the server never had it.
 
-Recovery rotates the kit, so a used recovery key stops working.
+Recovery runs in three steps: find the account, unwrap with the key, set a new
+password. The key check comes second on purpose — discovering a mistyped key
+*after* choosing a new password would be a poor place to fail.
+
+**The server cannot verify a recovery key.** Possession is proved implicitly:
+only someone who unwrapped the real DEK can produce a valid new wrapper
+containing it. A client that guessed would seal a garbage key and lock itself out
+of a vault it could never read. Denial of service, not disclosure — which is why
+the endpoint is heavily rate limited rather than authenticated.
 
 **HKDF, not Argon2id, for the recovery KEK.** Argon2id exists to make guessing a
 low-entropy human password expensive. A 128-bit machine-generated key has nothing
-to guess — brute-forcing it is infeasible regardless of KDF speed — so the slow
-KDF would cost 300 ms and buy nothing.
+to guess, so the slow KDF would cost 300 ms and buy nothing.
 
 The recovery key is formatted in Crockford base32 (no `I`, `L`, `O`, or `U`) in
 groups of four, since a user transcribes it by hand from paper and recovery is a
 once-in-a-crisis flow where a typo means data loss.
+
+### Recovery kit rotation
+
+Recovery issues a new kit as a side effect, so a used recovery key stops working.
+But a user who *knows* their key was exposed and still remembers their password
+had no way to replace it without going through a full recovery.
+
+Settings can issue a new kit directly. It requires the master password despite
+the session already being valid: a recovery key is a permanent credential to the
+vault, and someone who borrowed an unlocked laptop should not be able to mint
+one. The old key stops working immediately; the password and every vault item are
+untouched.
 
 ### Sessions: rotation and reuse detection
 
@@ -199,10 +231,6 @@ Rotation does **not** extend expiry — the new token inherits the original
 On the client, concurrent 401s share a single in-flight refresh promise. Without
 that, several requests would each replay the same token and the app would trip
 its own reuse detection, logging itself out.
-
-**SHA-256, not Argon2id,** for refresh tokens and backup codes — the input is
-already 256 bits of CSPRNG output, so there is no low-entropy guess for a slow
-hash to defend against.
 
 ### Two-factor authentication (TOTP)
 
@@ -244,6 +272,8 @@ server necessarily holds in plaintext.
   produces `Password1!`.
 - **The generator uses `crypto.getRandomValues` with modulo-bias rejection**, so
   every character is uniformly likely.
+- **Duplicate entry names are blocked and reused passwords are flagged** — both
+  necessarily client-side, since the server holds ciphertext it cannot compare.
 
 ---
 
@@ -260,14 +290,14 @@ server necessarily holds in plaintext.
 ```
 Server/src/
   config/         env validated with zod at startup; exits on invalid
-  crypto/         keys, cipher, envelope, recovery, refreshToken, totp — pure, no I/O
+  crypto/         keys, cipher, envelope, padding, recovery, refreshToken, totp
   repositories/   all SQL lives here, and nowhere else
   services/       business rules; knows nothing about HTTP
-  routes/         zod schemas per endpoint
+  routes/         zod schemas per endpoint, all .strict()
   middleware/     requireAuth, rate limiting, validation
   errors/         AppError, separating operational failures from bugs
   app.js          wiring only — exports the app, does not listen
-  server.js       imports app, calls listen
+  server.js       imports app, calls listen, sweeps expired tokens hourly
 
 Web/src/
   crypto/         the browser port, byte-verified against Node vectors
@@ -275,7 +305,7 @@ Web/src/
   context/        vault (holds the DEK), theme, mascot reactions
   lib/            strength, policy, clipboard, health
   components/     shared UI primitives and the pixel icon set
-  screens/        signup, recovery kit, unlock, vault, generator, settings
+  screens/        signup, recovery kit, unlock, recover, vault, generator, settings
 ```
 
 Dependencies point one way: routes call services, services call repositories.
@@ -303,8 +333,11 @@ is enforced by the module boundary.
 | Credential replay | Sends a stored `auth_hash` to the login endpoint | Server-side re-hashing means the stored value is not the value the endpoint accepts. |
 | Refresh token theft | Steals a refresh token and uses it | Rotation makes each token single-use. When the real user next refreshes, the server sees a spent token, cannot tell which party is legitimate, and revokes the whole family. |
 | Session persistence after compromise | Wants access to survive a password change | Password change and recovery revoke every session for that user, in the same transaction as the credential write. |
+| Stolen recovery key | Holds a copy of a printed kit | The kit can be rotated from Settings without a full recovery, and any completed recovery rotates it automatically. |
+| Unauthorised kit minting | Uses a borrowed unlocked session to issue a new recovery key | Requires the master password, not merely a valid session. |
 | TOTP replay | Reuses an observed 6-digit code inside its window | The consumed time-step is recorded; codes at or below it are refused. |
 | 2FA as an oracle | Probes to learn whether a password is valid | A wrong code and a wrong password return the same error. |
+| Size analysis | Infers password length from ciphertext length | Items are padded into power-of-two buckets before encryption. |
 | Data tampering | Flips bits in stored ciphertext | GCM auth tag fails loudly at decryption. |
 | SQL injection | Malicious input in any request field | All queries parameterized; no SQL built by string concatenation. |
 | IDOR / cross-user access | Guesses another user's item UUID | Every vault query is scoped by `user_id` from the verified JWT, in the `WHERE` clause. A mismatch matches zero rows and returns 404 — not 403, which would confirm the item exists. |
@@ -324,25 +357,29 @@ a threat model.
   an account's credentials, but cannot produce a wrapper containing the real DEK,
   so they lock the account out rather than reading it. **Denial of service, not
   disclosure.** A production system would add email confirmation.
-- **`/api/user/kdf-params` is an account-enumeration oracle,** and now also
-  reveals whether an account has 2FA enabled. It is rate limited. The alternative
-  — a two-step login with a separate pending-2FA token — was judged not worth the
+- **`/api/user/kdf-params` is an account-enumeration oracle,** and also reveals
+  whether an account has 2FA enabled. It is rate limited. The alternative — a
+  two-step login with a separate pending-2FA token — was judged not worth the
   extra credential type for this project.
+- **Padding reduces the length leak; it does not eliminate it.** A 6-character
+  password and a 200-character passphrase are indistinguishable, but an observer
+  can still tell which of nine size buckets an item falls into — mostly, whether
+  it has notes. Full mitigation means padding everything to the largest bucket
+  and paying 64 KB per item.
+- **Reused-password detection only sees loaded items,** and only in the browser.
+  The server cannot help: two identical passwords encrypt to completely different
+  bytes, because every encryption gets a fresh nonce.
 - **Clipboard clearing cannot reach OS clipboard history.** Windows `Win+V` and
   similar managers keep their own copy. The guarantee is "not left in the paste
   buffer," not "unrecoverable."
 - **JavaScript cannot guarantee memory erasure.** `dek.fill(0)` is best effort;
   the runtime may have copied the buffer already.
-- **Expired refresh tokens are swept on login,** not by a scheduler. A dormant
-  account keeps its expired rows. Production wants `pg_cron` or similar.
 - **Rate limiting is in-memory.** Counters reset on restart and are not shared
   across instances. A Redis-backed store is the production answer.
 - **A weak master password weakens everything.** Argon2id makes guessing
   expensive; it cannot rescue a password from a wordlist.
 - **A compromised client device is out of scope.** A keylogger sees plaintext at
   the moment the user does.
-- **Item length is not hidden.** GCM ciphertext length reveals approximate
-  plaintext length. Padding into fixed-size buckets would address this.
 - **Email addresses are stored in plaintext**, since they are the login
   identifier.
 - **No TLS in local development.** The architecture assumes TLS terminating at a
@@ -402,12 +439,20 @@ Configuration is validated at startup and the process exits on invalid values �
 short `JWT_SECRET` refuses to start rather than silently producing weakly signed
 tokens.
 
+### Least-privilege database role
+
+The compose setup connects as `postgres` for simplicity.
+`Server/migrations/sql/create-app-role.sql` defines the role a real deployment
+would use: `SELECT`, `INSERT`, `UPDATE`, `DELETE` on the four tables the
+application touches, and nothing else — no `CREATE`, no `DROP`, no access to the
+migrations table.
+
 ---
 
 ## Testing
 
 ```bash
-cd Server && npm test    # 110 tests
+cd Server && npm test    # 119 tests
 cd Web && npm test       # 24 tests
 ```
 
@@ -437,12 +482,15 @@ Among them:
 - A TOTP code cannot be used twice, and a backup code cannot be used twice
 - Login without a code fails once 2FA is on — the one test that proves the
   feature is not inert
+- Regenerating a kit requires the master password, and a rejected attempt leaves
+  the existing kit working
+- Two plaintexts of very different lengths pad to the same size
 - The API response contains no plaintext, asserted by string search on the whole
   response body
 
-Two tests state the central design claim directly: vault ciphertext is
-**byte-identical** before and after a password change, and before and after a KDF
-upgrade.
+Three tests state the central design claim directly: vault ciphertext is
+**byte-identical** before and after a password change, before and after a KDF
+upgrade, and before and after a recovery kit rotation.
 
 ### Verifying the claims yourself
 
@@ -473,6 +521,7 @@ possession of a key that exists in neither the database nor the server.
 | `POST` | `/api/account/kdf-upgrade` | Bearer | Raise KDF parameters; re-wraps the DEK |
 | `GET` | `/api/account/recovery-material` | — | Recovery salt and wrapper |
 | `POST` | `/api/account/recover` | — | Complete recovery with a new password |
+| `POST` | `/api/account/recovery-kit` | Bearer | Issue a new recovery kit; requires the master password |
 | `POST` | `/api/account/totp/begin` | Bearer | Issue a TOTP secret and QR URI |
 | `POST` | `/api/account/totp/confirm` | Bearer | Verify a code, enable 2FA, return backup codes once |
 | `POST` | `/api/account/totp/disable` | Bearer | Turn 2FA off; requires a current code |
@@ -485,6 +534,8 @@ machine-readable codes (`EMAIL_TAKEN`, `INVALID_CREDENTIALS`,
 
 ## Documentation
 
+- **[DESIGN.md](docs/DESIGN.md)** — architecture, decisions, rejected
+  alternatives, and the mistakes made along the way
 - [ADR 0001 — Envelope encryption](docs/adr/0001-envelope-encryption.md)
 
 ---
@@ -493,7 +544,6 @@ machine-readable codes (`EMAIL_TAKEN`, `INVALID_CREDENTIALS`,
 
 - Responsive layout for mobile
 - Redis-backed rate limiting
-- Least-privilege database role; the app currently connects as superuser
-- Scheduled cleanup of expired refresh tokens
+- Least-privilege role wired into the container setup by default
 - Structured logging and an audit trail
-- Padding vault items to fixed-size buckets to hide length
+- Email confirmation on the recovery endpoint
