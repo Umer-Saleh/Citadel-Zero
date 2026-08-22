@@ -40,6 +40,12 @@ mistakes made along the way are in **[DESIGN.md](docs/DESIGN.md)**.
 
 ---
 
+**Short on time?** The two sections worth reading are
+[Threat model](#threat-model) — what this defends against, and
+[Accepted limitations](#accepted-limitations) — what it doesn't.
+
+---
+
 ## Cryptographic design
 
 ### Key hierarchy
