@@ -9,12 +9,6 @@ a single stored credential.
 
 React · Node.js · Express · PostgreSQL · Argon2id · AES-256-GCM · Docker · 143 tests
 
-> **This is an educational implementation.** It has not been independently
-> audited and is not intended to store real credentials.
-
-> **Desktop only.** The interface is built for a desktop viewport and has no
-> responsive layout. It will not lay out correctly on a phone.
-
 *Citadel for the vault-within-a-vault structure — the data key sealed behind the
 password-derived key. Zero for zero-knowledge.*
 
@@ -384,6 +378,16 @@ a threat model.
   identifier.
 - **No TLS in local development.** The architecture assumes TLS terminating at a
   reverse proxy in deployment.
+
+---
+
+### Scope and Status
+
+> **This is an educational implementation.** It has not been independently
+> audited and is not intended to store real credentials.
+
+> **Desktop only.** The interface is built for a desktop viewport and has no
+> responsive layout. It will not lay out correctly on a phone.
 
 ---
 
