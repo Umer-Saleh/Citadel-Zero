@@ -3,6 +3,7 @@ import { useVault } from '../context/VaultContext';
 import { Card, Input, Button, DeriveBar } from '../components/ui';
 import { Paladin } from '../components/Paladin';
 import { usePix } from '../context/PixContext';
+import { DEMO_MODE, DEMO_EMAIL, DEMO_PASSWORD } from '../lib/demo';
 
 export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
   const { login } = useVault();
@@ -147,6 +148,47 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
                 />
                 <span style={{ fontSize: 12, color: 'var(--muted)', textWrap: 'pretty' }}>
                   Six digits from your authenticator app, or one of your backup codes.
+                </span>
+              </div>
+            )}
+
+            {/* Demo credentials. Not a secret by any reading — this
+                account's password is published in the README and on
+                this screen, which is the point of it. Renders nothing
+                on a normal build. */}
+            {DEMO_MODE && DEMO_EMAIL && (
+              <div style={{
+                display: 'flex', flexDirection: 'column', gap: 10,
+                padding: 14, borderRadius: 'var(--radius)',
+                border: '1px dashed var(--amber)',
+                background: 'color-mix(in srgb, var(--amber) 8%, transparent)'
+              }}>
+                <span style={{
+                  font: "600 10px 'Geist Mono', monospace",
+                  letterSpacing: '.16em', color: 'var(--amber)'
+                }}>
+                  DEMO ACCOUNT
+                </span>
+                <div style={{ font: "500 12px 'Geist Mono', monospace", color: 'var(--text)', wordBreak: 'break-all' }}>
+                  {DEMO_EMAIL}<br />{DEMO_PASSWORD}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setEmail(DEMO_EMAIL); setPw(DEMO_PASSWORD); }}
+                  style={{
+                    alignSelf: 'flex-start',
+                    font: "600 11px 'Geist Mono', monospace", letterSpacing: '.12em',
+                    padding: '7px 12px', borderRadius: 'var(--radius)',
+                    border: '1px solid var(--edge)', background: 'transparent',
+                    color: 'var(--text)', cursor: 'pointer'
+                  }}
+                >
+                  USE THESE
+                </button>
+                <span style={{ fontSize: 12, color: 'var(--muted)', textWrap: 'pretty' }}>
+                  Its vault entries are fake. Everything in it was encrypted by a
+                  client that derived the same key from the password above — the
+                  server has never held it.
                 </span>
               </div>
             )}

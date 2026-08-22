@@ -14,6 +14,9 @@
   --glow: rgba(124, 184, 99, .18);
   --grid: rgba(240, 233, 214, .03);
   --radius: 3px;
+  /* Height of the demo banner, published by DemoBanner. 0 when the
+     banner is absent, which is every non-demo build. */
+  --demo-banner-h: 0px;
   --scanop: .03;
 }
 

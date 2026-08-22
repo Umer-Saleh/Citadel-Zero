@@ -33,7 +33,9 @@ export function AppShell({ children, view = 'vault', onNavigate }) {
     // on a long one, rather than floating mid-screen.
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <header style={{
-        position: 'sticky', top: 0, zIndex: 40,
+        // Sticks below the demo banner when there is one. The variable
+        // is 0px otherwise, which is the original behaviour.
+        position: 'sticky', top: 'var(--demo-banner-h, 0px)', zIndex: 40,
         background: 'var(--surface)', borderBottom: '1px solid var(--edge)'
       }}>
         <div style={{
