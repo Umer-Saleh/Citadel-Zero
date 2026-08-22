@@ -21,6 +21,17 @@ const schema = z.object({
   // addresses. express-rate-limit v8 refuses to start in that
   // configuration (ERR_ERL_PERMISSIVE_TRUST_PROXY) for this reason.
   TRUST_PROXY: z.coerce.number().int().min(0).max(10).optional(),
+
+  // Redis-backed rate limiting. Unset means the in-memory store, so
+  // local development and the test suite need no extra service.
+  REDIS_URL: z.string().optional(),
+
+  // Limits, tunable without a rebuild so a public demo can be
+  // tightened without touching code. The defaults are the values that
+  // were previously hardcoded.
+  AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+  API_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(300),
+  RATE_LIMIT_WINDOW_MINUTES: z.coerce.number().int().positive().default(15),
 });
 
 const parsed = schema.safeParse(process.env);
