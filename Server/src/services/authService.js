@@ -235,7 +235,7 @@ async function confirmTotpEnrolment(userId, code) {
     await totpRepo.replaceBackupCodes(userId, codes.map(hashBackupCode), client);
   });
 
-  console.log(`[server] TOTP enabled for ${user.email}`);
+  console.log(`[server] TOTP enabled for user ${user.id}`);
 
   return { backupCodes: codes };   // shown once, then gone
 }
@@ -260,7 +260,7 @@ async function disableTotp(userId, code) {
     await totpRepo.replaceBackupCodes(userId, [], client);
   });
 
-  console.log(`[server] TOTP disabled for ${user.email}`);
+  console.log(`[server] TOTP disabled for user ${user.id}`);
 }
 
 /**
@@ -294,7 +294,10 @@ async function login({ email, authHash, totpCode }) {
   const valid = await serverVerifyAuth(authHash, user ? user.auth_hash : DUMMY_HASH).catch(() => false);
 
   if (!user || !valid) {
-    console.warn(`[server] failed login for ${email}`);
+    // The id, not the email. A failed-login log is exactly where an
+    // attacker's list of probed addresses would otherwise accumulate,
+    // and for an unknown account there is no id to write at all.
+    console.warn(`[server] failed login for ${user ? `user ${user.id}` : 'unknown account'}`);
     throw new AppError('INVALID_CREDENTIALS', 401, 'invalid credentials');
   }
 
@@ -302,7 +305,7 @@ async function login({ email, authHash, totpCode }) {
     const ok = await checkTotp(user, totpCode);
 
     if (!ok) {
-      console.warn(`[server] failed TOTP for ${email}`);
+      console.warn(`[server] failed TOTP for user ${user.id}`);
       // Deliberately the SAME error as a wrong password. A distinct
       // code would confirm to an attacker that the password they hold
       // is live, letting them focus phishing on exactly those accounts.

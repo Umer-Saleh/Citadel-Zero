@@ -70,7 +70,7 @@ app.get('/api/health', (req, res) => {
 app.post('/api/auth/signup', validate(signupSchema), wrap(async (req, res) => {
   const user = await authService.signup(req.body);
 
-  console.log(`[server] registered ${req.body.email} as ${user.id}`);
+  console.log(`[server] registered user ${user.id}`);
   res.status(201).json({ ok: true });
 }));
 
@@ -81,11 +81,11 @@ app.get('/api/user/kdf-params',
   }));
 
 app.post('/api/auth/login', validate(loginSchema), wrap(async (req, res) => {
-  const { token, refreshToken, refreshExpiresAt,
+  const { userId, token, refreshToken, refreshExpiresAt,
           wrappedDek, kdfUpgradeAvailable, targetKdfParams } =
     await authService.login(req.body);
 
-  console.log(`[server] login success for ${req.body.email}`);
+  console.log(`[server] login success for user ${userId}`);
 
   // Named explicitly rather than spread: the service result also
   // carries userId and email, and a route should decide what goes

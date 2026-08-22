@@ -25,7 +25,7 @@ async function changePassword(userId, {
   const valid = await serverVerifyAuth(currentAuthHash, user.auth_hash).catch(() => false);
 
   if (!valid) {
-    console.warn(`[server] failed password change for ${user.email}`);
+    console.warn(`[server] failed password change for user ${user.id}`);
     throw new AppError('INVALID_CREDENTIALS', 401, 'current password is incorrect');
   }
 
@@ -49,7 +49,7 @@ async function changePassword(userId, {
     await refreshTokenRepo.revokeAllForUser(userId, client);
   });
 
-  console.log(`[server] password changed for ${user.email}`);
+  console.log(`[server] password changed for user ${user.id}`);
 }
 
 /** Public material the client needs before deriving the recovery KEK. */
@@ -115,7 +115,7 @@ async function completeRecovery({
     await refreshTokenRepo.revokeAllForUser(user.id, client);
   });
 
-  console.log(`[server] recovery completed for ${email}`);
+  console.log(`[server] recovery completed for user ${user.id}`);
 }
 
 
@@ -159,7 +159,7 @@ async function upgradeKdf(userId, {
     wrappedDek: newWrappedDek
   });
 
-  console.log(`[server] KDF upgraded for ${user.email}`);
+  console.log(`[server] KDF upgraded for user ${user.id}`);
 }
 
 /**
@@ -185,7 +185,7 @@ async function regenerateRecoveryKit(userId, {
   const valid = await serverVerifyAuth(currentAuthHash, user.auth_hash).catch(() => false);
 
   if (!valid) {
-    console.warn(`[server] failed kit regeneration for ${user.email}`);
+    console.warn(`[server] failed kit regeneration for user ${user.id}`);
     throw new AppError('INVALID_CREDENTIALS', 401, 'invalid credentials');
   }
 
@@ -197,7 +197,7 @@ async function regenerateRecoveryKit(userId, {
     recoveryWrappedDek: newRecoveryWrappedDek
   });
 
-  console.log(`[server] recovery kit regenerated for ${user.email}`);
+  console.log(`[server] recovery kit regenerated for user ${user.id}`);
 }
 
 module.exports = { changePassword, getRecoveryMaterial, completeRecovery, upgradeKdf, regenerateRecoveryKit };
