@@ -27,6 +27,21 @@ const app = express();
 // Order matters: security headers first, then body parsing,
 // then rate limiting before any route work happens.
 // ---------------------------------------------------------------
+// ---------------------------------------------------------------
+// PROXY TRUST
+// Behind a reverse proxy, req.ip is the PROXY's address unless this
+// is set — so express-rate-limit sees a single client for the whole
+// internet and every visitor shares one bucket. With a 10-request
+// auth limit that is a self-inflicted denial of service, not a
+// hardening measure.
+//
+// Unset when the process is exposed directly, which is what local
+// development does, so nothing changes there.
+// ---------------------------------------------------------------
+if (config.TRUST_PROXY !== undefined) {
+  app.set('trust proxy', config.TRUST_PROXY);
+}
+
 app.use(cors({
   origin: config.CORS_ORIGIN,
   credentials: true
