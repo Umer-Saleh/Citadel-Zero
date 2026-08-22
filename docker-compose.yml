@@ -9,10 +9,16 @@ services:
       POSTGRES_DB: password_manager
     volumes:
       - pgdata:/var/lib/postgresql/data
-      # Anything in this directory runs once, on first initialisation
-      # of an empty data volume. Creating the role needs superuser, so
-      # it happens here rather than in a migration.
-      - ./Server/migrations/sql:/docker-entrypoint-initdb.d:ro
+      # Runs once, on first initialisation of an empty data volume.
+      # Creating the role needs superuser, so it happens here rather
+      # than in a migration.
+      #
+      # The single FILE, not the directory it lives in. Mounting the
+      # directory also ran grant-app-role.sql at init time, before
+      # migrations had created the tables it grants on — and the
+      # Postgres entrypoint stops on the first error, so database
+      # initialisation aborted and the container exited.
+      - ./Server/migrations/sql/create-app-role.sh:/docker-entrypoint-initdb.d/create-app-role.sh:ro
 
       # (leave the volumes block unchanged)
 

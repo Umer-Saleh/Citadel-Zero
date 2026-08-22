@@ -441,11 +441,31 @@ tokens.
 
 ### Least-privilege database role
 
-The compose setup connects as `postgres` for simplicity.
-`Server/migrations/sql/create-app-role.sql` defines the role a real deployment
-would use: `SELECT`, `INSERT`, `UPDATE`, `DELETE` on the four tables the
-application touches, and nothing else — no `CREATE`, no `DROP`, no access to the
-migrations table.
+The local compose setup connects as `postgres` for simplicity. A real
+deployment uses `citadel_app`, which holds `SELECT`, `INSERT`, `UPDATE` and
+`DELETE` on the four tables the application touches and nothing else — no
+`CREATE`, no `DROP`, no `TRUNCATE`, no access to the migrations table.
+
+It is created in two phases, because the two halves can only run at different
+times:
+
+- `migrations/sql/create-app-role.sh` runs at **database initialisation**, where
+  superuser is available. It creates the role and grants `CONNECT` and `USAGE`.
+  The password comes from `APP_DB_PASSWORD`; with it unset the script skips
+  itself, which is what local development does.
+- `migrations/sql/grant-app-role.sql` runs **after migrations**, because it
+  grants on tables migrations create. It is idempotent and applied on every
+  deploy, so a table added by a later migration is picked up. It skips silently
+  when the role does not exist.
+
+They were one file, and that file was mounted into `/docker-entrypoint-initdb.d`
+where it granted on tables that did not exist yet. Postgres runs init scripts
+with `ON_ERROR_STOP=1`, so database initialisation aborted and the container
+exited — on any clone with no existing data volume.
+
+`DELETE` rather than `TRUNCATE` is deliberate. Every child table cascades from
+`users`, so a single `DELETE FROM users` clears the database without the role
+needing a privilege that would also let it empty a table by accident.
 
 ---
 
