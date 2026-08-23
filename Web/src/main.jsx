@@ -5,6 +5,7 @@ import { Backdrop } from './components/Backdrop';
 import { PixProvider } from './context/PixContext.jsx';
 import { DemoBanner } from './components/DemoBanner';
 import App from './App.jsx'
+import './fonts.css';
 import './theme.css';
 
 createRoot(document.getElementById('root')).render(

@@ -69,7 +69,10 @@
 	# ---------------------------------------------------------------
 	handle {
 		# CSP for the application, derived from what this frontend
-		# actually does rather than copied from a template:
+		# actually does rather than copied from a template. Every
+		# fetch directive is 'self'; the only two relaxations are a
+		# WebAssembly compile and inline style attributes, and both
+		# are the narrow token rather than the broad one:
 		#
 		#   'wasm-unsafe-eval'  hash-wasm compiles a WebAssembly
 		#                       Argon2id. Without it the unlock screen
@@ -82,11 +85,13 @@
 		#                       style ATTRIBUTES. Nothing here injects
 		#                       <style> elements, so -elem stays strict
 		#                       and only the attribute channel is open.
-		#   fonts.googleapis    index.html links a Google Fonts
-		#   fonts.gstatic       stylesheet, which pulls font files from
-		#                       a second host. Self-hosting the two
-		#                       families would let both origins go; see
-		#                       DEPLOY.md.
+		#   font-src 'self'     the three families are served from this
+		#                       origin, out of @fontsource via the
+		#                       bundle. They used to come from
+		#                       fonts.googleapis.com, which pulled the
+		#                       files from fonts.gstatic.com — two
+		#                       third-party origins in a policy that is
+		#                       otherwise entirely 'self'.
 		#   img-src data:       the TOTP QR code is generated in the
 		#                       browser and rendered as a data: URI. No
 		#                       remote image is ever loaded.
@@ -98,7 +103,7 @@
 		# Deliberately absent: object-src and base-uri are pinned to
 		# 'none', and frame-ancestors 'none' means this page cannot be
 		# framed for a clickjacking overlay on the unlock form.
-		header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src-elem 'self' https://fonts.googleapis.com; style-src-attr 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'"
+		header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src-elem 'self'; style-src-attr 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'"
 
 		reverse_proxy web:80
 	}

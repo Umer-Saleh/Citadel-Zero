@@ -340,9 +340,11 @@ than one that does not.
   limited, not fixed. See the README.
 - **The demo account's password is public**, so that account has no
   confidentiality. It holds invented data.
-- **Google Fonts is a third-party origin** in the CSP. Self-hosting the two
-  families would let both `fonts.googleapis.com` and `fonts.gstatic.com` come
-  out of the policy entirely, and is the one CSP improvement left.
+- **The CSP allows a WebAssembly compile and inline style attributes.**
+  `'wasm-unsafe-eval'` is what lets hash-wasm derive an Argon2id key at all, and
+  `style-src-attr 'unsafe-inline'` is what lets React's `style={{}}` props
+  render. Both are the narrow token; every other fetch directive is `'self'`,
+  and the page loads nothing from a third-party origin.
 - **HSTS is sent without `preload`.** Adding it commits the domain to a
   browser-baked list that is slow to leave. Add it only when you are sure every
   present and future subdomain will be HTTPS.

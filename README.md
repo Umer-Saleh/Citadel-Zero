@@ -425,10 +425,13 @@ The public demo deployment ([DEPLOY.md](DEPLOY.md)) adds four of its own:
   is pinned to the demo user id and takes no parameter, and every field it
   returns is already obtainable by anyone who logs in with the published
   password. It adds no disclosure; it removes two API calls.
-- **The CSP still trusts Google Fonts.** `fonts.googleapis.com` and
-  `fonts.gstatic.com` are third-party origins in a policy that is otherwise
-  `'self'`. Self-hosting the two families would remove both, and is the one
-  improvement left in that policy.
+- **The CSP keeps two relaxations**, and neither can be removed without
+  rewriting the UI: `'wasm-unsafe-eval'`, because hash-wasm compiles a
+  WebAssembly Argon2id, and `style-src-attr 'unsafe-inline'`, because the
+  interface styles itself with React `style={{}}` props, which become inline
+  style attributes. Both are the narrow token rather than the broad one — script
+  `eval()` stays blocked, and `style-src-elem` stays strict. Every other fetch
+  directive is `'self'`.
 
 ---
 
@@ -619,7 +622,6 @@ machine-readable codes (`EMAIL_TAKEN`, `INVALID_CREDENTIALS`,
 - Responsive layout for mobile
 - Structured logging and an audit trail
 - Email confirmation on the recovery endpoint
-- Self-hosted fonts, to drop the last third-party origin from the CSP
 
 Redis-backed rate limiting and the least-privilege role are now wired into the
 production setup — see [DEPLOY.md](DEPLOY.md). Both are off by default in local

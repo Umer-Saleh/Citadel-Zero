@@ -1,0 +1,102 @@
+/*
+ * Self-hosted fonts.
+ *
+ * These used to come from a <link> to fonts.googleapis.com, which
+ * pulled the font files from a second host, fonts.gstatic.com. That
+ * put two third-party origins into a Content-Security-Policy that is
+ * otherwise entirely 'self', and made every first paint depend on
+ * someone else's CDN being reachable. Serving them ourselves lets
+ * style-src-elem and font-src both collapse to 'self'.
+ *
+ * The files come from the @fontsource packages, so they are pinned in
+ * package-lock.json and updated with npm rather than by dropping
+ * binaries into the repository by hand.
+ *
+ * Declared here rather than importing the packages' own stylesheets
+ * because @fontsource names the sans family "Geist Sans", while this
+ * codebase has always called it "Geist" — across some fifty style
+ * declarations. Re-declaring the four faces we actually use is a
+ * smaller and more honest change than renaming the font everywhere to
+ * match a package.
+ *
+ * Latin only, and only the weights in use: Geist 400/500/600/700,
+ * Geist Mono 400/500/600, Press Start 2P 400. Every other weight and
+ * subset the packages ship stays out of the bundle.
+ *
+ * font-display: swap throughout — text renders in the fallback
+ * immediately and reflows when the face arrives. For an unlock screen
+ * that is strictly better than a blank page.
+ */
+
+/* ---------------------------------------------------------------
+   Geist — body and UI text
+   --------------------------------------------------------------- */
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('@fontsource/geist-sans/files/geist-sans-latin-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('@fontsource/geist-sans/files/geist-sans-latin-500-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('@fontsource/geist-sans/files/geist-sans-latin-600-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('@fontsource/geist-sans/files/geist-sans-latin-700-normal.woff2') format('woff2');
+}
+
+/* ---------------------------------------------------------------
+   Geist Mono — ciphertext, keys, recovery codes
+   --------------------------------------------------------------- */
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('@fontsource/geist-mono/files/geist-mono-latin-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('@fontsource/geist-mono/files/geist-mono-latin-500-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('@fontsource/geist-mono/files/geist-mono-latin-600-normal.woff2') format('woff2');
+}
+
+/* ---------------------------------------------------------------
+   Press Start 2P — the wordmark and headings
+   --------------------------------------------------------------- */
+@font-face {
+  font-family: 'Press Start 2P';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('@fontsource/press-start-2p/files/press-start-2p-latin-400-normal.woff2') format('woff2');
+}
