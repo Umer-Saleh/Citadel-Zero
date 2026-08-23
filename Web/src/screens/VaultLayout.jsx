@@ -1,6 +1,7 @@
 import { Vault } from './Vault';
 import { ItemDetail } from './ItemDetail';
 import { Icon } from '../components/Icon';
+import { StoredMaterial } from '../components/StoredMaterial';
 
 /**
  * The two-column vault: list on the left, detail/edit panel on the
@@ -16,6 +17,7 @@ import { Icon } from '../components/Icon';
 export function VaultLayout({selected, onSelect, forgedPassword, onForgedConsumed }) {
 
   return (
+    <>
     <div style={{
       display: 'grid',
       gridTemplateColumns: 'minmax(0,1fr) 380px',
@@ -51,6 +53,10 @@ export function VaultLayout({selected, onSelect, forgedPassword, onForgedConsume
         )}
       </div>
     </div>
+
+    {/* Demo instances only — renders null everywhere else. */}
+    <StoredMaterial />
+    </>
   );
 }
 

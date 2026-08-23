@@ -19,6 +19,7 @@ const cors = require('cors');
 const config = require('./config');
 
 const accountService = require('./services/accountService');
+const demoService = require('./services/demoService');
   
 const app = express();
 
@@ -238,6 +239,27 @@ app.post('/api/account/recovery-kit',
     await accountService.regenerateRecoveryKit(req.userId, req.body);
     res.status(200).json({ ok: true });
   }));
+
+// ---------------------------------------------------------------
+// DEMO ROUTES
+// Mounted only when DEMO_MODE is on, so they do not exist at all in a
+// normal deployment — not "exist but refuse", do not exist.
+//
+// This one serves the raw stored rows for the demo account so the UI
+// can show them beside the plaintext it decrypted. It is pinned to
+// the id resolved from DEMO_EMAIL and takes no parameter of any kind,
+// so there is nothing a caller can point it at. It is a strict subset
+// of what that account already discloses to anyone — its password is
+// printed on its own unlock screen — and it returns no key material.
+// See services/demoService.js for the full reasoning.
+// ---------------------------------------------------------------
+if (config.demoMode) {
+  app.get('/api/demo/stored-material',
+    authLimiter,
+    wrap(async (req, res) => {
+      res.status(200).json(await demoService.storedMaterial());
+    }));
+}
 
 // ---------------------------------------------------------------
 // 404 — anything that matched no route

@@ -32,6 +32,11 @@ const schema = z.object({
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
   API_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(300),
   RATE_LIMIT_WINDOW_MINUTES: z.coerce.number().int().positive().default(15),
+
+  // Public-demo mode. Off unless explicitly enabled, so nothing here
+  // can switch itself on in a real deployment by accident.
+  DEMO_MODE: z.enum(['true', 'false']).default('false'),
+  DEMO_EMAIL: z.string().email().optional(),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -49,5 +54,15 @@ const config = parsed.data;
 // Rate limiting is off in tests so the suite can exercise auth
 // endpoints freely.
 config.rateLimitEnabled = config.RATE_LIMIT_ENABLED === 'true' && config.NODE_ENV !== 'test';
+
+// Demo mode requires an account to point at. Enabling it without one
+// would mount a route that can only ever 404, so refuse instead.
+config.demoMode = config.DEMO_MODE === 'true';
+
+if (config.demoMode && !config.DEMO_EMAIL) {
+  console.error('Invalid configuration:');
+  console.error('  DEMO_EMAIL: required when DEMO_MODE is true');
+  process.exit(1);
+}
 
 module.exports = config;
