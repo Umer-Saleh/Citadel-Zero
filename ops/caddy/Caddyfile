@@ -1,0 +1,114 @@
+# Citadel Zero — public demo reverse proxy.
+#
+# Caddy terminates TLS, obtains and renews Let's Encrypt certificates
+# automatically, and redirects HTTP to HTTPS without being told to.
+# It is the only container that publishes a port.
+#
+# ---------------------------------------------------------------
+# ONE ORIGIN, NOT TWO
+# ---------------------------------------------------------------
+# The frontend and the API share a hostname and are split by path:
+# /api/* goes to the Node process, everything else to nginx. An
+# api.<domain> subdomain would need a second certificate, a CORS
+# preflight on every request, and connect-src pointing at a third
+# party in the CSP below. Same origin costs nothing and removes all
+# three.
+{
+	# Required, and compose enforces it. An EMPTY value is not
+	# "no email" — it is `email` with no argument, which is a
+	# Caddyfile parse error and crash-loops the container. The cost of
+	# setting it is one line; the benefit is Let's Encrypt warning you
+	# before a failed renewal becomes an expired certificate.
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	# ---------------------------------------------------------------
+	# SECURITY HEADERS
+	# Site-wide, so they cover the API responses too. `header` replaces
+	# rather than appends, which matters because helmet sets some of
+	# these on /api — one deterministic value each, not two.
+	# ---------------------------------------------------------------
+	header {
+		# Two years, subdomains included. NO `preload`: that submits the
+		# domain to a browser-baked list which is slow and awkward to
+		# get out of, and this is a demo host. Add it only if you are
+		# certain every present and future subdomain will be HTTPS.
+		Strict-Transport-Security "max-age=63072000; includeSubDomains"
+
+		# Stops a browser second-guessing Content-Type. Relevant here
+		# because the API returns JSON that must never be sniffed into
+		# something executable.
+		X-Content-Type-Options "nosniff"
+
+		# Send no Referer at all. There is nothing on this origin whose
+		# path is anyone else's business, and the vault is a
+		# single-page app whose URLs would otherwise leak in outbound
+		# requests.
+		Referrer-Policy "no-referrer"
+
+		# frame-ancestors below is the real defence; this covers
+		# anything that still honours only the older header.
+		X-Frame-Options "DENY"
+
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+
+		# Don't advertise the server or its version.
+		-Server
+	}
+
+	# ---------------------------------------------------------------
+	# API
+	# ---------------------------------------------------------------
+	handle /api/* {
+		reverse_proxy server:3000
+	}
+
+	# ---------------------------------------------------------------
+	# FRONTEND
+	# ---------------------------------------------------------------
+	handle {
+		# CSP for the application, derived from what this frontend
+		# actually does rather than copied from a template:
+		#
+		#   'wasm-unsafe-eval'  hash-wasm compiles a WebAssembly
+		#                       Argon2id. Without it the unlock screen
+		#                       cannot derive a key at all. This is the
+		#                       narrow token — NOT 'unsafe-eval', which
+		#                       would also re-enable eval() for
+		#                       JavaScript.
+		#   style-src-attr      the entire UI styles with React
+		#     'unsafe-inline'   style={{}} props, which become inline
+		#                       style ATTRIBUTES. Nothing here injects
+		#                       <style> elements, so -elem stays strict
+		#                       and only the attribute channel is open.
+		#   fonts.googleapis    index.html links a Google Fonts
+		#   fonts.gstatic       stylesheet, which pulls font files from
+		#                       a second host. Self-hosting the two
+		#                       families would let both origins go; see
+		#                       DEPLOY.md.
+		#   img-src data:       the TOTP QR code is generated in the
+		#                       browser and rendered as a data: URI. No
+		#                       remote image is ever loaded.
+		#   connect-src 'self'  the API is same-origin, so the app
+		#                       needs to reach nowhere else. This is
+		#                       the line that would have to loosen if
+		#                       the API moved to a subdomain.
+		#
+		# Deliberately absent: object-src and base-uri are pinned to
+		# 'none', and frame-ancestors 'none' means this page cannot be
+		# framed for a clickjacking overlay on the unlock form.
+		header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src-elem 'self' https://fonts.googleapis.com; style-src-attr 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'"
+
+		reverse_proxy web:80
+	}
+
+	# Compression. nginx also gzips, but it only sees requests Caddy
+	# forwards, and Caddy is what talks to the browser.
+	encode zstd gzip
+
+	log {
+		output stdout
+		format console
+	}
+}

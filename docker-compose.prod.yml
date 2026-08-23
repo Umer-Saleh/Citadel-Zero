@@ -1,0 +1,259 @@
+# Citadel Zero — public demo deployment.
+#
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+#
+# STANDALONE, not an overlay on docker-compose.yml. Compose APPENDS
+# `ports` when it merges files, so an override cannot un-publish the
+# dev file's 3000 and 8080 — the API and nginx would stay exposed on
+# the host while looking like they had been locked down. A separate
+# file is the only way to be certain of what is published, and it
+# leaves the local setup in docker-compose.yml untouched.
+#
+# Only caddy publishes anything. Everything else talks over the
+# compose network.
+#
+# See DEPLOY.md. Read the note on VITE_API_URL below before changing
+# DOMAIN.
+
+services:
+  # ---------------------------------------------------------------
+  # TLS TERMINATION
+  # ---------------------------------------------------------------
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env.prod}
+      # Required. Empty is not "no contact address" — it makes the
+      # Caddyfile's `email` directive argument-less, which fails to
+      # parse and crash-loops this container.
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env.prod}
+    volumes:
+      - ./ops/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates and ACME account keys. This MUST persist: losing
+      # it means re-issuing on every deploy, and Let's Encrypt rate
+      # limits duplicate certificates to five per week.
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      server:
+        condition: service_healthy
+      web:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "caddy", "validate", "--config", "/etc/caddy/Caddyfile"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    mem_limit: 96m
+
+  # ---------------------------------------------------------------
+  # DATABASE
+  # ---------------------------------------------------------------
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.prod}
+      POSTGRES_DB: password_manager
+      # Consumed by create-app-role.sh at first initialisation. With
+      # it set, the least-privilege role exists and the API uses it;
+      # without it the API would fall back to the superuser.
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env.prod}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # The single init script. Not the directory — grant-app-role.sql
+      # lives beside it and must NOT run at init time, before
+      # migrations have created the tables it grants on.
+      - ./Server/migrations/sql/create-app-role.sh:/docker-entrypoint-initdb.d/create-app-role.sh:ro
+    # NO ports. Nothing outside this network reaches Postgres, and on
+    # a public VPS an exposed 5432 is found by scanners within hours.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d password_manager"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    mem_limit: 384m
+
+  # ---------------------------------------------------------------
+  # RATE LIMIT COUNTERS
+  # ---------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # No persistence. Everything in here is a rate-limit counter with
+    # a window measured in minutes; surviving a restart is not worth
+    # the disk writes, and losing it is a smaller problem than the
+    # in-memory store this replaces, which lost them on every deploy.
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "48mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    mem_limit: 64m
+
+  # ---------------------------------------------------------------
+  # MIGRATIONS — one shot, then grants
+  # ---------------------------------------------------------------
+  migrate:
+    build: ./Server
+    restart: "no"
+    environment:
+      # As the SUPERUSER. Migrations issue DDL, which is precisely
+      # what citadel_app is denied — that is the point of the role.
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/password_manager
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.prod}
+      NODE_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+    # Migrations, then the table grants. The grants come second
+    # because they target tables the migrations create, and they are
+    # idempotent so this is safe on every deploy — which is also what
+    # picks up a table added by a later migration.
+    command: sh -c "npx node-pg-migrate up -m migrations && node scripts/apply-grants.js"
+    mem_limit: 256m
+
+  # ---------------------------------------------------------------
+  # API
+  # ---------------------------------------------------------------
+  server:
+    build: ./Server
+    restart: unless-stopped
+    environment:
+      # As citadel_app: SELECT/INSERT/UPDATE/DELETE on four tables and
+      # nothing else. No CREATE, no DROP, no TRUNCATE, no sight of the
+      # migrations table.
+      DATABASE_URL: postgres://citadel_app:${APP_DB_PASSWORD}@db:5432/password_manager
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.prod}
+      PORT: 3000
+      NODE_ENV: production
+      # Same origin as the frontend, since Caddy path-routes both.
+      CORS_ORIGIN: https://${DOMAIN}
+      # Exactly one proxy in front: Caddy. A COUNT, not `true` — see
+      # config/index.js. Without this every visitor shares one
+      # rate-limit bucket and the auth limit locks out the internet.
+      TRUST_PROXY: 1
+      REDIS_URL: redis://redis:6379
+      # Tighter than the defaults, because this instance is public and
+      # every auth request costs a 64 MiB Argon2 verification.
+      AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-6}
+      API_RATE_LIMIT_MAX: ${API_RATE_LIMIT_MAX:-200}
+      DEMO_MODE: "true"
+      DEMO_EMAIL: ${DEMO_EMAIL:?set DEMO_EMAIL in .env.prod}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      # node, not curl: this image has no HTTP client and adding one
+      # for a healthcheck is surface for nothing.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    # The real constraint on this box. Every login runs Argon2id
+    # server-side at the library default of 64 MiB and 4 threads, on
+    # top of the client's own 128 MiB derivation. This bounds how many
+    # can overlap; the auth rate limit is the other half of that
+    # bound, and is as much a capacity control as a security one.
+    mem_limit: 640m
+
+  # ---------------------------------------------------------------
+  # FRONTEND
+  # ---------------------------------------------------------------
+  web:
+    build:
+      context: ./Web
+      args:
+        # ===========================================================
+        # READ THIS BEFORE CHANGING DOMAIN
+        # ===========================================================
+        # Vite inlines VITE_* values into the bundle at BUILD time.
+        # They are baked into the JavaScript, not read at runtime, so
+        # this image is specific to one domain. Change DOMAIN and a
+        # plain `up -d` keeps serving a bundle that talks to the OLD
+        # host — the site loads and every request fails.
+        #
+        # After changing DOMAIN:
+        #     docker compose -f docker-compose.prod.yml --env-file .env.prod \
+        #       build --no-cache web
+        #
+        # No path here: the client prefixes /api itself, and Caddy
+        # routes by path on the same origin.
+        VITE_API_URL: https://${DOMAIN}
+        VITE_DEMO_MODE: "true"
+        # Public on purpose. Everything VITE_ ships in the bundle, so
+        # this password is readable by anyone who loads the page —
+        # which is the point, it is printed on the unlock screen.
+        VITE_DEMO_EMAIL: ${DEMO_EMAIL:?set DEMO_EMAIL in .env.prod}
+        VITE_DEMO_PASSWORD: ${DEMO_PASSWORD:?set DEMO_PASSWORD in .env.prod}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    mem_limit: 48m
+
+  # ---------------------------------------------------------------
+  # DEMO SEED — one shot, after the API is up
+  # ---------------------------------------------------------------
+  seed:
+    build: ./Server
+    restart: "no"
+    environment:
+      API_URL: http://server:3000
+      DEMO_EMAIL: ${DEMO_EMAIL:?set DEMO_EMAIL in .env.prod}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:?set DEMO_PASSWORD in .env.prod}
+      # config/index.js validates the whole environment on import.
+      DATABASE_URL: postgres://citadel_app:${APP_DB_PASSWORD}@db:5432/password_manager
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.prod}
+      NODE_ENV: production
+    depends_on:
+      server:
+        condition: service_healthy
+    # A no-op when the account already exists, so this runs on every
+    # deploy without touching a live demo.
+    command: node scripts/seed-demo.js
+    mem_limit: 256m
+
+  # ---------------------------------------------------------------
+  # NIGHTLY WIPE
+  # ---------------------------------------------------------------
+  wipe:
+    build: ./Server
+    restart: unless-stopped
+    environment:
+      # citadel_app again. The wipe needs no privilege the API lacks:
+      # DELETE FROM users cascades to every child table.
+      DATABASE_URL: postgres://citadel_app:${APP_DB_PASSWORD}@db:5432/password_manager
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.prod}
+      NODE_ENV: production
+      API_URL: http://server:3000
+      DEMO_EMAIL: ${DEMO_EMAIL:?set DEMO_EMAIL in .env.prod}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:?set DEMO_PASSWORD in .env.prod}
+      WIPE_HOUR_UTC: ${WIPE_HOUR_UTC:-3}
+    volumes:
+      - ./ops/wipe/run.sh:/app/run.sh:ro
+    depends_on:
+      server:
+        condition: service_healthy
+    command: sh /app/run.sh
+    mem_limit: 256m
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

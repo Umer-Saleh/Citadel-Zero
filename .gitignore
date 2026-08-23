@@ -5,3 +5,5 @@ node_modules/
 *.log
 dist/
 coverage/
+# Production environment — secrets, never committed.
+.env.prod
