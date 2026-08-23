@@ -134,10 +134,9 @@ async function waitForApi(attempts = 60) {
   }
 }
 
-async function main() {
+async function seed() {
   if (!EMAIL || !PASSWORD) {
-    console.error('[seed] DEMO_EMAIL and DEMO_PASSWORD must both be set');
-    process.exit(1);
+    throw new Error('DEMO_EMAIL and DEMO_PASSWORD must both be set');
   }
 
   console.log(`[seed] waiting for ${API_URL}`);
@@ -216,7 +215,13 @@ async function main() {
   console.log(`[seed] done — ${DEMO_ITEMS.length} items`);
 }
 
-main().catch(err => {
-  console.error('[seed] failed:', err.message);
-  process.exit(1);
-});
+module.exports = { seed };
+
+// Runnable on its own, and importable by the wipe job, which reseeds
+// immediately after clearing the database.
+if (require.main === module) {
+  seed().catch(err => {
+    console.error('[seed] failed:', err.message);
+    process.exit(1);
+  });
+}

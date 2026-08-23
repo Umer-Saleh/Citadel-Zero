@@ -36,6 +36,12 @@ COPY --chown=node:node package*.json ./
 COPY --chown=node:node src ./src
 COPY --chown=node:node migrations ./migrations
 
+# Operational one-shots: the demo seed and the nightly wipe. They ride
+# in the same image because they need the same crypto and the same
+# native argon2 build — but neither is reachable from the running
+# server, which only ever executes src/server.js.
+COPY --chown=node:node scripts ./scripts
+
 ENV NODE_ENV=production
 
 EXPOSE 3000

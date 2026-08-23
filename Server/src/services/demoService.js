@@ -77,15 +77,23 @@ async function storedMaterial() {
     throw new AppError('NOT_FOUND', 404, 'not found');
   }
 
-  const userId = await resolveDemoUserId();
+  let userId = await resolveDemoUserId();
   if (!userId) throw new AppError('NOT_FOUND', 404, 'demo account not seeded');
 
-  const account = await demoRepo.accountMaterial(userId);
+  let account = await demoRepo.accountMaterial(userId);
 
   if (!account) {
-    // Seeded once, then wiped. Drop the stale id and report honestly.
+    // The nightly wipe deletes the account and reseeds it under a NEW
+    // id, so a long-running process is left holding one that no longer
+    // exists. Drop it and resolve again in the same request rather
+    // than 404ing once and healing on the next call — that once would
+    // land on whoever loaded the page at 03:00.
     forgetDemoUser();
-    throw new AppError('NOT_FOUND', 404, 'demo account not seeded');
+
+    userId = await resolveDemoUserId();
+    if (userId) account = await demoRepo.accountMaterial(userId);
+
+    if (!account) throw new AppError('NOT_FOUND', 404, 'demo account not seeded');
   }
 
   const items = await demoRepo.storedItems(userId);
