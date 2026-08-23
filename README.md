@@ -345,6 +345,26 @@ is enforced by the module boundary.
 | Username enumeration | Probes login to discover registered emails | Identical 401 for unknown account and wrong password — and login always performs an Argon2 verification, against a dummy hash when the account does not exist, so response time does not distinguish them either. |
 | KDF downgrade | Authenticated client proposes weak parameters | Rejected at two levels: the schema enforces the OWASP floor, and the service refuses anything below current defaults on any dimension. |
 
+### A logging fix worth naming
+
+Until recently the server wrote the account's **email address in plaintext** to
+its log on signup, login, failed login, password change, recovery, KDF upgrade,
+TOTP enable/disable and recovery-kit regeneration. Nothing encrypted leaked —
+but on any deployment with log aggregation, or simply a shared host, that put
+every user's address into `docker logs` and the system journal, where nothing
+else about the account is readable.
+
+The failed-login line was the worst of them: it logged the address that was
+*attempted*, so the log accumulated precisely the list of addresses an attacker
+had probed.
+
+Every one of those now logs the user id. An unknown account has no id, so it
+logs `unknown account`, which is also all an operator can legitimately learn
+from it.
+
+It is called out here rather than quietly fixed because a project that claims
+the server learns nothing should say when the server was learning something.
+
 ### Accepted limitations
 
 Stated deliberately, because a threat model that claims to cover everything is not
@@ -374,8 +394,10 @@ a threat model.
   buffer," not "unrecoverable."
 - **JavaScript cannot guarantee memory erasure.** `dek.fill(0)` is best effort;
   the runtime may have copied the buffer already.
-- **Rate limiting is in-memory.** Counters reset on restart and are not shared
-  across instances. A Redis-backed store is the production answer.
+- **Rate limiting is per IP.** The store is Redis when `REDIS_URL` is set and an
+  in-process Map otherwise, so counters now survive a restart in deployment —
+  but keying on the address is the real limit. Anyone with a proxy pool or a
+  /64 of IPv6 gets a multiple of the budget, and no store fixes that.
 - **A weak master password weakens everything.** Argon2id makes guessing
   expensive; it cannot rescue a password from a wordlist.
 - **A compromised client device is out of scope.** A keylogger sees plaintext at
@@ -384,6 +406,29 @@ a threat model.
   identifier.
 - **No TLS in local development.** The architecture assumes TLS terminating at a
   reverse proxy in deployment.
+
+The public demo deployment ([DEPLOY.md](DEPLOY.md)) adds four of its own:
+
+- **The demo account's master password is published**, on its own unlock screen
+  and inside the JavaScript bundle. That one account therefore has no
+  confidentiality at all. It is a throwaway holding invented entries, no other
+  account is affected, and nothing in the key hierarchy was weakened to allow it
+  — the seed script is an ordinary client that derives the same keys the browser
+  would. The alternative, inserting rows the server could read, would have
+  broken the model to save a script.
+- **Everything on the demo is deleted nightly.** An account created there is
+  gone by 03:00 UTC. This is the price of letting strangers sign up on a box
+  that must not accumulate other people's data, and the banner says so before
+  anyone types anything.
+- **The demo exposes its own stored rows** at `/api/demo/stored-material`, so a
+  reviewer can see the ciphertext beside the plaintext without a psql prompt. It
+  is pinned to the demo user id and takes no parameter, and every field it
+  returns is already obtainable by anyone who logs in with the published
+  password. It adds no disclosure; it removes two API calls.
+- **The CSP still trusts Google Fonts.** `fonts.googleapis.com` and
+  `fonts.gstatic.com` are third-party origins in a policy that is otherwise
+  `'self'`. Self-hosting the two families would remove both, and is the one
+  improvement left in that policy.
 
 ---
 
@@ -438,6 +483,15 @@ npm run dev              # port 5173
 Configuration is validated at startup and the process exits on invalid values — a
 short `JWT_SECRET` refuses to start rather than silently producing weakly signed
 tokens.
+
+### Deploying it publicly
+
+**[DEPLOY.md](DEPLOY.md)** covers a single-VPS deployment behind Caddy with
+automatic HTTPS: `docker-compose.prod.yml`, the nightly wipe, the demo account,
+and what remains exposed.
+
+That setup is a **demo**, not a service. It says so on every screen, publishes
+its demo account's password, and deletes every account once a day.
 
 ### Least-privilege database role
 
@@ -563,7 +617,10 @@ machine-readable codes (`EMAIL_TAKEN`, `INVALID_CREDENTIALS`,
 ## Not yet implemented
 
 - Responsive layout for mobile
-- Redis-backed rate limiting
-- Least-privilege role wired into the container setup by default
 - Structured logging and an audit trail
 - Email confirmation on the recovery endpoint
+- Self-hosted fonts, to drop the last third-party origin from the CSP
+
+Redis-backed rate limiting and the least-privilege role are now wired into the
+production setup — see [DEPLOY.md](DEPLOY.md). Both are off by default in local
+development, which needs neither.
