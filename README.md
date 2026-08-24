@@ -9,12 +9,6 @@ a single stored credential.
 
 React · Node.js · Express · PostgreSQL · Argon2id · AES-256-GCM · Docker · 143 tests
 
-> **This is an educational implementation.** It has not been independently
-> audited and is not intended to store real credentials.
-
-> **Desktop only.** The interface is built for a desktop viewport and has no
-> responsive layout. It will not lay out correctly on a phone.
-
 *Citadel for the vault-within-a-vault structure — the data key sealed behind the
 password-derived key. Zero for zero-knowledge.*
 
@@ -43,6 +37,12 @@ manager that happens to use encryption." Rule 3 is what makes it usable.
 
 The reasoning behind each decision, the alternatives that were rejected, and the
 mistakes made along the way are in **[DESIGN.md](docs/DESIGN.md)**.
+
+---
+
+**Short on time?** The two sections worth reading are
+[Threat model](#threat-model) — what this defends against, and
+[Accepted limitations](#accepted-limitations) — what it doesn't.
 
 ---
 
@@ -432,6 +432,16 @@ The public demo deployment ([DEPLOY.md](DEPLOY.md)) adds four of its own:
   style attributes. Both are the narrow token rather than the broad one — script
   `eval()` stays blocked, and `style-src-elem` stays strict. Every other fetch
   directive is `'self'`.
+
+---
+
+### Scope and Status
+
+> **This is an educational implementation.** It has not been independently
+> audited and is not intended to store real credentials.
+
+> **Desktop only.** The interface is built for a desktop viewport and has no
+> responsive layout. It will not lay out correctly on a phone.
 
 ---
 
