@@ -47,23 +47,49 @@ export function StoredMaterial() {
     <section style={{ marginTop: 32 }}>
       <button
         onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        className="vk-r-touch-y"
         style={{
           width: '100%', textAlign: 'left', cursor: 'pointer',
-          display: 'flex', alignItems: 'center', gap: 12,
-          padding: '14px 18px', borderRadius: 'var(--radius)',
+          display: 'flex', alignItems: 'flex-start', gap: 12,
+          padding: '16px 18px', borderRadius: 'var(--radius)',
           border: '1px dashed var(--edge)', background: 'transparent',
           color: 'var(--text)'
         }}
       >
-        <span style={{ fontFamily: "'Press Start 2P', monospace", fontSize: 10, color: 'var(--green)' }}>
+        <span style={{
+          fontFamily: "'Press Start 2P', monospace", fontSize: 10,
+          color: 'var(--green)', marginTop: 2
+        }}>
           {open ? '▾' : '▸'}
         </span>
-        <span style={{ font: "600 12px 'Geist Mono', monospace", letterSpacing: '.14em' }}>
-          WHAT THE SERVER ACTUALLY STORES
-        </span>
-        <span style={{ flex: 1 }} />
-        <span style={{ font: "500 11px 'Geist Mono', monospace", color: 'var(--muted)' }}>
-          DEMO ACCOUNT
+
+        <span style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0, flex: 1 }}>
+          <span style={{
+            display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+            font: "600 12px 'Geist Mono', monospace", letterSpacing: '.14em'
+          }}>
+            WHAT THE SERVER ACTUALLY STORES
+            <span style={{
+              font: "600 9px 'Geist Mono', monospace", letterSpacing: '.14em',
+              color: 'var(--amber)', border: '1px solid var(--amber)',
+              borderRadius: 'var(--radius)', padding: '2px 6px'
+            }}>
+              DEMO ACCOUNT
+            </span>
+          </span>
+
+          {/* The point of the panel, stated before it is opened. It was
+              previously only visible after expanding, which made the
+              row read as a debug toggle. */}
+          <span style={{
+            font: "400 12px Geist, sans-serif", color: 'var(--muted)',
+            letterSpacing: 0, textWrap: 'pretty'
+          }}>
+            Side by side: the exact rows sitting in Postgres, and the plaintext
+            this browser decrypted from them with a key the server has never
+            held. {open ? 'Tap to hide.' : 'Tap to see them.'}
+          </span>
         </span>
       </button>
 
@@ -75,10 +101,12 @@ export function StoredMaterial() {
           animation: 'riseIn .3s cubic-bezier(.2,.9,.3,1) both'
         }}>
           <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 20px', textWrap: 'pretty', maxWidth: '72ch' }}>
-            Left is the row as it sits in Postgres. Right is what this browser
-            decrypted from it, using a key derived from the master password —
-            which the server has never received and cannot derive. Nothing on
-            the left can produce anything on the right without that password.
+            <strong style={{ color: 'var(--text)' }}>On disk</strong> is the row exactly
+            as Postgres holds it. <strong style={{ color: 'var(--text)' }}>In this browser</strong> is
+            what was decrypted from that row, using a key derived from the master
+            password — which the server has never received and cannot derive.
+            Nothing on the left can produce anything on the right without that
+            password.
           </p>
 
           {error && <div style={{ fontSize: 13, color: 'var(--red)' }}>{error}</div>}
@@ -155,13 +183,17 @@ function Row({ label, stored, nonce, tag, plain, plainIsNote }) {
         {label}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>
+      {/* Stacks on mobile rather than shrinking to two ~99px columns.
+          The pairing survives because each half keeps its ON DISK /
+          IN THIS BROWSER label and they stay adjacent — losing the
+          comparison would remove the only reason this panel exists. */}
+      <div className="vk-r-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>
         <div style={{
           padding: 12, borderRadius: 'var(--radius)',
           background: 'var(--bg)', border: '1px solid var(--edge)'
         }}>
           <div style={{ ...mono, color: 'var(--muted)', marginBottom: 6 }}>ON DISK</div>
-          <div style={{ ...mono, color: 'var(--text)' }}>
+          <div className="vk-r-break" style={{ ...mono, color: 'var(--text)' }}>
             {stored.length > 180 ? stored.slice(0, 180) + '…' : stored}
           </div>
           {nonce && (

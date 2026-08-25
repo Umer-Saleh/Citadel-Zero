@@ -3,6 +3,7 @@ import { useVault } from '../context/VaultContext';
 import { Card, Input, Button, DeriveBar } from '../components/ui';
 import { Paladin } from '../components/Paladin';
 import { usePix } from '../context/PixContext';
+import { Icon } from '../components/Icon';
 import { DEMO_MODE, DEMO_EMAIL, DEMO_PASSWORD } from '../lib/demo';
 
 export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
@@ -22,6 +23,14 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
 
   // 'form' | 'deriving' | 'granted'
   const [phase, setPhase] = useState('form');
+
+  // Momentary confirmation that the demo credentials landed in the
+  // fields. Without it the button looked inert on a phone, where the
+  // filled inputs can be below the fold.
+  const [demoFilled, setDemoFilled] = useState(false);
+  const demoFillTimer = useRef(null);
+
+  useEffect(() => () => clearTimeout(demoFillTimer.current), []);
 
   // Move focus to the code field the moment it appears, so the user
   // can type straight from their phone without reaching for the mouse.
@@ -170,25 +179,68 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
                   font: "600 10px 'Geist Mono', monospace",
                   letterSpacing: '.16em', color: 'var(--amber)'
                 }}>
-                  DEMO ACCOUNT
+                  DEMO ACCOUNT — SIGN IN WITH THIS
                 </span>
-                <div className="vk-r-break" style={{ font: "500 12px 'Geist Mono', monospace", color: 'var(--text)', wordBreak: 'break-all' }}>
-                  {DEMO_EMAIL}<br />{DEMO_PASSWORD}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => { setEmail(DEMO_EMAIL); setPw(DEMO_PASSWORD); }}
-                  className="vk-r-touch"
+
+                {/* Deliberately readable, not masked. This password is
+                    published; hiding it would only make it harder to
+                    type on the device that cannot click the button. */}
+                <div
+                  className="vk-r-break"
                   style={{
-                    alignSelf: 'flex-start',
-                    font: "600 11px 'Geist Mono', monospace", letterSpacing: '.12em',
-                    padding: '7px 12px', borderRadius: 'var(--radius)',
-                    border: '1px solid var(--edge)', background: 'transparent',
-                    color: 'var(--text)', cursor: 'pointer'
+                    font: "500 12px 'Geist Mono', monospace", color: 'var(--text)',
+                    wordBreak: 'break-all', display: 'flex', flexDirection: 'column', gap: 2
                   }}
                 >
-                  USE THESE
+                  <span>
+                    <span style={{ color: 'var(--muted)', display: 'inline-block', minWidth: 46 }}>email</span>
+                    {DEMO_EMAIL}
+                  </span>
+                  <span>
+                    <span style={{ color: 'var(--muted)', display: 'inline-block', minWidth: 46 }}>pass</span>
+                    {DEMO_PASSWORD}
+                  </span>
+                </div>
+
+                {/* Reads as a control, not a caption: solid border, own
+                    background, full width, and it says what it does. */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail(DEMO_EMAIL);
+                    setPw(DEMO_PASSWORD);
+                    setError('');
+                    setDemoFilled(true);
+                    clearTimeout(demoFillTimer.current);
+                    demoFillTimer.current = setTimeout(() => setDemoFilled(false), 2200);
+                  }}
+                  className="vk-r-touch-y"
+                  style={{
+                    width: '100%',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                    font: "600 12px 'Geist Mono', monospace", letterSpacing: '.1em',
+                    padding: '12px 14px', borderRadius: 'var(--radius)',
+                    border: '1px solid var(--amber)',
+                    background: demoFilled
+                      ? 'color-mix(in srgb, var(--amber) 22%, transparent)'
+                      : 'color-mix(in srgb, var(--amber) 12%, transparent)',
+                    color: 'var(--text)', cursor: 'pointer',
+                    boxShadow: '0 2px 0 color-mix(in srgb, var(--amber) 45%, transparent)',
+                    transition: 'background .15s'
+                  }}
+                >
+                  {demoFilled
+                    ? <><Icon name="check" size={13} /> FILLED IN — PRESS UNLOCK</>
+                    : 'USE THESE DEMO CREDENTIALS'}
                 </button>
+
+                {/* Live region so the confirmation is announced, since
+                    the visual change is a long way from the button on
+                    a narrow screen. */}
+                <span aria-live="polite" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}>
+                  {demoFilled ? 'Demo credentials filled in. Press unlock.' : ''}
+                </span>
+
                 <span style={{ fontSize: 12, color: 'var(--muted)', textWrap: 'pretty' }}>
                   Its vault entries are fake. Everything in it was encrypted by a
                   client that derived the same key from the password above — the
