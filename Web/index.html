@@ -2,6 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- Without this, mobile browsers lay the page out on a virtual
+         980px canvas and scale the result down: everything "fits" and
+         nothing is readable. width=device-width is what makes the
+         media queries in theme.css apply to the real screen. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="description" content="A zero-knowledge password manager. The server never receives your master password, any encryption key, or any plaintext." />
     <title>Citadel Zero</title>

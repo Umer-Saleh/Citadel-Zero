@@ -220,3 +220,139 @@ input:-webkit-autofill:active {
     margin: 16mm;
   }
 }
+/* ===============================================================
+   RESPONSIVE LAYER
+   ---------------------------------------------------------------
+   Everything below this line is additive. Nothing above it was
+   changed, and none of these rules apply above the breakpoints they
+   are nested in — so desktop is byte-for-byte the layout it was.
+
+   WHY THESE USE !important
+   ------------------------
+   The UI is styled with ~371 inline style={{}} objects. An inline
+   declaration beats every selector: specificity cannot win against
+   it, no matter how the selector is restructured. The only two ways
+   to change an inline property from a stylesheet are !important, or
+   deleting the property from the JSX and letting CSS own it.
+
+   Extracting hundreds of inline styles into classes would be a very
+   large diff across a live site, which is the opposite of what this
+   work is for. So the overriding rules below carry !important, and
+   only the properties that genuinely have to defeat an inline value
+   carry it. Rules that add something new (touch sizing, wrapping)
+   do not.
+
+   Naming: vk-r-* — "vk" to match the existing vk-print / vk-grid
+   convention, "-r-" to mark it as part of this responsive layer.
+   =============================================================== */
+
+/* ---------------------------------------------------------------
+   ALWAYS ON — cheap guards that cannot regress a wide layout
+   --------------------------------------------------------------- */
+
+/* Replaced media never pushes the page wider than its container. */
+img, svg, video, canvas {
+  max-width: 100%;
+}
+
+/* Opt-in wrapping for unbroken machine strings — base64 ciphertext,
+   recovery keys, nonces. `anywhere` rather than `break-all` so normal
+   prose in the same block still breaks at spaces first. */
+.vk-r-break {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+/* For content that is legitimately wider than a phone and should
+   scroll on its own rather than widening the document. The container
+   scrolls; the page does not. */
+.vk-r-scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ---------------------------------------------------------------
+   TABLET AND BELOW  (<= 1024px)
+   The AppShell header needs 986px of content before it wraps, so it
+   starts adapting here rather than at the mobile breakpoint — it is
+   the one thing that breaks on a tablet.
+   --------------------------------------------------------------- */
+@media (max-width: 1024px) {
+  /* Let a fixed-height, fixed-direction bar reflow. */
+  .vk-r-shell-wrap {
+    flex-wrap: wrap !important;
+    height: auto !important;
+    gap: 12px !important;
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
+  }
+
+  /* Secondary chrome that is informative but not navigational. */
+  .vk-r-hide-md {
+    display: none !important;
+  }
+}
+
+/* ---------------------------------------------------------------
+   MOBILE  (<= 640px)
+   --------------------------------------------------------------- */
+@media (max-width: 640px) {
+  /* iOS Safari zooms the viewport when a focused input's text is
+     under 16px, and does not zoom back out. On an unlock screen that
+     is genuinely disorienting. The inline `font` shorthand sets both
+     size and family, so only the size is overridden here. */
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+
+  /* Fixed-width cards (400/420/460/560px) sit inside centred grid
+     containers. A grid item's default min-width:auto means its
+     min-content contribution — the fixed width — sizes the track, so
+     the existing maxWidth:'100%' never gets a chance to apply.
+     min-width:0 is what actually lets it shrink. */
+  .vk-r-fluid {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  /* Multi-column grids collapse to one column. */
+  .vk-r-stack {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Horizontal flex rows become vertical. */
+  .vk-r-col {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  /* Rows that should stay horizontal but may need a second line. */
+  .vk-r-wrap {
+    flex-wrap: wrap !important;
+  }
+
+  .vk-r-hide-sm {
+    display: none !important;
+  }
+
+  /* Tighter gutters: 24px each side costs 15% of a 320px screen. */
+  .vk-r-pad {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  /* 44x44 is the minimum comfortable touch target. Applied as a
+     minimum rather than a fixed size, so a control that is already
+     larger is untouched. */
+  .vk-r-touch {
+    min-height: 44px !important;
+    min-width: 44px !important;
+  }
+
+  /* Same, for controls whose width is meaningful (full-width
+     buttons) and only the height needs raising. */
+  .vk-r-touch-y {
+    min-height: 44px !important;
+  }
+}
