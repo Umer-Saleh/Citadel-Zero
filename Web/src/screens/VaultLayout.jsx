@@ -18,7 +18,10 @@ export function VaultLayout({selected, onSelect, forgedPassword, onForgedConsume
 
   return (
     <>
-    <div style={{
+    {/* vk-r-stack collapses this to one column on mobile. Without it
+        the 1fr track resolves to 0px against the fixed 380px panel and
+        the vault list disappears entirely. */}
+    <div className="vk-r-stack" style={{
       display: 'grid',
       gridTemplateColumns: 'minmax(0,1fr) 380px',
       gap: 24,
@@ -30,7 +33,12 @@ export function VaultLayout({selected, onSelect, forgedPassword, onForgedConsume
         selectedId={selected}
       />
 
-      <div style={{ position: 'sticky', top: 88 }}>
+      {/* Stacked on mobile: drop the sticky pin, and when an entry is
+          open show the editor above the list rather than below it. */}
+      <div
+        className={`vk-r-static${selected !== undefined ? ' vk-r-first' : ''}`}
+        style={{ position: 'sticky', top: 88 }}
+      >
         {selected === undefined ? (
           <PanelHint />
         ) : (

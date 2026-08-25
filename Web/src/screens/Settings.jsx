@@ -397,7 +397,7 @@ function ChangePassword({ email, changePassword }) {
         name="vk-current-master"
         value={cur} onChange={e => setCur(e.target.value)} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+      <div className="vk-r-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
         <Input label="New" mono type={pwType} autoComplete="new-password"
           value={next} onChange={e => setNext(e.target.value)} />
         <Input label="Confirm" mono type={pwType} autoComplete="new-password"

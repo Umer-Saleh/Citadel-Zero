@@ -39,8 +39,8 @@ export function Vault({ onSelectItem, onAddItem, selectedId }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'riseIn .4s cubic-bezier(.2,.9,.3,1) both' }}>
 
       {/* search + actions */}
-      <div style={{ display: 'flex', gap: 12 }}>
-        <div style={{ position: 'relative', flex: 1 }}>
+      <div className="vk-r-wrap" style={{ display: 'flex', gap: 12 }}>
+        <div className="vk-r-minw0" style={{ position: 'relative', flex: 1 }}>
           <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', pointerEvents: 'none', display: 'flex' }}>
             <Icon name="search" />
           </span>
@@ -68,7 +68,7 @@ export function Vault({ onSelectItem, onAddItem, selectedId }) {
           />
         </div>
 
-        <button onClick={onAddItem} style={primaryBtn}>
+        <button onClick={onAddItem} className="vk-r-touch-y" style={primaryBtn}>
           <Icon name="plus" size={12} /> ADD
         </button>
       </div>
@@ -177,10 +177,10 @@ function ItemRow({ item, index, onClick, selected }) {
       {/* quick-copy — appear on hover */}
       {hover && (
         <div style={{ display: 'flex', gap: 6 }}>
-          <button onClick={e => copy('user', item.data.username, e)} style={copyChip}>
+          <button onClick={e => copy('user', item.data.username, e)} className="vk-r-touch" style={copyChip}>
             {copied === 'user' ? <Icon name="check" size={12} /> : 'USER'}
           </button>
-          <button onClick={e => copy('pass', item.data.password, e)} style={copyChip}>
+          <button onClick={e => copy('pass', item.data.password, e)} className="vk-r-touch" style={copyChip}>
             {copied === 'pass' ? <Icon name="check" size={12} /> : 'PASS'}
           </button>
         </div>

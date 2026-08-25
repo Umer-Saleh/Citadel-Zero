@@ -128,7 +128,7 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
 
   return (
     <div style={{ animation: 'riseIn .22s cubic-bezier(.2,.9,.3,1) both' }}>
-      <div style={panel}>
+      <div className="vk-r-pad" style={panel}>
 
         {/* ---- HEADER: 48px avatar + name + url, divider beneath ---- */}
         <div style={{
@@ -453,7 +453,7 @@ function DeleteModal({ site, onCancel, onConfirm, busy }) {
       position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)',
       display: 'grid', placeItems: 'center', zIndex: 50, padding: 24
     }}>
-      <div style={{
+      <div className="vk-r-fluid" style={{
         width: 400, maxWidth: '90vw',
         background: 'var(--raised)', border: '1px solid var(--edge)',
         borderRadius: 'var(--radius)', boxShadow: '0 24px 48px -16px var(--shadow)',
@@ -466,7 +466,7 @@ function DeleteModal({ site, onCancel, onConfirm, busy }) {
           <strong style={{ color: 'var(--text)' }}>{site || 'This entry'}</strong> will be
           permanently removed. This cannot be undone.
         </p>
-        <div style={{ display: 'flex', gap: 12 }}>
+        <div className="vk-r-col" style={{ display: 'flex', gap: 12 }}>
           <PressButton onClick={onCancel} depth={2} style={{
             flex: 1, justifyContent: 'center',
             font: '600 13px Geist, sans-serif', letterSpacing: '.1em', padding: '12px 20px',

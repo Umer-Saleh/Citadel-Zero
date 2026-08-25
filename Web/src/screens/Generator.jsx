@@ -145,7 +145,7 @@ export function Generator({ onUse }) {
         </div>
 
         {/* character sets — labelled rows with mini switches */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <div className="vk-r-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           {Object.keys(SETS).map(k => (
             <CharsetRow key={k} label={LABELS[k]} sample={SAMPLES[k]} on={sets[k]} onToggle={() => toggleSet(k)} />
           ))}

@@ -291,6 +291,24 @@ img, svg, video, canvas {
   .vk-r-hide-md {
     display: none !important;
   }
+
+  /* Primary navigation moves to its own full-width second line once
+     the header wraps. order:10 puts it after the siblings it shares
+     the bar with, so the first line keeps the wordmark on the left
+     and the controls on the right. */
+  .vk-r-nav {
+    order: 10 !important;
+    width: 100% !important;
+    height: auto !important;
+    gap: 4px !important;
+  }
+
+  /* Tabs split the line evenly and become real touch targets. */
+  .vk-r-nav > button {
+    flex: 1 1 0 !important;
+    min-height: 44px !important;
+    padding: 0 8px !important;
+  }
 }
 
 /* ---------------------------------------------------------------
@@ -303,6 +321,26 @@ img, svg, video, canvas {
      size and family, so only the size is overridden here. */
   input, textarea, select {
     font-size: 16px !important;
+  }
+
+  /* An input carries an intrinsic width of roughly 20 characters,
+     and as a flex item with the default min-width:auto that becomes
+     a floor the container cannot go below — which is how a search
+     field ends up widening the whole document. Every input here is
+     already width:100%, so releasing the floor costs nothing. */
+  input, textarea, select {
+    min-width: 0 !important;
+  }
+
+  /* Same floor, one level up: children of a stacked grid must be
+     allowed to be narrower than their own min-content. */
+  .vk-r-stack > * {
+    min-width: 0 !important;
+  }
+
+  /* Explicit opt-in for the same fix elsewhere. */
+  .vk-r-minw0 {
+    min-width: 0 !important;
   }
 
   /* Fixed-width cards (400/420/460/560px) sit inside centred grid
@@ -354,5 +392,27 @@ img, svg, video, canvas {
      buttons) and only the height needs raising. */
   .vk-r-touch-y {
     min-height: 44px !important;
+  }
+
+  /* A sticky side panel becomes an ordinary block once the layout is
+     a single column — pinning it would park it over the list it is
+     supposed to sit beneath. */
+  .vk-r-static {
+    position: static !important;
+  }
+
+  /* Pulls a grid/flex item to the front of the visual order. Used so
+     that opening an entry on a phone shows the editor above the list
+     instead of below it, without changing what renders. */
+  .vk-r-first {
+    order: -1 !important;
+  }
+
+  /* The wordmark is set in Press Start 2P, which is very wide per
+     character. Dropping it two steps keeps the name visible — the
+     alternative was hiding it and leaving only the mascot. */
+  .vk-r-wordmark {
+    font-size: 10px !important;
+    letter-spacing: 0 !important;
   }
 }

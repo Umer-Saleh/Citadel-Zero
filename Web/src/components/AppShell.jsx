@@ -38,18 +38,22 @@ export function AppShell({ children, view = 'vault', onNavigate }) {
         position: 'sticky', top: 'var(--demo-banner-h, 0px)', zIndex: 40,
         background: 'var(--surface)', borderBottom: '1px solid var(--edge)'
       }}>
-        <div style={{
+        {/* This row needs 986px before anything gives. That is more
+            than a tablet has, so it starts wrapping at 1024 rather
+            than at the mobile breakpoint — the header is the one
+            thing here that breaks above 640. */}
+        <div className="vk-r-shell-wrap vk-r-pad" style={{
           maxWidth: 1120, margin: '0 auto', padding: '0 24px', height: 64,
           display: 'flex', alignItems: 'center', gap: 32
         }}>
           {/* PIX + wordmark */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <Paladin pose={pose} size={32} />
-            <span style={{ fontFamily: "'Press Start 2P', monospace", fontSize: 12, letterSpacing: 1, color: 'var(--text)' }}>
+            <span className="vk-r-wordmark" style={{ fontFamily: "'Press Start 2P', monospace", fontSize: 12, letterSpacing: 1, color: 'var(--text)' }}>
               CITADEL<span style={{ color: 'var(--green)' }}>ZERO</span>
             </span>
             {says && (
-              <span style={{
+              <span className="vk-r-hide-sm" style={{
                 font: "500 10px 'Geist Mono', monospace", letterSpacing: '.12em',
                 color: 'var(--muted)', whiteSpace: 'nowrap', animation: 'riseIn .25s both'
               }}>
@@ -60,7 +64,7 @@ export function AppShell({ children, view = 'vault', onNavigate }) {
 
           {/* primary navigation — replaces the gear button and the
               FORGE button that used to sit beside the vault search */}
-          <nav style={{ display: 'flex', gap: 8, height: '100%' }}>
+          <nav className="vk-r-nav" style={{ display: 'flex', gap: 8, height: '100%' }}>
             {TABS.map(([key, label]) => (
               <Tab key={key} label={label} active={view === key} onClick={() => onNavigate(key)} />
             ))}
@@ -71,7 +75,7 @@ export function AppShell({ children, view = 'vault', onNavigate }) {
           {/* vault health HUD — 7x8 segments, smaller than the Meter
               used elsewhere, so it sits inside a 64px bar */}
           {health !== null && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }} title="Average password strength across your vault">
+          <div className="vk-r-hide-md" style={{ display: 'flex', alignItems: 'center', gap: 10 }} title="Average password strength across your vault">
             <span style={{ font: "600 10px 'Geist Mono', monospace", letterSpacing: '.14em', color: 'var(--muted)' }}>
               VAULT
             </span>
@@ -94,6 +98,7 @@ export function AppShell({ children, view = 'vault', onNavigate }) {
 
           <button
             onClick={lock}
+            className="vk-r-touch"
             style={{
               display: 'flex', alignItems: 'center', gap: 8,
               font: "600 12px Geist, sans-serif", letterSpacing: '.1em',
@@ -107,11 +112,11 @@ export function AppShell({ children, view = 'vault', onNavigate }) {
         </div>
       </header>
 
-      <main style={{ flex: 1, width: '100%', maxWidth: 1120, margin: '0 auto', padding: '32px 24px' }}>
+      <main className="vk-r-pad" style={{ flex: 1, width: '100%', maxWidth: 1120, margin: '0 auto', padding: '32px 24px' }}>
         {children}
       </main>
 
-      <footer className="vk-noprint" style={{
+      <footer className="vk-noprint vk-r-wrap vk-r-pad" style={{
         maxWidth: 1120, margin: '0 auto', padding: '24px',
         display: 'flex', alignItems: 'center', gap: 12,
         borderTop: '1px solid var(--edge)',
