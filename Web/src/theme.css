@@ -416,6 +416,20 @@ img, svg, video, canvas {
     letter-spacing: 0 !important;
   }
 
+  /* The demo banner becomes a column: the warning text gets the full
+     width instead of the ~99px left over beside the chip and the
+     dismiss button, which is what made it 231px tall at 320px. Same
+     words, a third of the height. Its height is measured and
+     published by the component, so nothing here needs to be mirrored
+     in JavaScript. */
+  .vk-r-banner {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    row-gap: 10px !important;
+    padding-top: 12px !important;
+    padding-bottom: 12px !important;
+  }
+
   /* Secrets shown for transcription — the recovery key, TOTP secret,
      backup codes. At 19px with .2em tracking a 32-character key is
      ~490px and wraps mid-group, which is exactly where a hand-copied
