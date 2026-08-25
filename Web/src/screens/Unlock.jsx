@@ -72,8 +72,11 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
   const onEnter = e => e.key === 'Enter' && handleUnlock();
 
   return (
-    <section style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: '48px 24px', position: 'relative', zIndex: 1 }}>
-      <div style={{ width: 400, maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 32 }}>
+    <section className="vk-r-pad" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: '48px 24px', position: 'relative', zIndex: 1 }}>
+      {/* vk-r-fluid drops the fixed 400px on mobile. maxWidth:'100%'
+          alone never applied: this is a grid item, and a grid item's
+          default min-width:auto sizes the track from the fixed width. */}
+      <div className="vk-r-fluid" style={{ width: 400, maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 32 }}>
 
         <div style={{
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16,
@@ -169,12 +172,13 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
                 }}>
                   DEMO ACCOUNT
                 </span>
-                <div style={{ font: "500 12px 'Geist Mono', monospace", color: 'var(--text)', wordBreak: 'break-all' }}>
+                <div className="vk-r-break" style={{ font: "500 12px 'Geist Mono', monospace", color: 'var(--text)', wordBreak: 'break-all' }}>
                   {DEMO_EMAIL}<br />{DEMO_PASSWORD}
                 </div>
                 <button
                   type="button"
                   onClick={() => { setEmail(DEMO_EMAIL); setPw(DEMO_PASSWORD); }}
+                  className="vk-r-touch"
                   style={{
                     alignSelf: 'flex-start',
                     font: "600 11px 'Geist Mono', monospace", letterSpacing: '.12em',
