@@ -48,8 +48,8 @@ export function Signup({ onComplete, onGoLogin }) {
   const onEnter = e => e.key === 'Enter' && handleSubmit();
 
   return (
-    <section style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: '48px 24px', position: 'relative', zIndex: 1 }}>
-      <div style={{ width: 420, maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 32 }}>
+    <section className="vk-r-pad" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: '48px 24px', position: 'relative', zIndex: 1 }}>
+      <div className="vk-r-fluid" style={{ width: 420, maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 32 }}>
 
         {/* masthead — gap 16 per the prototype (was 12) */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>

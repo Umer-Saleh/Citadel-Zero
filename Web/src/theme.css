@@ -415,4 +415,15 @@ img, svg, video, canvas {
     font-size: 10px !important;
     letter-spacing: 0 !important;
   }
+
+  /* Secrets shown for transcription — the recovery key, TOTP secret,
+     backup codes. At 19px with .2em tracking a 32-character key is
+     ~490px and wraps mid-group, which is exactly where a hand-copied
+     key gets mistyped. Smaller type lets it break on the dashes
+     instead. It stays monospaced and selectable. */
+  .vk-secret {
+    font-size: 15px !important;
+    letter-spacing: .12em !important;
+    padding: 20px 14px !important;
+  }
 }

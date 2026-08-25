@@ -22,8 +22,8 @@ export function Locked({ email, onGoUnlock }) {
   }
 
   return (
-    <section style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24 }}>
-      <div style={{ width: 380, maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 28, alignItems: 'center' }}>
+    <section className="vk-r-pad" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24 }}>
+      <div className="vk-r-fluid" style={{ width: 380, maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 28, alignItems: 'center' }}>
         {/* PIX holds the guarding pose — portcullis down */}
         <Paladin pose="guard" size={80} />
 

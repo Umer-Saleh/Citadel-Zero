@@ -96,8 +96,8 @@ export function Recover({ onRecovered, onBack }) {
   const onEnter = (fn) => (e) => e.key === 'Enter' && fn();
 
   return (
-    <section style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: '48px 24px', position: 'relative', zIndex: 1 }}>
-      <div style={{ width: 460, maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 28 }}>
+    <section className="vk-r-pad" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: '48px 24px', position: 'relative', zIndex: 1 }}>
+      <div className="vk-r-fluid" style={{ width: 460, maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 28 }}>
 
         <div style={{
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16,
@@ -151,7 +151,7 @@ export function Recover({ onRecovered, onBack }) {
                 name="vk-recovery-key"
               />
               {error && <div style={{ fontSize: 13, color: 'var(--red)' }}>{error}</div>}
-              <div style={{ display: 'flex', gap: 12 }}>
+              <div className="vk-r-col" style={{ display: 'flex', gap: 12 }}>
                 <Button variant="secondary" onClick={() => { setPhase('email'); setError(''); }}
                   style={{ font: '600 12px Geist, sans-serif', padding: '11px 18px' }}>
                   BACK

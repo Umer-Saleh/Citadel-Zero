@@ -51,8 +51,8 @@ export function RecoveryKit({ recoveryKey, email, onContinue }) {
   }
 
   return (
-    <section style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: '48px 24px', position: 'relative', zIndex: 1 }}>
-      <div style={{ width: 560, maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <section className="vk-r-pad" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: '48px 24px', position: 'relative', zIndex: 1 }}>
+      <div className="vk-r-fluid" style={{ width: 560, maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 24 }}>
 
         {/* PIX kneels in his solemn oath — this is the weighty moment */}
         <div className="vk-noprint" style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
@@ -92,7 +92,7 @@ export function RecoveryKit({ recoveryKey, email, onContinue }) {
 
           {/* prototype's kit buttons are smaller than the default:
               12px type, 11px 16px padding */}
-          <div className="vk-noprint" style={{ display: 'flex', gap: 12 }}>
+          <div className="vk-noprint vk-r-col" style={{ display: 'flex', gap: 12 }}>
             <Button variant="secondary" onClick={copy} style={kitBtn}>
               {copied ? <><Icon name="check" /> COPIED</> : <><Icon name="copy" /> COPY</>}
             </Button>
