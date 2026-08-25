@@ -1,13 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8" shape-rendering="crispEdges">
-  <rect width="8" height="8" fill="#111310"/>
-  <g fill="#7CB863">
-    <rect x="2" y="0" width="4" height="1"/>
-    <rect x="1" y="1" width="1" height="1"/><rect x="6" y="1" width="1" height="1"/>
-    <rect x="1" y="2" width="1" height="1"/><rect x="6" y="2" width="1" height="1"/>
-    <rect x="0" y="3" width="8" height="1"/>
-    <rect x="0" y="4" width="3" height="1"/><rect x="5" y="4" width="3" height="1"/>
-    <rect x="0" y="5" width="3" height="1"/><rect x="5" y="5" width="3" height="1"/>
-    <rect x="0" y="6" width="8" height="1"/>
-    <rect x="0" y="7" width="8" height="1"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" fill="none" role="img" aria-label="Citadel Zero">
+  <title>Citadel Zero</title>
+  <path d="M15 27V22a9 9 0 0 1 18 0v1.5" stroke="#1D9E75" stroke-width="5" stroke-linecap="round"/>
+  <rect x="6" y="24" width="36" height="20" rx="5.5" fill="#1D9E75"/>
+  <circle cx="24" cy="34" r="4.5" fill="none" stroke="#FFFFFF" stroke-width="3.5"/>
 </svg>

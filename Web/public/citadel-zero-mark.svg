@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" fill="none" role="img" aria-label="Citadel Zero">
+  <title>Citadel Zero</title>
+  <path d="M15 27V22a9 9 0 0 1 18 0v1.5" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+  <rect x="7" y="24" width="34" height="20" rx="5.5" fill="currentColor"/>
+  <circle cx="24" cy="34" r="4.75" fill="none" stroke="var(--logo-accent, #1D9E75)" stroke-width="2.75"/>
+</svg>
