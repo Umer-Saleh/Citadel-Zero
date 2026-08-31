@@ -49,9 +49,31 @@ export function AppShell({ children, view = 'vault', onNavigate }) {
           {/* PIX + wordmark */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <Paladin pose={pose} size={32} />
-            <span className="vk-r-wordmark" style={{ fontFamily: "'Press Start 2P', monospace", fontSize: 12, letterSpacing: 1, color: 'var(--text)' }}>
+            {/* A button, not an anchor: navigation here is App's `view`
+                state, not a URL, so an <a href> would reload the page and
+                drop the DEK — locking the vault as a side effect of
+                clicking the logo. Same mechanism as the tabs below, and
+                a native button also gets keyboard focus and the same
+                focus ring they do for free.
+
+                Padding, border and background are reset so the wordmark
+                renders exactly as it did as a span. Only cursor and the
+                hover fade are new, and both live in theme.css so they do
+                not have to fight an inline style. */}
+            <button
+              type="button"
+              onClick={() => onNavigate('vault')}
+              aria-label="Citadel Zero, go to vault"
+              className="vk-r-wordmark vk-wordmark-link"
+              style={{
+                background: 'none', border: 'none', padding: 0, margin: 0,
+                display: 'inline-flex', alignItems: 'center',
+                fontFamily: "'Press Start 2P', monospace", fontSize: 12,
+                letterSpacing: 1, color: 'var(--text)'
+              }}
+            >
               CITADEL<span style={{ color: 'var(--green)' }}>ZERO</span>
-            </span>
+            </button>
             {says && (
               <span className="vk-r-hide-sm" style={{
                 font: "500 10px 'Geist Mono', monospace", letterSpacing: '.12em',

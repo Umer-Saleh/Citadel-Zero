@@ -250,6 +250,24 @@ input:-webkit-autofill:active {
    ALWAYS ON — cheap guards that cannot regress a wide layout
    --------------------------------------------------------------- */
 
+/* The header wordmark, which is a button that returns to the vault.
+   Kept here rather than inline because an inline `opacity` would have
+   to be overridden with !important to animate on hover, and the point
+   is that the wordmark's resting appearance is untouched.
+
+   No focus rule: the nav tabs beside it carry no custom focus style
+   either, so both take the browser's own ring on keyboard focus.
+   Adding one here would make the wordmark stand out from the nav
+   rather than match it. */
+.vk-wordmark-link {
+  cursor: pointer;
+  transition: opacity .15s;
+}
+
+.vk-wordmark-link:hover {
+  opacity: .72;
+}
+
 /* Replaced media never pushes the page wider than its container. */
 img, svg, video, canvas {
   max-width: 100%;
