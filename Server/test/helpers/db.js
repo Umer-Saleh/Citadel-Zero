@@ -3,7 +3,7 @@ require('./setup');
 const { query, pool } = require('../../src/db');
 const {
   generateSalt, deriveKeys, generateDEK, wrapDEK,
-  generateRecoveryKey, deriveRecoveryKek
+  generateRecoveryKey, deriveRecoveryKek, deriveRecoveryAuthHash
 } = require('../../src/crypto');
 
 
@@ -34,6 +34,10 @@ async function makeSignupPayload(email = 'test@example.com', password = 'test-pa
   const recoverySalt = generateSalt();
   const recoveryKek = deriveRecoveryKek(recoveryKey, recoverySalt);
 
+  // Proof of possession for that kit. Same key, different HKDF label,
+  // so it cannot unwrap anything.
+  const recoveryAuthHash = deriveRecoveryAuthHash(recoveryKey, recoverySalt);
+
   return {
     payload: {
       email,
@@ -42,7 +46,8 @@ async function makeSignupPayload(email = 'test@example.com', password = 'test-pa
       kdfParams,
       wrappedDek: wrapDEK(dek, kek),
       recoverySalt: recoverySalt.toString('base64'),
-      recoveryWrappedDek: wrapDEK(dek, recoveryKek)
+      recoveryWrappedDek: wrapDEK(dek, recoveryKek),
+      recoveryAuthHash: recoveryAuthHash.toString('base64')
     },
     dek,
     kek,

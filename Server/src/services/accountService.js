@@ -4,6 +4,7 @@ const { withTransaction } = require('../db')
 const { serverStoreAuth, serverVerifyAuth } = require('../auth');
 const { AppError } = require('../errors/AppError');
 const { needsKdfUpgrade, DEFAULT_KDF_PARAMS } = require('../crypto');
+const { DUMMY_HASH } = require('./authService');
 
 /**
  * Change the master password.
@@ -52,12 +53,35 @@ async function changePassword(userId, {
   console.log(`[server] password changed for user ${user.id}`);
 }
 
-/** Public material the client needs before deriving the recovery KEK. */
+/**
+ * Public material the client needs before deriving the recovery KEK.
+ *
+ * Still unauthenticated, and still returns only the salt and the
+ * wrapper — both useless without the recovery key. The row it reads
+ * also carries recovery_auth_hash; that value is deliberately NOT in
+ * the response. Returning the verifier would hand an attacker the
+ * exact thing completeRecovery asks them to prove.
+ *
+ * An account created before proof of possession existed has no
+ * verifier, so recovery cannot succeed for it. Saying so HERE rather
+ * than at the write endpoint is deliberate: this is step one of the
+ * flow, so the user finds out before typing a key that cannot work,
+ * and this endpoint already 404s on unknown emails — it is already an
+ * enumeration oracle, so a 409 tells an attacker only that an account
+ * is legacy, a state the write endpoint refuses identically anyway.
+ */
 async function getRecoveryMaterial(email) {
   const user = await userRepo.findRecoveryByEmail(email);
 
   if (!user || !user.recovery_wrapped_dek) {
     throw new AppError('NOT_FOUND', 404, 'not found');
+  }
+
+  if (!user.recovery_auth_hash) {
+    throw new AppError(
+      'RECOVERY_UNAVAILABLE', 409,
+      'this account predates proof of possession and cannot be recovered'
+    );
   }
 
   return {
@@ -74,26 +98,64 @@ async function getRecoveryMaterial(email) {
  * Complete a recovery: replace the password-derived wrapper and issue
  * a fresh recovery wrapper.
  *
- * Note what the server cannot verify here: it has no way to check that
- * the client actually holds the recovery key. Possession is proved
- * implicitly — only someone who unwrapped the real DEK can produce a
- * new wrapper containing it. A client that guesses would simply lock
- * itself out of its own vault, which is why this endpoint is heavily
- * rate limited rather than authenticated.
+ * PROOF OF POSSESSION.
+ *
+ * The client derives two independent values from the recovery key,
+ * separated by their HKDF info label: "recovery-kek" unwraps the DEK
+ * and never leaves the device, "recovery-auth" is sent here. We check
+ * it against a stored Argon2 hash of that value — exactly the
+ * treatment the master password's auth hash gets. The server still
+ * never sees the recovery key, and nothing it stores can unwrap
+ * anything.
+ *
+ * This function previously verified NOTHING. It looked an account up
+ * by email and overwrote the credentials, both DEK wrappers and every
+ * session. One unauthenticated request carrying syntactically valid
+ * garbage permanently destroyed any account whose email was known —
+ * and /api/user/kdf-params makes emails discoverable. Confidentiality
+ * held, since the attacker learned nothing, but the vault was gone.
+ *
+ * ONE failure response for three causes: no such account, an account
+ * with no verifier, and a wrong proof. All three return the same 401
+ * and all three pay for one Argon2 verification — against DUMMY_HASH
+ * when there is no real hash to check — so neither the response nor
+ * the timing distinguishes them.
+ *
+ * COST. This endpoint is unauthenticated and every Argon2 operation
+ * costs 64 MiB. A REJECTED attempt costs exactly one: the verify below
+ * runs before either serverStoreAuth, so a wrong proof never pays to
+ * harden credentials that are about to be discarded. A SUCCESSFUL
+ * recovery costs three, sequentially — one verify, two stores — so a
+ * single request still peaks at 64 MiB rather than 192. authLimiter
+ * bounds the rate.
  */
 async function completeRecovery({
-  email, newAuthHash, newKdfSalt, newKdfParams,
-  newWrappedDek, newRecoverySalt, newRecoveryWrappedDek
+  email, recoveryAuthHash,
+  newAuthHash, newKdfSalt, newKdfParams,
+  newWrappedDek, newRecoverySalt, newRecoveryWrappedDek,
+  newRecoveryAuthHash
 }) {
-  const user = await userRepo.findByEmail(email);
+  const user = await userRepo.findRecoveryByEmail(email);
 
-  if (!user) {
-    throw new AppError('NOT_FOUND', 404, 'not found');
+  // Null both for an unknown account and for one predating this
+  // verifier. Both fall through to the same comparison, so the work
+  // done is identical either way.
+  const storedProof = (user && user.recovery_auth_hash) || null;
+
+  const valid = await serverVerifyAuth(
+    recoveryAuthHash, storedProof || DUMMY_HASH
+  ).catch(() => false);
+
+  if (!user || !storedProof || !valid) {
+    console.warn('[server] rejected recovery attempt');
+    throw new AppError('INVALID_RECOVERY_KEY', 401, 'invalid recovery key');
   }
 
+  // Only past the proof do we spend anything on the new credentials.
   const stored = await serverStoreAuth(newAuthHash);
+  const storedNewProof = await serverStoreAuth(newRecoveryAuthHash);
 
-  // All three must land together. A partial write would leave the
+  // All of it must land together. A partial write would leave the
   // account with a new password wrapper and a stale recovery wrapper
   // — the DEK still sealed under the OLD recovery key. The user could
   // log in, but their recovery kit would no longer open their vault.
@@ -105,9 +167,12 @@ async function completeRecovery({
       wrappedDek: newWrappedDek
     }, client);
 
+    // Wrapper and verifier move in one statement, inside the same
+    // transaction as the credential write.
     await userRepo.updateRecoveryWrapper(user.id, {
       recoverySalt: newRecoverySalt,
-      recoveryWrappedDek: newRecoveryWrappedDek
+      recoveryWrappedDek: newRecoveryWrappedDek,
+      recoveryAuthHash: storedNewProof
     }, client);
 
     // Recovery means the old credentials are presumed lost or
@@ -174,7 +239,8 @@ async function upgradeKdf(userId, {
  * who borrowed an unlocked laptop shouldn't be able to mint one.
  */
 async function regenerateRecoveryKit(userId, {
-  currentAuthHash, newRecoverySalt, newRecoveryWrappedDek
+  currentAuthHash, newRecoverySalt, newRecoveryWrappedDek,
+  newRecoveryAuthHash
 }) {
   const user = await userRepo.findById(userId);
 
@@ -189,12 +255,24 @@ async function regenerateRecoveryKit(userId, {
     throw new AppError('INVALID_CREDENTIALS', 401, 'invalid credentials');
   }
 
-  // Single write, so no transaction needed — and deliberately NOT
-  // touching auth_hash, kdf_params or wrapped_dek. The password is
-  // unchanged; only the second door gets a new lock.
+  // After the password check, so a rejected attempt costs one Argon2
+  // verification rather than a verification plus a store.
+  const storedNewProof = await serverStoreAuth(newRecoveryAuthHash);
+
+  // Still a single statement, and now it has to be: the new wrapper
+  // and the verifier for the new key describe the same kit, and a
+  // state where one moved without the other would either lock the user
+  // out of a valid key or leave the old key still able to prove
+  // itself. One UPDATE is atomic by definition — a stronger guarantee
+  // than two statements in a transaction, and one round trip instead
+  // of three.
+  //
+  // Deliberately NOT touching auth_hash, kdf_params or wrapped_dek.
+  // The password is unchanged; only the second door gets a new lock.
   await userRepo.updateRecoveryWrapper(userId, {
     recoverySalt: newRecoverySalt,
-    recoveryWrappedDek: newRecoveryWrappedDek
+    recoveryWrappedDek: newRecoveryWrappedDek,
+    recoveryAuthHash: storedNewProof
   });
 
   console.log(`[server] recovery kit regenerated for user ${user.id}`);

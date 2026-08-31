@@ -25,6 +25,13 @@ const wrappedDekSchema = z.object({
   authTag: base64(16)
 }).strict();
 
+// The recovery key's proof of possession. Derived client-side from
+// the same key as the recovery KEK but under a different HKDF info
+// label, so holding one reveals nothing about the other. 32 bytes,
+// same shape as authHash — and, like authHash, it is a credential,
+// never a decryption key.
+const recoveryAuthHashField = base64(32);
+
 const signupSchema = z.object({
   email: z.string().email().max(254),
   authHash: base64(32),
@@ -32,7 +39,8 @@ const signupSchema = z.object({
   kdfParams,
   wrappedDek: wrappedDekSchema,
   recoverySalt: base64(16),
-  recoveryWrappedDek: wrappedDekSchema
+  recoveryWrappedDek: wrappedDekSchema,
+  recoveryAuthHash: recoveryAuthHashField
 }).strict();
 
 // Six digits for TOTP, or a 10-char hex backup code. One field, two
@@ -85,12 +93,18 @@ const recoveryMaterialQuerySchema = z.object({
 // unwrapping the DEK — the server never sees the recovery key itself.
 const recoverSchema = z.object({
   email: z.string().email().max(254),
+  // Proof that this caller holds the CURRENT recovery key. Without it
+  // this endpoint overwrote credentials for anyone who knew an email.
+  recoveryAuthHash: recoveryAuthHashField,
   newAuthHash: base64(32),
   newKdfSalt: base64(16),
   newKdfParams: kdfParams,
   newWrappedDek: wrappedDekSchema,
   newRecoverySalt: base64(16),
-  newRecoveryWrappedDek: wrappedDekSchema
+  newRecoveryWrappedDek: wrappedDekSchema,
+  // Verifier for the NEW kit this recovery issues. Distinct from the
+  // proof above: one retires, the other takes over.
+  newRecoveryAuthHash: recoveryAuthHashField
 }).strict();
 
 const upgradeKdfSchema = z.object({
@@ -119,7 +133,10 @@ const logoutSchema = refreshSchema;
 const regenerateKitSchema = z.object({
   currentAuthHash: base64(32),
   newRecoverySalt: base64(16),
-  newRecoveryWrappedDek: wrappedDekSchema
+  newRecoveryWrappedDek: wrappedDekSchema,
+  // This flow authenticates with the master password, so there is no
+  // proof of the OLD recovery key — only a verifier for the new one.
+  newRecoveryAuthHash: recoveryAuthHashField
 }).strict();
 
 module.exports = {

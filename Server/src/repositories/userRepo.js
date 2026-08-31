@@ -73,14 +73,31 @@ async function updateCredentials(userId, { authHash, kdfSalt, kdfParams, wrapped
   return rowCount > 0;
 }
 
-async function updateRecoveryWrapper(userId, { recoverySalt, recoveryWrappedDek }, client) {
+/**
+ * Replace a recovery kit: the wrapper and the verifier that proves
+ * possession of the key it was made for.
+ *
+ * Five columns in ONE statement, deliberately. The wrapper and the
+ * verifier describe the same kit; a state where one moved without the
+ * other would either lock the user out of a valid key or leave a
+ * retired key still able to prove itself. A single UPDATE cannot
+ * produce that state at all.
+ *
+ * Still takes an optional client, because completeRecovery calls it
+ * inside a transaction alongside the credential write.
+ */
+async function updateRecoveryWrapper(
+  userId, { recoverySalt, recoveryWrappedDek, recoveryAuthHash }, client
+) {
   const { rowCount } = await q(client).query(
     `UPDATE users
      SET recovery_salt = $1, recovery_wrapped_dek = $2,
-         recovery_wrapped_dek_nonce = $3, recovery_wrapped_dek_tag = $4
-     WHERE id = $5`,
+         recovery_wrapped_dek_nonce = $3, recovery_wrapped_dek_tag = $4,
+         recovery_auth_hash = $5
+     WHERE id = $6`,
     [recoverySalt, recoveryWrappedDek.ciphertext,
-     recoveryWrappedDek.nonce, recoveryWrappedDek.authTag, userId]
+     recoveryWrappedDek.nonce, recoveryWrappedDek.authTag,
+     recoveryAuthHash, userId]
   );
   return rowCount > 0;
 }

@@ -26,12 +26,20 @@ const ACCESS_TOKEN_TTL = '10m';
 const REFRESH_TOKEN_TTL_DAYS = 14;
 
 async function signup({ email, authHash, kdfSalt, kdfParams, wrappedDek,
-                        recoverySalt, recoveryWrappedDek }) {
+                        recoverySalt, recoveryWrappedDek, recoveryAuthHash }) {
   try {
+    // Both credentials get the same treatment: the client's hash is
+    // re-hashed before storage, so a stolen column is not replayable
+    // against the endpoint that accepts it. recoveryAuthHash is the
+    // recovery key's equivalent of authHash — proof of possession,
+    // never a decryption key.
     const stored = await serverStoreAuth(authHash);
+    const storedRecovery = await serverStoreAuth(recoveryAuthHash);
+
     return await userRepo.create({
       email, kdfSalt, kdfParams, authHash: stored, wrappedDek,
-      recoverySalt, recoveryWrappedDek
+      recoverySalt, recoveryWrappedDek,
+      recoveryAuthHash: storedRecovery
     });
   } catch (err) {
     if (err.code === '23505') {
@@ -333,5 +341,9 @@ async function login({ email, authHash, totpCode }) {
 
 module.exports = {
   signup, getKdfParams, login, issueSession, refresh, logout,
-  beginTotpEnrolment, confirmTotpEnrolment, disableTotp
+  beginTotpEnrolment, confirmTotpEnrolment, disableTotp,
+  // Exported so accountService can spend the same Argon2 work on a
+  // recovery attempt for an account that does not exist. One
+  // definition, so the two paths cannot drift apart on cost.
+  DUMMY_HASH
 };

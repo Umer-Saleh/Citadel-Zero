@@ -8,7 +8,7 @@ const app = require('../../src/app');
 const { resetDatabase, closeDatabase, makeSignupPayload, FAST_KDF } = require('../helpers/db');
 const {
   generateSalt, deriveKeys, wrapDEK, unwrapDEK, encryptItem, decryptItem,
-  generateRecoveryKey, deriveRecoveryKek
+  generateRecoveryKey, deriveRecoveryKek, deriveRecoveryAuthHash
 } = require('../../src/crypto');
 
 test.beforeEach(resetDatabase);
@@ -73,6 +73,14 @@ async function buildRecovery(email, recoveryKey, recoveryMaterial, newPassword) 
     newRecoveryKey,
     payload: {
       email,
+      // Proof that we hold the CURRENT key, derived under the same
+      // salt the server stored the verifier against.
+      recoveryAuthHash: deriveRecoveryAuthHash(
+        recoveryKey, Buffer.from(recoveryMaterial.recoverySalt, 'base64')
+      ).toString('base64'),
+      newRecoveryAuthHash: deriveRecoveryAuthHash(
+        newRecoveryKey, newRecoverySalt
+      ).toString('base64'),
       newAuthHash: authHash.toString('base64'),
       newKdfSalt: newSalt.toString('base64'),
       newKdfParams: FAST_KDF,
@@ -97,7 +105,10 @@ function buildKitRegeneration(dek, currentAuthHash) {
     payload: {
       currentAuthHash,
       newRecoverySalt: newRecoverySalt.toString('base64'),
-      newRecoveryWrappedDek: wrapDEK(dek, newRecoveryKek)
+      newRecoveryWrappedDek: wrapDEK(dek, newRecoveryKek),
+      newRecoveryAuthHash: deriveRecoveryAuthHash(
+        newRecoveryKey, newRecoverySalt
+      ).toString('base64')
     }
   };
 }
