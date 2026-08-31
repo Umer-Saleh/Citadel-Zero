@@ -26,18 +26,21 @@ async function findByEmail(email, client) {
 }
 
 async function create({ email, kdfSalt, kdfParams, authHash, wrappedDek,
-                        recoverySalt, recoveryWrappedDek }, client) {
+                        recoverySalt, recoveryWrappedDek,
+                        recoveryAuthHash }, client) {
   const { rows } = await q(client).query(
     `INSERT INTO users (email, kdf_salt, kdf_params, auth_hash,
                         wrapped_dek, wrapped_dek_nonce, wrapped_dek_tag,
                         recovery_salt, recovery_wrapped_dek,
-                        recovery_wrapped_dek_nonce, recovery_wrapped_dek_tag)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+                        recovery_wrapped_dek_nonce, recovery_wrapped_dek_tag,
+                        recovery_auth_hash)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
      RETURNING id, email`,
     [email, kdfSalt, kdfParams, authHash,
      wrappedDek.ciphertext, wrappedDek.nonce, wrappedDek.authTag,
      recoverySalt, recoveryWrappedDek.ciphertext,
-     recoveryWrappedDek.nonce, recoveryWrappedDek.authTag]
+     recoveryWrappedDek.nonce, recoveryWrappedDek.authTag,
+     recoveryAuthHash]
   );
   return rows[0];
 }
@@ -82,11 +85,19 @@ async function updateRecoveryWrapper(userId, { recoverySalt, recoveryWrappedDek 
   return rowCount > 0;
 }
 
-/** Public recovery material, needed before the client can derive anything. */
+/**
+ * Recovery material, plus the verifier completeRecovery checks against.
+ *
+ * recovery_auth_hash is selected here but must NEVER be returned to a
+ * client. getRecoveryMaterial picks the two public fields out of this
+ * row by hand for exactly that reason — handing over the verifier
+ * would give an attacker the thing they are supposed to prove.
+ */
 async function findRecoveryByEmail(email, client) {
   const { rows } = await q(client).query(
     `SELECT id, email, recovery_salt, recovery_wrapped_dek,
-            recovery_wrapped_dek_nonce, recovery_wrapped_dek_tag
+            recovery_wrapped_dek_nonce, recovery_wrapped_dek_tag,
+            recovery_auth_hash
      FROM users WHERE email = $1`,
     [email]
   );
