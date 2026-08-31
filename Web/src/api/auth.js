@@ -184,9 +184,13 @@ export async function getRecoveryMaterial(email) {
 /**
  * Unwrap the DEK with a recovery key.
  *
- * Throws if the key is wrong — GCM authentication fails, which is the
- * only verification that exists. The server cannot check a recovery
- * key; it has never seen one.
+ * Throws if the key is wrong: GCM authentication fails, which proves
+ * locally that this key really does open this vault.
+ *
+ * That is one of two checks, not the only one. The server separately
+ * verifies possession at the write endpoint, against a proof derived
+ * from the same key — see completeRecovery. This one runs first
+ * because failing here costs nothing and tells the user immediately.
  */
 export async function unwrapWithRecoveryKey(recoveryKey, recoverySalt, recoveryWrappedDek) {
   const kek = await deriveRecoveryKek(recoveryKey, fromBase64(recoverySalt));

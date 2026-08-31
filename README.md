@@ -177,11 +177,28 @@ Recovery runs in three steps: find the account, unwrap with the key, set a new
 password. The key check comes second on purpose — discovering a mistyped key
 *after* choosing a new password would be a poor place to fail.
 
-**The server cannot verify a recovery key.** Possession is proved implicitly:
-only someone who unwrapped the real DEK can produce a valid new wrapper
-containing it. A client that guessed would seal a garbage key and lock itself out
-of a vault it could never read. Denial of service, not disclosure — which is why
-the endpoint is heavily rate limited rather than authenticated.
+**The server verifies possession, and still never sees the key.** The client
+derives two values from the recovery key, separated by their HKDF info label:
+`recovery-kek` unwraps the DEK and never leaves the device, while
+`recovery-auth` is sent and checked against a stored Argon2 hash — the same
+treatment `auth_hash` gets. Distinct labels put the two outputs in different PRF
+domains, so the value the server holds says nothing about the one that opens the
+vault, and cannot unwrap anything.
+
+That replaced an argument which was half right. Possession used to be proved
+only *implicitly*: only someone holding the real key could produce a wrapper
+containing the real DEK, so a client that guessed would seal garbage and lock
+itself out of a vault it could never read. The reasoning is sound about
+**confidentiality** and silent about **availability**. Because the server wrote
+first and let the ciphertext arbitrate afterwards, anyone who knew an email
+address could send syntactically valid nonsense and destroy that account
+permanently — denial of service rather than disclosure, but total and
+irreversible. Checking the proof *before* the write closes that without the
+server learning anything it was not already storing.
+
+The endpoint remains unauthenticated, because the user has forgotten their
+password and has nothing else to authenticate with. Unauthenticated is not the
+same as unverified, and conflating the two is what left the hole.
 
 **HKDF, not Argon2id, for the recovery KEK.** Argon2id exists to make guessing a
 low-entropy human password expensive. A 128-bit machine-generated key has nothing

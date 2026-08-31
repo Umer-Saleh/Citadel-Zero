@@ -174,10 +174,12 @@ app.delete('/api/vault/:id',
 // ACCOUNT ROUTES
 // Password change is authenticated and re-wraps the DEK under a new
 // KEK. Recovery is deliberately NOT authenticated: the user has
-// forgotten their password and cannot log in. Possession of the
-// recovery key is proved implicitly, since only a client that
-// unwrapped the real DEK can produce a valid new wrapper — someone
-// without it can lock the account out but learns nothing.
+// forgotten their password and has nothing left to authenticate
+// with. It is still VERIFIED — the caller proves possession of the
+// recovery key with a value derived from it under a separate HKDF
+// label, checked before anything is written. Unauthenticated is not
+// the same as unverified; treating them as the same is what once let
+// anyone knowing an email address destroy that account.
 // ---------------------------------------------------------------
 
 app.post('/api/account/password',
