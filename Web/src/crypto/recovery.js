@@ -54,3 +54,42 @@ export async function deriveRecoveryKek(recoveryKey, salt) {
 
   return new Uint8Array(bits);
 }
+
+/**
+ * Derive the recovery key's PROOF OF POSSESSION from the same key.
+ *
+ * Domain separation is the whole point. This differs from
+ * deriveRecoveryKek only in the HKDF info label, which puts the two
+ * outputs in different PRF domains: recovering one tells you nothing
+ * about the other without breaking HMAC-SHA256. It is the same split
+ * keys.js already makes between "auth" and "kek" for the master
+ * password, applied to the second door.
+ *
+ * So this value can be sent to the server and stored there — hardened
+ * again with Argon2, exactly like authHash — while the KEK that
+ * actually opens the vault never leaves this device.
+ *
+ * Must agree byte for byte with the Node implementation in
+ * Server/src/crypto/recovery.js, or a vault sealed by one cannot be
+ * recovered through the other. There is a test on each side asserting
+ * the same known answer.
+ *
+ * Argon2id is deliberately NOT used, for the same reason
+ * deriveRecoveryKek does not use it: a 128-bit machine-generated key
+ * has nothing to guess, so a slow KDF would cost time and buy nothing.
+ */
+export async function deriveRecoveryAuthHash(recoveryKey, salt) {
+  const normalized = recoveryKey.replace(/-/g, '').toUpperCase();
+
+  const ikm = await crypto.subtle.importKey(
+    'raw', utf8(normalized), 'HKDF', false, ['deriveBits']
+  );
+
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'HKDF', hash: 'SHA-256', salt, info: utf8('recovery-auth') },
+    ikm,
+    KEY_LENGTH * 8
+  );
+
+  return new Uint8Array(bits);
+}

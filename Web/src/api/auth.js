@@ -1,6 +1,6 @@
 import {
   deriveKeys, generateSalt, generateDEK, wrapDEK, unwrapDEK,
-  generateRecoveryKey, deriveRecoveryKek,
+  generateRecoveryKey, deriveRecoveryKek, deriveRecoveryAuthHash,
   DEFAULT_KDF_PARAMS, toBase64, fromBase64
 } from '../crypto';
 import { api, setToken, setRefreshToken, getRefreshToken, clearToken } from './client';
@@ -27,7 +27,12 @@ export async function signup(email, password) {
     kdfParams: DEFAULT_KDF_PARAMS,
     wrappedDek: await wrapDEK(dek, kek),
     recoverySalt: toBase64(recoverySalt),
-    recoveryWrappedDek: await wrapDEK(dek, recoveryKek)
+    recoveryWrappedDek: await wrapDEK(dek, recoveryKek),
+    // Proof of possession for this kit, so the server can later check
+    // that a recovery caller actually holds the key. Derived from the
+    // same key under a different HKDF label, so it cannot unwrap
+    // anything and reveals nothing about the KEK above.
+    recoveryAuthHash: toBase64(await deriveRecoveryAuthHash(recoveryKey, recoverySalt))
   });
 
   return { recoveryKey };   // shown once, then gone
@@ -191,18 +196,23 @@ export async function unwrapWithRecoveryKey(recoveryKey, recoverySalt, recoveryW
 /**
  * Complete a recovery: set a new password and issue a fresh kit.
  *
- * Note what the server cannot verify here. It has no way to check the
- * client actually holds the recovery key — possession is proved
- * implicitly, because only someone who unwrapped the REAL DEK can
- * produce a new wrapper containing it. A client that guessed would
- * seal a garbage DEK and lock itself out of a vault it could never
- * read. Denial of service, not disclosure, which is why this endpoint
- * is heavily rate limited rather than authenticated.
+ * The server DOES verify possession now. We send a proof derived from
+ * the recovery key under the "recovery-auth" label, and the server
+ * checks it against an Argon2 hash it stored at signup — the same
+ * treatment the master password's auth hash gets. It still never sees
+ * the key itself, and the proof cannot unwrap anything.
  *
- * @param dek  the DEK recovered by unwrapWithRecoveryKey
- * @returns    the NEW recovery key, shown once. The old one is dead.
+ * Until this existed the endpoint verified nothing, so anyone who knew
+ * an email could overwrite the credentials and both wrappers and
+ * destroy the account permanently.
+ *
+ * @param recoveryKey   the key the user typed, needed for the proof
+ * @param recoverySalt  base64 salt the proof must be derived under —
+ *                      the same one the stored verifier was made with
+ * @param dek           the DEK recovered by unwrapWithRecoveryKey
+ * @returns             the NEW recovery key, shown once.
  */
-export async function completeRecovery(email, newPassword, dek) {
+export async function completeRecovery(email, newPassword, dek, recoveryKey, recoverySalt) {
   const newSalt = generateSalt();
   const { authHash: newAuthHash, kek: newKek } =
     await deriveKeys(newPassword, newSalt, DEFAULT_KDF_PARAMS);
@@ -215,12 +225,21 @@ export async function completeRecovery(email, newPassword, dek) {
 
   await api.post('/api/account/recover', {
     email,
+    // Proof for the CURRENT key, under the salt the server stored its
+    // verifier against — not the new salt generated above.
+    recoveryAuthHash: toBase64(
+      await deriveRecoveryAuthHash(recoveryKey, fromBase64(recoverySalt))
+    ),
     newAuthHash: toBase64(newAuthHash),
     newKdfSalt: toBase64(newSalt),
     newKdfParams: DEFAULT_KDF_PARAMS,
     newWrappedDek: await wrapDEK(dek, newKek),
     newRecoverySalt: toBase64(newRecoverySalt),
-    newRecoveryWrappedDek: await wrapDEK(dek, newRecoveryKek)
+    newRecoveryWrappedDek: await wrapDEK(dek, newRecoveryKek),
+    // Verifier for the kit this recovery issues. The old one retires.
+    newRecoveryAuthHash: toBase64(
+      await deriveRecoveryAuthHash(newRecoveryKey, newRecoverySalt)
+    )
   });
 
   return { recoveryKey: newRecoveryKey };
@@ -254,7 +273,13 @@ export async function regenerateRecoveryKit(email, password, dek) {
   await api.post('/api/account/recovery-kit', {
     currentAuthHash: toBase64(currentAuthHash),
     newRecoverySalt: toBase64(newRecoverySalt),
-    newRecoveryWrappedDek: await wrapDEK(dek, newRecoveryKek)
+    newRecoveryWrappedDek: await wrapDEK(dek, newRecoveryKek),
+    // Verifier for the new kit. This flow authenticates with the
+    // master password, so there is no proof of the OLD recovery key —
+    // only the value that will prove the new one.
+    newRecoveryAuthHash: toBase64(
+      await deriveRecoveryAuthHash(newRecoveryKey, newRecoverySalt)
+    )
   });
 
   return { recoveryKey: newRecoveryKey };

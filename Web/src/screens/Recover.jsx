@@ -43,6 +43,14 @@ export function Recover({ onRecovered, onBack }) {
     } catch (e) {
       setError(
         e.code === 'NOT_FOUND' ? 'No vault found for that email.'
+        // This account was created before recovery required proof of
+        // possession, so it has no stored verifier and no recovery
+        // key can be checked against it. The vault itself is fine and
+        // the password still opens it — the fix is to sign in and
+        // mint a fresh kit, which writes the verifier that was
+        // missing. Saying so beats a dead end.
+        : e.code === 'RECOVERY_UNAVAILABLE'
+          ? 'This vault was created before recovery keys could be verified, so its old kit can no longer be used. Your master password still works: sign in with it, then open Settings and issue a new recovery key. That new kit will work normally.'
         : e.code === 'NETWORK_ERROR' ? 'Cannot reach the server.'
         : `Could not start recovery${e.code ? ` (${e.code})` : ''}.`
       );
@@ -60,9 +68,10 @@ export function Recover({ onRecovered, onBack }) {
       const recovered = await auth.unwrapWithRecoveryKey(
         key, material.recoverySalt, material.recoveryWrappedDek
       );
-      // Success here means GCM authenticated the wrapper — the only
-      // check that exists, and a conclusive one. The server never
-      // sees the recovery key and cannot verify it.
+      // Success here means GCM authenticated the wrapper: this key
+      // really does open this vault. It is a local check only — the
+      // server verifies possession separately, at the write endpoint,
+      // against a proof derived from the same key. Both have to pass.
       setDek(recovered);
       setPhase('password');
     } catch {
@@ -79,7 +88,9 @@ export function Recover({ onRecovered, onBack }) {
 
     setPhase('working');
     try {
-      const { recoveryKey } = await auth.completeRecovery(email, pw, dek);
+      const { recoveryKey } = await auth.completeRecovery(
+        email, pw, dek, key, material.recoverySalt
+      );
       // Zero the recovered DEK — the caller re-logs in and derives it
       // again from the new password.
       dek.fill(0);
@@ -88,6 +99,14 @@ export function Recover({ onRecovered, onBack }) {
       setPhase('password');
       setError(
         e.code === 'NETWORK_ERROR' ? 'Cannot reach the server.'
+        // The server proves the recovery key before it writes
+        // anything, and answers every failure the same way — no such
+        // account, no verifier, wrong key are one response. So this
+        // message cannot be more specific than the server was, and
+        // should not pretend to be. Reaching it after the key already
+        // unwrapped the vault means the kit changed underneath us.
+        : e.code === 'INVALID_RECOVERY_KEY'
+          ? 'The server would not accept that recovery key. If a new kit was issued for this vault since the key you used was printed, the older key no longer works — use the most recent one.'
         : `Recovery failed${e.code ? ` (${e.code})` : ''}.`
       );
     }
