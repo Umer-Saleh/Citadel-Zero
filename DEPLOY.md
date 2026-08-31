@@ -441,6 +441,16 @@ than one that does not.
   with a proxy pool gets a multiple of the budget.
 - **`/api/user/kdf-params` is an account-enumeration oracle.** It is rate
   limited, not fixed. See the README.
+- **A recovery kit issued before this deploy stops working.** Recovery now
+  requires proof of possession of the recovery key, and accounts created
+  earlier have no stored verifier — one cannot be derived server-side, since
+  that needs the key itself. `/api/account/recover` refuses them, and
+  `/api/account/recovery-material` returns 409 `RECOVERY_UNAVAILABLE` so the
+  user is told at the start of the flow rather than after typing a key that
+  cannot work. The master password still opens those vaults; issuing a new kit
+  from Settings restores recovery. This self-heals here within a day, because
+  the nightly wipe deletes every account and the reseeded demo account always
+  has a verifier.
 - **The demo account's password is public**, so that account has no
   confidentiality. It holds invented data.
 - **The CSP allows a WebAssembly compile and inline style attributes.**

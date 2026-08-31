@@ -47,7 +47,8 @@
 // script, which is that it holds no server privilege whatsoever.
 const {
   deriveKeys, generateSalt, generateDEK, wrapDEK, encryptItem,
-  generateRecoveryKey, deriveRecoveryKek, DEFAULT_KDF_PARAMS
+  generateRecoveryKey, deriveRecoveryKek, deriveRecoveryAuthHash,
+  DEFAULT_KDF_PARAMS
 } = require('../src/crypto');
 
 const API_URL = (process.env.API_URL || 'http://server:3000').replace(/\/$/, '');
@@ -152,6 +153,21 @@ async function seed() {
   const recoverySalt = generateSalt();
   const recoveryKek = await deriveRecoveryKek(recoveryKey, recoverySalt);
 
+  // Proof of possession for the kit, from the same recovery key under
+  // a different HKDF label. The server stores an Argon2 hash of this
+  // and checks it before it will overwrite anything at
+  // /api/account/recover.
+  //
+  // Derived through src/crypto rather than reimplemented here on
+  // purpose: this script is a client, and a second copy of the HKDF
+  // would be a second implementation nothing cross-checks. The one in
+  // src/crypto is the one the browser is verified against.
+  //
+  // signup rejects a payload without this — the schema is .strict()
+  // — so if this line is ever lost the nightly reseed fails and the
+  // demo account does not come back.
+  const recoveryAuthHash = deriveRecoveryAuthHash(recoveryKey, recoverySalt);
+
   const signup = await call('POST', '/api/auth/signup', {
     email: EMAIL,
     authHash: b64(authHash),
@@ -159,7 +175,8 @@ async function seed() {
     kdfParams: DEFAULT_KDF_PARAMS,
     wrappedDek: wrapDEK(dek, kek),
     recoverySalt: b64(recoverySalt),
-    recoveryWrappedDek: wrapDEK(dek, recoveryKek)
+    recoveryWrappedDek: wrapDEK(dek, recoveryKek),
+    recoveryAuthHash: b64(recoveryAuthHash)
   });
 
   if (signup.status === 409 || signup.data?.error === 'EMAIL_TAKEN') {

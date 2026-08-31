@@ -372,11 +372,25 @@ a threat model.
 
 - **A forgotten master password with no recovery kit means permanent data loss.**
   No reset is possible, because a reset would require the server to hold a key.
-- **The recovery endpoint is unauthenticated.** It has to be — the user has
-  forgotten their password. An attacker who knows an email address can overwrite
-  an account's credentials, but cannot produce a wrapper containing the real DEK,
-  so they lock the account out rather than reading it. **Denial of service, not
-  disclosure.** A production system would add email confirmation.
+- **The recovery endpoint is unauthenticated, but it is no longer unverified.**
+  It has to stay unauthenticated — the user has forgotten their password. It
+  used to accept any syntactically valid request naming a real email address,
+  which let anyone overwrite an account's credentials and both DEK wrappers and
+  destroy it permanently: denial of service rather than disclosure, but total
+  and irreversible. The client now sends a proof derived from the recovery key
+  under a separate HKDF label, and the server checks it against a stored Argon2
+  hash before writing anything — the same treatment the master password's auth
+  hash gets. The server still never sees the recovery key, and what it stores
+  cannot unwrap anything. Email confirmation would still add a second channel,
+  which a production system would want.
+- **A recovery kit issued before that check existed can no longer be used.**
+  Those accounts have no stored verifier, and one cannot be derived
+  server-side — deriving it needs the recovery key, which only the user holds.
+  Recovery refuses them, and says so at the first step rather than after the key
+  is typed. The master password still opens the vault, and issuing a new kit
+  from Settings restores recovery. On the public demo the exposure is at most a
+  day: the nightly wipe deletes every account, and the reseeded demo account is
+  created with a verifier.
 - **`/api/user/kdf-params` is an account-enumeration oracle,** and also reveals
   whether an account has 2FA enabled. It is rate limited. The alternative — a
   two-step login with a separate pending-2FA token — was judged not worth the

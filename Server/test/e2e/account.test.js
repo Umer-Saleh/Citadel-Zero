@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const request = require('supertest');
 
 const app = require('../../src/app');
-const { resetDatabase, closeDatabase, makeSignupPayload, FAST_KDF } = require('../helpers/db');
+const { resetDatabase, closeDatabase, makeSignupPayload, FAST_KDF, query } = require('../helpers/db');
 const {
   generateSalt, deriveKeys, wrapDEK, unwrapDEK, encryptItem, decryptItem,
   generateRecoveryKey, deriveRecoveryKek, deriveRecoveryAuthHash
@@ -556,4 +556,187 @@ test('regenerating requires authentication', async () => {
     .send(buildKitRegeneration(dek, payload.authHash).payload);
 
   assert.strictEqual(res.status, 401);
+});
+
+// ---------------------------------------------------------------
+// PROOF OF POSSESSION
+//
+// /api/account/recover used to verify nothing. It looked an account
+// up by email and overwrote auth_hash, kdf_salt, kdf_params, both DEK
+// wrappers and every session, so one unauthenticated request with
+// syntactically valid garbage permanently destroyed any account whose
+// email was known. These tests exist so that cannot come back.
+// ---------------------------------------------------------------
+
+/** Everything a recovery is able to destroy, in one comparable value. */
+async function accountFingerprint(email) {
+  const { rows } = await query(
+    `SELECT auth_hash, kdf_salt, kdf_params, wrapped_dek,
+            wrapped_dek_nonce, wrapped_dek_tag,
+            recovery_salt, recovery_wrapped_dek,
+            recovery_wrapped_dek_nonce, recovery_wrapped_dek_tag,
+            recovery_auth_hash
+     FROM users WHERE email = $1`,
+    [email]
+  );
+  return JSON.stringify(rows[0]);
+}
+
+test('recovery with a correct proof succeeds', async () => {
+  const { payload, recoveryKey } = await makeSignupPayload(EMAIL, OLD_PASSWORD);
+  await request(app).post('/api/auth/signup').send(payload);
+
+  const material = await request(app)
+    .get('/api/account/recovery-material')
+    .query({ email: EMAIL });
+
+  const recovery = await buildRecovery(EMAIL, recoveryKey, material.body, NEW_PASSWORD);
+
+  const res = await request(app).post('/api/account/recover').send(recovery.payload);
+
+  assert.strictEqual(res.status, 200);
+});
+
+test('recovery with a WRONG proof is rejected and writes nothing', async () => {
+  const { payload, recoveryKey } = await makeSignupPayload(EMAIL, OLD_PASSWORD);
+  await request(app).post('/api/auth/signup').send(payload);
+
+  const material = await request(app)
+    .get('/api/account/recovery-material')
+    .query({ email: EMAIL });
+
+  const recovery = await buildRecovery(EMAIL, recoveryKey, material.body, NEW_PASSWORD);
+
+  // Everything else about this request is valid. Only the proof is
+  // wrong — which is exactly the shape of the original attack.
+  recovery.payload.recoveryAuthHash = Buffer.alloc(32).toString('base64');
+
+  const before = await accountFingerprint(EMAIL);
+
+  const res = await request(app).post('/api/account/recover').send(recovery.payload);
+
+  assert.strictEqual(res.status, 401);
+  assert.strictEqual(res.body.error, 'INVALID_RECOVERY_KEY');
+
+  // The regression test for the defect. Not "the response was an
+  // error" — that the row is byte for byte what it was.
+  assert.strictEqual(await accountFingerprint(EMAIL), before);
+
+  // And the account is still usable: the original password still logs
+  // in, which it would not if any credential column had moved.
+  const login = await request(app)
+    .post('/api/auth/login')
+    .send({ email: EMAIL, authHash: payload.authHash });
+
+  assert.strictEqual(login.status, 200);
+});
+
+test('recovery against an unknown email fails identically', async () => {
+  const { payload, recoveryKey } = await makeSignupPayload(EMAIL, OLD_PASSWORD);
+  await request(app).post('/api/auth/signup').send(payload);
+
+  const material = await request(app)
+    .get('/api/account/recovery-material')
+    .query({ email: EMAIL });
+
+  const known = await buildRecovery(EMAIL, recoveryKey, material.body, NEW_PASSWORD);
+
+  // Same request, wrong proof, against an account that exists.
+  const wrongProof = {
+    ...known.payload,
+    recoveryAuthHash: Buffer.alloc(32).toString('base64')
+  };
+  const a = await request(app).post('/api/account/recover').send(wrongProof);
+
+  // Same request again, against an account that does not exist.
+  const b = await request(app)
+    .post('/api/account/recover')
+    .send({ ...wrongProof, email: 'nobody@example.com' });
+
+  // An attacker must not be able to tell "wrong key" from "no such
+  // account", or this endpoint enumerates accounts.
+  assert.strictEqual(a.status, b.status);
+  assert.deepStrictEqual(a.body, b.body);
+  assert.strictEqual(b.status, 401);
+});
+
+test('recovery is refused for an account with no stored proof', async () => {
+  const { payload, recoveryKey } = await makeSignupPayload(EMAIL, OLD_PASSWORD);
+  await request(app).post('/api/auth/signup').send(payload);
+
+  const material = await request(app)
+    .get('/api/account/recovery-material')
+    .query({ email: EMAIL });
+
+  const recovery = await buildRecovery(EMAIL, recoveryKey, material.body, NEW_PASSWORD);
+
+  // Simulate an account created before proof of possession existed.
+  await query('UPDATE users SET recovery_auth_hash = NULL WHERE email = $1', [EMAIL]);
+
+  const before = await accountFingerprint(EMAIL);
+
+  // The correct recovery key must NOT be enough on its own. Falling
+  // back to the old unverified path for these rows would leave the
+  // defect open for exactly the accounts that cannot defend themselves.
+  const res = await request(app).post('/api/account/recover').send(recovery.payload);
+
+  assert.strictEqual(res.status, 401);
+  assert.strictEqual(res.body.error, 'INVALID_RECOVERY_KEY');
+  assert.strictEqual(await accountFingerprint(EMAIL), before);
+
+  // The user is told at the START of the flow, where it is actionable,
+  // rather than after typing a key that cannot work.
+  const probe = await request(app)
+    .get('/api/account/recovery-material')
+    .query({ email: EMAIL });
+
+  assert.strictEqual(probe.status, 409);
+  assert.strictEqual(probe.body.error, 'RECOVERY_UNAVAILABLE');
+});
+
+test('regenerating the kit invalidates the previous recovery key', async () => {
+  const { payload, dek, recoveryKey } = await makeSignupPayload(EMAIL, OLD_PASSWORD);
+  await request(app).post('/api/auth/signup').send(payload);
+
+  const login = await request(app)
+    .post('/api/auth/login')
+    .send({ email: EMAIL, authHash: payload.authHash });
+
+  // What the OLD key would have proved, captured before rotation.
+  const before = await request(app)
+    .get('/api/account/recovery-material')
+    .query({ email: EMAIL });
+
+  const staleRecovery = await buildRecovery(
+    EMAIL, recoveryKey, before.body, NEW_PASSWORD
+  );
+
+  const regen = buildKitRegeneration(dek, payload.authHash);
+  const rotated = await request(app)
+    .post('/api/account/recovery-kit')
+    .set('Authorization', `Bearer ${login.body.token}`)
+    .send(regen.payload);
+
+  assert.strictEqual(rotated.status, 200);
+
+  // The retired key must no longer prove anything, though it was valid
+  // moments ago.
+  const res = await request(app)
+    .post('/api/account/recover')
+    .send(staleRecovery.payload);
+
+  assert.strictEqual(res.status, 401);
+  assert.strictEqual(res.body.error, 'INVALID_RECOVERY_KEY');
+
+  // And the NEW key does work, so rotation replaced rather than broke.
+  const after = await request(app)
+    .get('/api/account/recovery-material')
+    .query({ email: EMAIL });
+
+  const fresh = await buildRecovery(
+    EMAIL, regen.newRecoveryKey, after.body, NEW_PASSWORD
+  );
+  const ok = await request(app).post('/api/account/recover').send(fresh.payload);
+
+  assert.strictEqual(ok.status, 200);
 });
