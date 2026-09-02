@@ -247,19 +247,22 @@ app.post('/api/account/recovery-kit',
 // Mounted only when DEMO_MODE is on, so they do not exist at all in a
 // normal deployment — not "exist but refuse", do not exist.
 //
-// This one serves the raw stored rows for the demo account so the UI
-// can show them beside the plaintext it decrypted. It is pinned to
-// the id resolved from DEMO_EMAIL and takes no parameter of any kind,
-// so there is nothing a caller can point it at. It is a strict subset
-// of what that account already discloses to anyone — its password is
-// printed on its own unlock screen — and it returns no key material.
-// See services/demoService.js for the full reasoning.
+// This one serves the caller's own stored rows so the UI can show
+// them beside the plaintext it decrypted. requireAuth, and scoped to
+// req.userId from the verified token: the same ownership rule the
+// vault routes use, and no parameter names an account.
+//
+// It used to be pinned to one id resolved from DEMO_EMAIL, which was
+// a stronger property than this. That pin depended on a single shared
+// demo account, which per-visitor vaults deliberately remove. See
+// services/demoService.js — the tradeoff is written out there rather
+// than glossed here.
 // ---------------------------------------------------------------
 if (config.demoMode) {
   app.get('/api/demo/stored-material',
-    authLimiter,
+    requireAuth,
     wrap(async (req, res) => {
-      res.status(200).json(await demoService.storedMaterial());
+      res.status(200).json(await demoService.storedMaterial(req.userId));
     }));
 }
 

@@ -55,14 +55,14 @@ const config = parsed.data;
 // endpoints freely.
 config.rateLimitEnabled = config.RATE_LIMIT_ENABLED === 'true' && config.NODE_ENV !== 'test';
 
-// Demo mode requires an account to point at. Enabling it without one
-// would mount a route that can only ever 404, so refuse instead.
+// Demo mode no longer points at an account. Each visitor provisions
+// their own throwaway vault through the ordinary signup path, so
+// there is no shared identity for the server to resolve.
+//
+// DEMO_EMAIL is therefore accepted but unused. It stays in the schema
+// because docker-compose.prod.yml still passes it and .env.prod still
+// declares it required; removing it there is a separate change to
+// files this branch does not touch. Nothing in src/ reads it.
 config.demoMode = config.DEMO_MODE === 'true';
-
-if (config.demoMode && !config.DEMO_EMAIL) {
-  console.error('Invalid configuration:');
-  console.error('  DEMO_EMAIL: required when DEMO_MODE is true');
-  process.exit(1);
-}
 
 module.exports = config;
