@@ -6,9 +6,37 @@ import {
 import { api, setToken, setRefreshToken, getRefreshToken, clearToken } from './client';
 
 /**
+ * Brand for KDF material that came from a signup in this tab.
+ *
+ * Module-private and never exported, so a value carrying it cannot be
+ * constructed anywhere outside this file. That is the point: login()
+ * accepts pre-known KDF material only when it is stamped with this,
+ * which makes "the caller really did just create this account" a
+ * property the code enforces rather than a comment asking nicely.
+ *
+ * Why that matters is specific. Skipping the kdf-params fetch also
+ * skips the totpEnabled pre-check below. For an account created
+ * moments ago that check is vacuous — a brand-new account cannot have
+ * 2FA, since enrolling requires a session it does not yet have. For
+ * any OTHER account the check is load-bearing, and losing it would
+ * mean burning a one-to-two second Argon2id derivation and then being
+ * told INVALID_CREDENTIALS by the server, which reports 2FA failures
+ * and wrong passwords identically and on purpose. That is a miserable
+ * thing to debug, so the brand makes it unreachable.
+ */
+const FRESH_SIGNUP = Symbol('kdf material from a signup in this tab');
+
+/**
  * Sign up. Does all crypto client-side, sends only wrapped material.
  * Returns the recovery key ONCE — the caller must show it and then
  * discard it, because it can never be retrieved again.
+ *
+ * Also returns the KDF material it just registered, branded. A caller
+ * that logs in immediately afterwards can hand this straight to
+ * login() and skip the kdf-params round trip, because these are
+ * exactly the values the server has stored — it persists both verbatim
+ * with no normalisation, no defaults and no server-side rewriting.
+ * Ignoring it is fine and costs one extra request.
  */
 export async function signup(email, password) {
   const salt = generateSalt();
@@ -35,7 +63,11 @@ export async function signup(email, password) {
     recoveryAuthHash: toBase64(await deriveRecoveryAuthHash(recoveryKey, recoverySalt))
   });
 
-  return { recoveryKey };   // shown once, then gone
+  return {
+    recoveryKey,             // shown once, then gone
+    // Branded so login() will accept it; see FRESH_SIGNUP above.
+    kdfMaterial: { [FRESH_SIGNUP]: true, salt, kdfParams: DEFAULT_KDF_PARAMS }
+  };
 }
 
 /**
@@ -46,19 +78,49 @@ export async function signup(email, password) {
  * TOTP_REQUIRED *before* deriving — Argon2 takes a second or two and
  * there's no point spending it on a request the server will reject.
  * The caller catches that, shows a code field, and calls again.
+ *
+ * @param knownKdf  OPTIONAL, and only ever the branded object returned
+ *                  by signup() in this same tab. When present the
+ *                  kdf-params GET is skipped, because the caller
+ *                  already holds the values that request would return.
+ *                  Omitted by every ordinary login, which is why the
+ *                  fetch below remains the default path exercised by
+ *                  the app and the whole test suite — the shortcut is
+ *                  the exception, not the rule.
  */
-export async function login(email, password, totpCode) {
-  const { kdfSalt, kdfParams, totpEnabled } = await api.get(
-    `/api/user/kdf-params?email=${encodeURIComponent(email)}`
-  );
+export async function login(email, password, totpCode, knownKdf) {
+  let salt, kdfParams;
 
-  if (totpEnabled && !totpCode) {
-    const err = new Error('TOTP_REQUIRED');
-    err.code = 'TOTP_REQUIRED';
-    throw err;
+  if (knownKdf !== undefined) {
+    // Structural, not advisory. Only signup() can produce a value
+    // carrying FRESH_SIGNUP, so this cannot be satisfied by a caller
+    // that merely *believes* it knows an account's parameters.
+    if (knownKdf?.[FRESH_SIGNUP] !== true) {
+      throw new Error(
+        'login: knownKdf must be the kdfMaterial returned by signup() in this tab'
+      );
+    }
+
+    // No totpEnabled check: an account created in this tab moments ago
+    // cannot have 2FA, and the brand above is what guarantees that is
+    // the only kind of account reaching this branch.
+    salt = knownKdf.salt;
+    kdfParams = knownKdf.kdfParams;
+  } else {
+    const { kdfSalt, kdfParams: storedParams, totpEnabled } = await api.get(
+      `/api/user/kdf-params?email=${encodeURIComponent(email)}`
+    );
+
+    if (totpEnabled && !totpCode) {
+      const err = new Error('TOTP_REQUIRED');
+      err.code = 'TOTP_REQUIRED';
+      throw err;
+    }
+
+    salt = fromBase64(kdfSalt);
+    kdfParams = storedParams;
   }
 
-  const salt = fromBase64(kdfSalt);
   const { authHash, kek } = await deriveKeys(password, salt, kdfParams);
 
   const res = await api.post('/api/auth/login', {

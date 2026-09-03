@@ -46,10 +46,58 @@ describe('provisioning', () => {
     expect(calls[1]).toBe('login');
     expect(calls.slice(2)).toEqual(DEMO_FIXTURES.map(f => 'item:' + f.site));
     expect(addItem).toHaveBeenCalledTimes(5);
-    // signup and login must receive the SAME credentials
-    expect(signup.mock.calls[0]).toEqual(login.mock.calls[0]);
+    // signup and login must receive the SAME credentials.
+    //
+    // Compared positionally rather than as whole argument lists,
+    // because login now takes two further arguments that signup does
+    // not — the totpCode slot and the KDF material. The original
+    // whole-list equality is preserved as the two explicit checks
+    // below plus the argument assertions that follow it.
+    expect(login.mock.calls[0][0]).toBe(signup.mock.calls[0][0]);   // email
+    expect(login.mock.calls[0][1]).toBe(signup.mock.calls[0][1]);   // password
+    expect(signup.mock.calls[0]).toHaveLength(2);
     expect(creds.email).toMatch(/^demo-[0-9a-f]{20}@demo\.invalid$/);
     expect(creds.password).toHaveLength(32);
+  });
+
+  test('login is never given a TOTP code — a new account cannot have 2FA', async () => {
+    const login = vi.fn(async () => {});
+    await provisionDemoVault({
+      signup: async () => ({ recoveryKey: 'K' }), login, addItem: async () => {}
+    });
+
+    expect(login.mock.calls[0][2]).toBeUndefined();
+  });
+
+  test('the KDF material from signup is threaded into login', async () => {
+    // Opaque on purpose. provisionDemoVault must forward whatever
+    // signup returned without inspecting or reconstructing it — the
+    // brand that makes login accept it is a Symbol this file cannot
+    // see, so anything but a straight hand-off would fail in the app.
+    const kdfMaterial = { marker: 'from-signup' };
+    const signup = vi.fn(async () => ({ recoveryKey: 'K', kdfMaterial }));
+    const login = vi.fn(async () => {});
+
+    await provisionDemoVault({ signup, login, addItem: async () => {} });
+
+    // Identity, not equality: the same object, unmodified.
+    expect(login.mock.calls[0][3]).toBe(kdfMaterial);
+    expect(login).toHaveBeenCalledTimes(1);
+  });
+
+  test('a signup that returns no material still provisions, without it', async () => {
+    // The skip is an optimisation. Losing it must cost an extra
+    // request, never the vault.
+    const login = vi.fn(async () => {});
+    const addItem = vi.fn(async () => {});
+
+    const creds = await provisionDemoVault({
+      signup: async () => undefined, login, addItem
+    });
+
+    expect(login.mock.calls[0][3]).toBeUndefined();
+    expect(addItem).toHaveBeenCalledTimes(5);
+    expect(creds.email).toMatch(/@demo\.invalid$/);
   });
 
   test('identities are unique and unbiased in shape', async () => {

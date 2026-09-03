@@ -92,9 +92,13 @@ export function VaultProvider({ children }) {
   }, []);
 
 
-  const login = useCallback(async (loginEmail, password, totpCode) => {
+  // knownKdf is forwarded, not interpreted. It is only ever the
+  // branded object from auth.signup(), and only the demo provisioning
+  // path passes one; every other caller omits it and takes the
+  // ordinary kdf-params fetch.
+  const login = useCallback(async (loginEmail, password, totpCode, knownKdf) => {
     const { dek: newDek, kdfUpgradeAvailable: upgrade, targetKdfParams } =
-      await auth.login(loginEmail, password, totpCode);
+      await auth.login(loginEmail, password, totpCode, knownKdf);
     // Both, together. The ref first so a callback captured before this
     // login can use the key the moment login() resolves, without
     // waiting for a render.

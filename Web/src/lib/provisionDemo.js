@@ -35,6 +35,14 @@ import { DEMO_FIXTURES } from './demoFixtures';
  * hardens both the auth hash and the recovery verifier, then login
  * verifies. The API container has a 640 MB limit.
  *
+ * In RATE-LIMITED requests it costs one from the signup bucket and one
+ * from the auth bucket. It used to cost three from the auth bucket
+ * alone — signup, kdf-params, login — which at a limit of 24 allowed
+ * only eight vaults per address per fifteen minutes and made a
+ * conference network run dry after a handful of visitors. Signup now
+ * has its own counter, and the kdf-params fetch is skipped by reusing
+ * the material signup returns.
+ *
  * So this must only ever run from a deliberate user action. It must
  * never be called from an effect, a route match, a retry, or anything
  * else that a crawler or a security scanner could trigger by fetching
@@ -154,12 +162,27 @@ export function clearDemoCredentials() {
 export async function provisionDemoVault({ signup, login, addItem }) {
   const { email, password } = newIdentity();
 
-  // The ordinary signup path. Its return value is the one-time
-  // recovery key; a throwaway vault has nobody to show it to, so it is
-  // deliberately dropped here rather than stored.
-  await signup(email, password);
+  // The ordinary signup path. It returns the one-time recovery key,
+  // which a throwaway vault has nobody to show to and is deliberately
+  // dropped, and the KDF material it just registered.
+  // `?? {}` so a signup implementation that returns nothing still
+  // works: kdfMaterial is then undefined, login takes its ordinary
+  // kdf-params fetch, and the only cost is one extra request. The
+  // skip is an optimisation, not a requirement.
+  const { kdfMaterial } = (await signup(email, password)) ?? {};
 
-  await login(email, password);
+  // Handing the material back skips the kdf-params GET that login
+  // would otherwise make. Those are the values the server stored a
+  // moment ago — it persists them verbatim — so the request could only
+  // ever return what we already have. The saving is not the round trip
+  // but the rate-limit slot: kdf-params shares the auth bucket with
+  // login, so fetching it here would double this path's cost against
+  // the limit that governs whether the next visitor gets a vault.
+  //
+  // No totpCode: a brand-new account cannot have 2FA. login() enforces
+  // that structurally rather than trusting this comment — the material
+  // carries a brand only signup() can apply.
+  await login(email, password, undefined, kdfMaterial);
 
   // Sequentially, not Promise.all. Five parallel writes would race the
   // token refresh if the access token expired mid-flight, and the
