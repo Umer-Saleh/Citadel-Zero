@@ -128,8 +128,8 @@ export function DemoBanner() {
           font: "500 11px 'Geist Mono', monospace",
           letterSpacing: '.08em', opacity: .92
         }}>
-          THE ENTIRE DATABASE IS DELETED AND RESEEDED EVERY DAY AT 03:00 UTC ·
-          ANY ACCOUNT YOU CREATE WILL BE GONE
+          THE ENTIRE DATABASE IS DELETED EVERY DAY AT 03:00 UTC ·
+          ANY VAULT YOU CREATE WILL BE GONE
         </span>
       </div>
 

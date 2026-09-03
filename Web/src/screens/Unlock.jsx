@@ -3,11 +3,13 @@ import { useVault } from '../context/VaultContext';
 import { Card, Input, Button, DeriveBar } from '../components/ui';
 import { Paladin } from '../components/Paladin';
 import { usePix } from '../context/PixContext';
-import { Icon } from '../components/Icon';
-import { DEMO_MODE, DEMO_EMAIL, DEMO_PASSWORD } from '../lib/demo';
+import { DEMO_MODE } from '../lib/demo';
+import {
+  provisionDemoVault, resumeDemoVault, loadDemoCredentials
+} from '../lib/provisionDemo';
 
 export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
-  const { login } = useVault();
+  const { login, signup, addItem } = useVault();
   const { pose: pixPose, says: pixSays } = usePix();
 
   const [email, setEmail] = useState('');
@@ -24,13 +26,84 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
   // 'form' | 'deriving' | 'granted'
   const [phase, setPhase] = useState('form');
 
-  // Momentary confirmation that the demo credentials landed in the
-  // fields. Without it the button looked inert on a phone, where the
-  // filled inputs can be below the fold.
-  const [demoFilled, setDemoFilled] = useState(false);
-  const demoFillTimer = useRef(null);
+  // 'idle' | 'creating' | 'resuming'. Also the re-entry guard: every
+  // demo action returns immediately unless this is 'idle'.
+  const [demoBusy, setDemoBusy] = useState('idle');
 
-  useEffect(() => () => clearTimeout(demoFillTimer.current), []);
+  // Explains a vault that is gone, rather than surfacing it as a
+  // failed login.
+  const [demoNotice, setDemoNotice] = useState('');
+
+  // Whether this tab provisioned a vault earlier. A sessionStorage
+  // read and nothing else — no request, no derivation. Deliberately
+  // computed here rather than in an effect: NOTHING on this screen may
+  // touch the network before a click.
+  const [hasStoredDemo, setHasStoredDemo] = useState(
+    () => (DEMO_MODE ? loadDemoCredentials() !== null : false)
+  );
+
+  // ---------------------------------------------------------------
+  // Both handlers below are reachable ONLY from an onClick. Neither is
+  // called from an effect, a timer, or a render path.
+  //
+  // That is not tidiness. One provision costs two Argon2id derivations
+  // in this browser and three 64 MiB Argon2 operations on a server
+  // capped at 640 MB, so anything a crawler could trigger by fetching
+  // the page is a denial-of-service hole.
+  // ---------------------------------------------------------------
+
+  async function startDemoVault() {
+    if (demoBusy !== 'idle') return;
+
+    setError('');
+    setDemoNotice('');
+    setDemoBusy('creating');
+
+    try {
+      await provisionDemoVault({ signup, login, addItem });
+      // login() put the DEK in memory, so isUnlocked has already
+      // flipped and App is swapping to the vault. The remaining item
+      // writes finish against a context that is still mounted.
+    } catch (e) {
+      setDemoBusy('idle');
+      setError(
+        e.code === 'NETWORK_ERROR' ? 'Cannot reach the server.'
+        : e.code === 'TOO_MANY_ATTEMPTS'
+          ? 'Too many demo vaults have been created from this network recently. Wait a few minutes and try again.'
+        : `Could not create a demo vault${e.code ? ` (${e.code})` : ''}.`
+      );
+    }
+  }
+
+  async function resumeDemo() {
+    if (demoBusy !== 'idle') return;
+
+    setError('');
+    setDemoNotice('');
+    setDemoBusy('resuming');
+
+    try {
+      const reopened = await resumeDemoVault({ login });
+
+      if (!reopened) {
+        // The account is gone — the nightly wipe is the ordinary
+        // reason. resumeDemoVault has already dropped the stale
+        // credentials. Say what happened plainly and offer a new
+        // vault; do NOT create one unasked.
+        setHasStoredDemo(false);
+        setDemoNotice(
+          'The demo vault from earlier in this tab is gone — the whole database is deleted at 03:00 UTC. Start a new one below.'
+        );
+        setDemoBusy('idle');
+      }
+    } catch (e) {
+      setDemoBusy('idle');
+      setError(
+        e.code === 'NETWORK_ERROR' ? 'Cannot reach the server.'
+        : `Could not reopen that demo vault${e.code ? ` (${e.code})` : ''}.`
+      );
+    }
+  }
 
   // Move focus to the code field the moment it appears, so the user
   // can type straight from their phone without reaching for the mouse.
@@ -164,11 +237,16 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
               </div>
             )}
 
-            {/* Demo credentials. Not a secret by any reading — this
-                account's password is published in the README and on
-                this screen, which is the point of it. Renders nothing
-                on a normal build. */}
-            {DEMO_MODE && DEMO_EMAIL && (
+            {/* Demo vaults. Renders nothing on a normal build:
+                DEMO_MODE is a build-time literal, so the bundler drops
+                this whole branch and the provisioning module with it.
+
+                There are no published credentials any more. One shared
+                account meant every visitor was authenticated AS it and
+                could change its password, turn on 2FA and lock out
+                everyone after them, or edit what the next visitor saw.
+                A private throwaway vault has nothing to take over. */}
+            {DEMO_MODE && (
               <div style={{
                 display: 'flex', flexDirection: 'column', gap: 10,
                 padding: 14, borderRadius: 'var(--radius)',
@@ -179,72 +257,54 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
                   font: "600 10px 'Geist Mono', monospace",
                   letterSpacing: '.16em', color: 'var(--amber)'
                 }}>
-                  DEMO ACCOUNT — SIGN IN WITH THIS
+                  {hasStoredDemo ? 'DEMO VAULT — THIS TAB' : 'JUST LOOKING?'}
                 </span>
 
-                {/* Deliberately readable, not masked. This password is
-                    published; hiding it would only make it harder to
-                    type on the device that cannot click the button. */}
-                <div
-                  className="vk-r-break"
-                  style={{
-                    font: "500 12px 'Geist Mono', monospace", color: 'var(--text)',
-                    wordBreak: 'break-all', display: 'flex', flexDirection: 'column', gap: 2
-                  }}
-                >
-                  <span>
-                    <span style={{ color: 'var(--muted)', display: 'inline-block', minWidth: 46 }}>email</span>
-                    {DEMO_EMAIL}
+                {demoNotice && (
+                  <span style={{ fontSize: 12, color: 'var(--amber)', textWrap: 'pretty' }}>
+                    {demoNotice}
                   </span>
-                  <span>
-                    <span style={{ color: 'var(--muted)', display: 'inline-block', minWidth: 46 }}>pass</span>
-                    {DEMO_PASSWORD}
-                  </span>
-                </div>
+                )}
 
-                {/* Reads as a control, not a caption: solid border, own
-                    background, full width, and it says what it does. */}
+                {hasStoredDemo && (
+                  <button
+                    type="button"
+                    onClick={resumeDemo}
+                    disabled={demoBusy !== 'idle'}
+                    className="vk-r-touch-y"
+                    style={demoPrimaryButton(demoBusy !== 'idle')}
+                  >
+                    {demoBusy === 'resuming' ? 'OPENING YOUR VAULT…' : 'RESUME YOUR DEMO VAULT'}
+                  </button>
+                )}
+
                 <button
                   type="button"
-                  onClick={() => {
-                    setEmail(DEMO_EMAIL);
-                    setPw(DEMO_PASSWORD);
-                    setError('');
-                    setDemoFilled(true);
-                    clearTimeout(demoFillTimer.current);
-                    demoFillTimer.current = setTimeout(() => setDemoFilled(false), 2200);
-                  }}
+                  onClick={startDemoVault}
+                  disabled={demoBusy !== 'idle'}
                   className="vk-r-touch-y"
-                  style={{
-                    width: '100%',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                    font: "600 12px 'Geist Mono', monospace", letterSpacing: '.1em',
-                    padding: '12px 14px', borderRadius: 'var(--radius)',
-                    border: '1px solid var(--amber)',
-                    background: demoFilled
-                      ? 'color-mix(in srgb, var(--amber) 22%, transparent)'
-                      : 'color-mix(in srgb, var(--amber) 12%, transparent)',
-                    color: 'var(--text)', cursor: 'pointer',
-                    boxShadow: '0 2px 0 color-mix(in srgb, var(--amber) 45%, transparent)',
-                    transition: 'background .15s'
-                  }}
+                  style={hasStoredDemo
+                    ? demoSecondaryButton(demoBusy !== 'idle')
+                    : demoPrimaryButton(demoBusy !== 'idle')}
                 >
-                  {demoFilled
-                    ? <><Icon name="check" size={13} /> FILLED IN — PRESS UNLOCK</>
-                    : 'USE THESE DEMO CREDENTIALS'}
+                  {demoBusy === 'creating'
+                    ? 'CREATING YOUR VAULT…'
+                    : hasStoredDemo ? 'START A FRESH ONE' : 'START A DEMO VAULT'}
                 </button>
 
-                {/* Live region so the confirmation is announced, since
-                    the visual change is a long way from the button on
-                    a narrow screen. */}
+                {/* Announced, because on a narrow screen the button that
+                    changed can be the only thing visible and the wait is
+                    several seconds of Argon2id. */}
                 <span aria-live="polite" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}>
-                  {demoFilled ? 'Demo credentials filled in. Press unlock.' : ''}
+                  {demoBusy === 'creating' ? 'Creating your demo vault. This takes a few seconds.'
+                    : demoBusy === 'resuming' ? 'Reopening your demo vault.'
+                    : demoNotice}
                 </span>
 
                 <span style={{ fontSize: 12, color: 'var(--muted)', textWrap: 'pretty' }}>
-                  Its vault entries are fake. Everything in it was encrypted by a
-                  client that derived the same key from the password above — the
-                  server has never held it.
+                  {demoBusy === 'creating'
+                    ? 'Deriving a key with Argon2id and encrypting five example entries in this browser. The pause is the security working.'
+                    : 'Creates a private vault with five invented entries, encrypted in this browser under a key the server never receives. Nobody else can see it, and it is deleted with everything else at 03:00 UTC.'}
                 </span>
               </div>
             )}
@@ -298,4 +358,40 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
       </div>
     </section>
   );
+}
+
+// The demo actions. Amber like the box they sit in, so they read as
+// part of the demo affordance rather than competing with the green
+// UNLOCK button that submits the real form.
+function demoPrimaryButton(busy) {
+  return {
+    width: '100%',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+    font: "600 12px 'Geist Mono', monospace", letterSpacing: '.1em',
+    padding: '12px 14px', borderRadius: 'var(--radius)',
+    border: '1px solid var(--amber)',
+    background: 'color-mix(in srgb, var(--amber) 12%, transparent)',
+    color: 'var(--text)',
+    cursor: busy ? 'progress' : 'pointer',
+    opacity: busy ? 0.7 : 1,
+    boxShadow: '0 2px 0 color-mix(in srgb, var(--amber) 45%, transparent)',
+    transition: 'background .15s, opacity .15s'
+  };
+}
+
+// Quieter: offered alongside RESUME, where starting over is the less
+// likely intent.
+function demoSecondaryButton(busy) {
+  return {
+    width: '100%',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+    font: "600 11px 'Geist Mono', monospace", letterSpacing: '.1em',
+    padding: '10px 14px', borderRadius: 'var(--radius)',
+    border: '1px solid var(--edge)',
+    background: 'transparent',
+    color: 'var(--muted)',
+    cursor: busy ? 'progress' : 'pointer',
+    opacity: busy ? 0.7 : 1,
+    transition: 'opacity .15s'
+  };
 }
