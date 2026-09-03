@@ -1,11 +1,17 @@
 #!/usr/bin/env node
 /**
- * Nightly wipe and reseed for the public demo.
+ * Nightly wipe for the public demo.
  *
- * Deletes every account on the instance, then recreates the demo
- * account through the ordinary client path. The banner promises this
+ * Deletes every account on the instance. The banner promises this
  * happens; the promise is the reason anyone can be told not to worry
  * about what they typed into a demo.
+ *
+ * It used to reseed a shared demo account afterwards. There is no
+ * shared account any more — every visitor provisions their own vault
+ * in the browser — so the wipe now ends with an EMPTY database and
+ * that is the correct outcome, not a failure. The log says so
+ * explicitly, because the person reading `logs wipe` at 06:00 would
+ * otherwise see "0 accounts" and reasonably assume the seed broke.
  *
  * ---------------------------------------------------------------
  * WHY DELETE AND NOT TRUNCATE
@@ -23,18 +29,17 @@
  * ---------------------------------------------------------------
  * WHY AN ADVISORY LOCK
  * ---------------------------------------------------------------
- * A wipe that overlaps a reseed would delete the account the other
- * half just created and leave the demo empty until the next night.
- * The lock makes a second invocation — a manual run during the
- * scheduled one, say — wait rather than interleave.
+ * Two wipes running at once would have one deleting rows the other is
+ * still counting, and the cascade assertion below would fire on a
+ * count that was never inconsistent. The lock makes a second
+ * invocation — a manual run during the scheduled one, say — wait
+ * rather than interleave.
  *
  *   DATABASE_URL                required
- *   DEMO_EMAIL, DEMO_PASSWORD   required (used by the seed step)
- *   API_URL                     default http://server:3000
+ *   API_URL                     unused since the reseed was removed
  */
 
 const { Client } = require('pg');
-const { seed } = require('./seed-demo');
 
 // Arbitrary but fixed. Any process taking this id is asking for the
 // same thing, which is the point.
@@ -63,6 +68,15 @@ async function wipe() {
       `vault_items now ${items.rows[0].n}, refresh_tokens now ${tokens.rows[0].n}`
     );
 
+    // Spelled out because the alternative is someone reading this at
+    // 06:00, seeing an empty database, and going looking for a seed
+    // step that no longer exists.
+    console.log(
+      '[wipe] the database is now empty, which is the expected end state — ' +
+      'there is no shared demo account to reseed. Visitors provision their ' +
+      'own vault on demand.'
+    );
+
     if (items.rows[0].n !== 0 || tokens.rows[0].n !== 0) {
       // The cascade is the whole basis for using DELETE. If it ever
       // stops holding — a new table added without ON DELETE CASCADE —
@@ -81,7 +95,6 @@ async function wipe() {
 async function main() {
   console.log(`[wipe] starting at ${new Date().toISOString()}`);
   await wipe();
-  await seed();
   console.log(`[wipe] complete at ${new Date().toISOString()}`);
 }
 

@@ -406,8 +406,8 @@ a threat model.
   Recovery refuses them, and says so at the first step rather than after the key
   is typed. The master password still opens the vault, and issuing a new kit
   from Settings restores recovery. On the public demo the exposure is at most a
-  day: the nightly wipe deletes every account, and the reseeded demo account is
-  created with a verifier.
+  day: the nightly wipe deletes every account, and any vault provisioned
+  afterwards is created with a verifier.
 - **`/api/user/kdf-params` is an account-enumeration oracle,** and also reveals
   whether an account has 2FA enabled. It is rate limited. The alternative — a
   two-step login with a separate pending-2FA token — was judged not worth the
@@ -440,22 +440,28 @@ a threat model.
 
 The public demo deployment ([DEPLOY.md](DEPLOY.md)) adds four of its own:
 
-- **The demo account's master password is published**, on its own unlock screen
-  and inside the JavaScript bundle. That one account therefore has no
-  confidentiality at all. It is a throwaway holding invented entries, no other
-  account is affected, and nothing in the key hierarchy was weakened to allow it
-  — the seed script is an ordinary client that derives the same keys the browser
-  would. The alternative, inserting rows the server could read, would have
-  broken the model to save a script.
-- **Everything on the demo is deleted nightly.** An account created there is
-  gone by 03:00 UTC. This is the price of letting strangers sign up on a box
-  that must not accumulate other people's data, and the banner says so before
-  anyone types anything.
-- **The demo exposes its own stored rows** at `/api/demo/stored-material`, so a
-  reviewer can see the ciphertext beside the plaintext without a psql prompt. It
-  is pinned to the demo user id and takes no parameter, and every field it
-  returns is already obtainable by anyone who logs in with the published
-  password. It adds no disclosure; it removes two API calls.
+- **Every visitor provisions their own demo vault, and anyone can create
+  them.** There is no shared demo account and no published password: clicking
+  "Start a demo vault" runs the ordinary signup in the browser, encrypting five
+  invented entries under a key the server never receives. That removes the
+  previous hazard — one shared identity every visitor was authenticated as, and
+  could lock everyone else out of by changing its password or enabling 2FA — but
+  it means account creation is open to anyone who clicks, repeatedly. Nothing
+  bounds that today except the auth rate limit and the nightly wipe. Per-visitor
+  quotas are the fix and are not implemented yet.
+- **Everything on the demo is deleted nightly.** Every account, demo vault and
+  item is gone at 03:00 UTC, and nothing is recreated afterwards — the database
+  is simply empty until the next visitor provisions a vault. This is the price
+  of letting strangers sign up on a box that must not accumulate other people's
+  data, and the banner says so before anyone types anything.
+- **The demo exposes the caller's own stored rows** at
+  `/api/demo/stored-material`, so a reviewer can see the ciphertext beside the
+  plaintext without a psql prompt. It requires authentication and is scoped to
+  the user id on the verified token, so every field it returns is already in
+  that caller's own login response and vault fetch. It used to be pinned to one
+  hardcoded id, which was a stronger property; that pin depended on the shared
+  demo account which no longer exists, and what replaces it is ordinary
+  ownership scoping — the same guarantee `GET /api/vault` gives, no better.
 - **The CSP keeps two relaxations**, and neither can be removed without
   rewriting the UI: `'wasm-unsafe-eval'`, because hash-wasm compiles a
   WebAssembly Argon2id, and `style-src-attr 'unsafe-inline'`, because the
@@ -531,11 +537,12 @@ tokens.
 ### Deploying it publicly
 
 **[DEPLOY.md](DEPLOY.md)** covers a single-VPS deployment behind Caddy with
-automatic HTTPS: `docker-compose.prod.yml`, the nightly wipe, the demo account,
-and what remains exposed.
+automatic HTTPS: `docker-compose.prod.yml`, the nightly wipe, per-visitor demo
+vaults, and what remains exposed.
 
-That setup is a **demo**, not a service. It says so on every screen, publishes
-its demo account's password, and deletes every account once a day.
+That setup is a **demo**, not a service. It says so on every screen, hands each
+visitor a private throwaway vault rather than a shared one, and deletes every
+account once a day.
 
 ### Least-privilege database role
 

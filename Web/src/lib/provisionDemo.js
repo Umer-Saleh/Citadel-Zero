@@ -29,10 +29,11 @@ import { DEMO_FIXTURES } from './demoFixtures';
  *
  * COST — READ BEFORE CALLING THIS FROM ANYWHERE NEW
  * -------------------------------------------------
- * One provision costs one 128 MiB Argon2id derivation in the browser
- * and THREE 64 MiB Argon2 operations on the server: signup hardens
- * both the auth hash and the recovery verifier, then login verifies.
- * The API container has a 640 MB limit.
+ * One provision costs TWO 128 MiB Argon2id derivations in this
+ * browser — signup derives, then login derives again from the same
+ * password — and THREE 64 MiB Argon2 operations on the server: signup
+ * hardens both the auth hash and the recovery verifier, then login
+ * verifies. The API container has a 640 MB limit.
  *
  * So this must only ever run from a deliberate user action. It must
  * never be called from an effect, a route match, a retry, or anything

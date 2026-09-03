@@ -1,11 +1,11 @@
 # Deploying the public demo
 
 How to put Citadel Zero on a single Ubuntu VPS behind HTTPS, as a demo
-instance that wipes and reseeds itself nightly.
+instance that wipes itself nightly.
 
 **This deployment is a portfolio demo, not a service.** It advertises that on
-every screen, publishes the demo account's password, and deletes every account
-once a day. Nothing here is suitable for real credentials, and the
+every screen, gives each visitor a private throwaway vault rather than a shared
+account, and deletes every account once a day. Nothing here is suitable for real credentials, and the
 [README's accepted limitations](README.md#accepted-limitations) say why.
 
 Local development is unaffected by everything in this file — `docker-compose.yml`
@@ -23,8 +23,8 @@ still works exactly as the README describes.
 | `db` | `postgres:17-alpine` | — | named volume `pgdata` |
 | `redis` | `redis:7-alpine` | — | rate-limit counters, no persistence |
 | `migrate` | built from `Server/` | — | one shot: migrations, then grants |
-| `seed` | built from `Server/` | — | one shot: creates the demo account |
-| `wipe` | built from `Server/` | — | sleeps until 03:00 UTC, wipes, reseeds |
+| `seed` | built from `Server/` | — | one shot: no-op, kept so compose still starts |
+| `wipe` | built from `Server/` | — | sleeps until 03:00 UTC and wipes; no reseed |
 
 Caddy is the only container that publishes a port. Postgres and Redis are
 reachable only from inside the compose network.
@@ -238,8 +238,9 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
 
 Migrations run automatically as their own service, and the server waits for them
 to *complete* rather than merely start. The grants re-apply on every deploy,
-which is how a table added by a new migration gets picked up. `seed` is a no-op
-when the demo account already exists, so a redeploy never disturbs it.
+which is how a table added by a new migration gets picked up. `seed` does
+nothing at all now — visitors provision their own vaults — but it still runs and
+still exits 0, because compose declares the service.
 
 ### When you must rebuild the frontend from scratch
 
@@ -298,10 +299,16 @@ per request. Cap it before it matters:
 
 ## 6. The nightly wipe
 
-The `wipe` container sleeps until `WIPE_HOUR_UTC` (default 03:00), deletes every
-account, and reseeds the demo one. A single `DELETE FROM users` clears everything
-because all three child tables cascade — which also means it runs under the same
-least-privilege role as the API, needing no elevation.
+The `wipe` container sleeps until `WIPE_HOUR_UTC` (default 03:00) and deletes
+every account. A single `DELETE FROM users` clears everything because all three
+child tables cascade — which also means it runs under the same least-privilege
+role as the API, needing no elevation.
+
+**It no longer reseeds anything, so a successful wipe ends with an empty
+database.** That is the expected outcome, not a failure. The log says so in
+as many words; if you are reading `logs wipe` in the morning, "0 accounts" is
+what a healthy night looks like. The next visitor to click "Start a demo vault"
+creates one.
 
 The scheduler is a shell loop rather than crond, because BusyBox crond wants to
 run as root and this image runs as the unprivileged `node` user. It recomputes
@@ -320,12 +327,8 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod \
   run --rm wipe node scripts/wipe-demo.js
 ```
 
-Reseed **without** wiping — safe, it exits immediately if the account exists:
-
-```bash
-docker compose -f docker-compose.prod.yml --env-file .env.prod \
-  run --rm seed node scripts/seed-demo.js
-```
+There is no reseed command any more. `seed` is a no-op kept only so the compose
+service it belongs to still exits 0; running it by hand prints why and stops.
 
 An advisory lock stops a manual run from interleaving with the scheduled one.
 
@@ -357,14 +360,10 @@ snapshot:
 0 2 * * * /home/deploy/bin/backup-citadel.sh >> /home/deploy/backups/backup.log 2>&1
 ```
 
-**If the demo account is simply missing** — the wipe ran but the reseed failed —
-you do not need a backup. Nothing of value was lost; that is the entire premise
-of a demo that wipes nightly. Just reseed:
-
-```bash
-docker compose -f docker-compose.prod.yml --env-file .env.prod \
-  run --rm seed node scripts/seed-demo.js
-```
+**If the site has no demo data**, that is not a fault to repair. After a wipe
+the database is empty by design, and it stays that way until someone clicks
+"Start a demo vault" on the unlock screen. Open the site and click it; if a
+vault appears with five entries, the whole path is working.
 
 **If the wipe container is crash-looping**, it will not take the site down — a
 failed run logs and waits for the next slot rather than exiting. Stop it while
@@ -449,10 +448,13 @@ than one that does not.
   user is told at the start of the flow rather than after typing a key that
   cannot work. The master password still opens those vaults; issuing a new kit
   from Settings restores recovery. This self-heals here within a day, because
-  the nightly wipe deletes every account and the reseeded demo account always
-  has a verifier.
-- **The demo account's password is public**, so that account has no
-  confidentiality. It holds invented data.
+  the nightly wipe deletes every account and any vault provisioned afterwards
+  always has a verifier.
+- **Anyone can create demo vaults, without limit.** Each one costs two Argon2id
+  derivations in the visitor's browser and three 64 MiB Argon2 operations on the
+  API, and nothing caps how many a single address may create beyond the auth
+  rate limit. The nightly wipe bounds how long they accumulate. Per-visitor
+  quotas are the proper fix and are not implemented yet.
 - **The CSP allows a WebAssembly compile and inline style attributes.**
   `'wasm-unsafe-eval'` is what lets hash-wasm derive an Argon2id key at all, and
   `style-src-attr 'unsafe-inline'` is what lets React's `style={{}}` props
@@ -466,9 +468,9 @@ than one that does not.
   the next slot without drifting — but if the container is not running *at*
   `WIPE_HOUR_UTC:00`, because a host reboot or redeploy spanned that minute, the
   loop resolves to tomorrow and that night is skipped silently. The window is a
-  minute wide and the consequence is that the demo account survives an extra
-  day, so this is accepted rather than fixed; persisting the last-run timestamp
-  would be the fix. `logs wipe | grep '\[wipe\]'` shows whether last night's run
+  minute wide and the consequence is that a day of visitor vaults survives an
+  extra day, so this is accepted rather than fixed; persisting the last-run
+  timestamp would be the fix. `logs wipe | grep '\[wipe\]'` shows whether last night's run
   happened, and a missed night can be caught up with the manual run above.
 - **`TRUST_PROXY` is a hop count, not a list.** It is set to 1, meaning exactly
   one proxy — Caddy. Putting a CDN or another reverse proxy in front without
