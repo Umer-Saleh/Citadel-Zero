@@ -65,12 +65,23 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
       // flipped and App is swapping to the vault. The remaining item
       // writes finish against a context that is still mounted.
     } catch (e) {
+      // Logged, always. An earlier version reported only e.code, and a
+      // DOMException from crypto.subtle has no .code — so a real
+      // defect (a null DEK, five failed writes) rendered as a bare
+      // "could not create a demo vault" with nothing in the console.
+      // That cost a full click-through to diagnose something a stack
+      // trace would have named immediately.
+      console.error('[demo] provisioning failed:', e);
+
       setDemoBusy('idle');
       setError(
         e.code === 'NETWORK_ERROR' ? 'Cannot reach the server.'
         : e.code === 'TOO_MANY_ATTEMPTS'
           ? 'Too many demo vaults have been created from this network recently. Wait a few minutes and try again.'
-        : `Could not create a demo vault${e.code ? ` (${e.code})` : ''}.`
+        // Fall back to the message when there is no code. Ugly on
+        // screen, but an unexpected failure should be identifiable
+        // from the UI alone rather than only from the console.
+        : `Could not create a demo vault${e.code ? ` (${e.code})` : e.message ? `: ${e.message}` : '.'}`
       );
     }
   }
@@ -97,10 +108,12 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
         setDemoBusy('idle');
       }
     } catch (e) {
+      console.error('[demo] resume failed:', e);
+
       setDemoBusy('idle');
       setError(
         e.code === 'NETWORK_ERROR' ? 'Cannot reach the server.'
-        : `Could not reopen that demo vault${e.code ? ` (${e.code})` : ''}.`
+        : `Could not reopen that demo vault${e.code ? ` (${e.code})` : e.message ? `: ${e.message}` : '.'}`
       );
     }
   }
