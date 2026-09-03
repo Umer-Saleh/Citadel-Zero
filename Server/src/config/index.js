@@ -33,6 +33,33 @@ const schema = z.object({
   API_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(300),
   RATE_LIMIT_WINDOW_MINUTES: z.coerce.number().int().positive().default(15),
 
+  // Signup has its own bucket, separate from AUTH_RATE_LIMIT_MAX.
+  //
+  // It used to share it, and the shared budget was what a public demo
+  // actually ran out of: provisioning a demo vault spent signup, then
+  // kdf-params, then login — three requests from one counter, so a
+  // limit of 24 allowed only eight vaults per address per window.
+  // Behind a corporate NAT or conference wifi that is a handful of
+  // visitors before everyone else is told TOO_MANY_ATTEMPTS.
+  //
+  // Separating it lets the two be tuned for what they each defend
+  // against. AUTH_RATE_LIMIT_MAX slows credential guessing and email
+  // enumeration and wants to stay low; this one bounds how many
+  // ACCOUNTS one address may create, and is measured in accounts.
+  // Twenty per address per fifteen minutes is a number a scanner hits
+  // and a room full of people does not.
+  //
+  // Not unbounded, because signup is the most expensive request the
+  // API serves: two 64 MiB Argon2 hardening operations against a
+  // 640 MB container limit.
+  //
+  // NOTE ON TUNING: docker-compose.prod.yml passes environment through
+  // an explicit `environment:` map with no `env_file:`, so setting
+  // this in .env.prod does NOT reach the container. The default below
+  // is what production runs until a line is added to that map. See the
+  // commented entry in .env.prod.example.
+  SIGNUP_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(20),
+
   // Public-demo mode. Off unless explicitly enabled, so nothing here
   // can switch itself on in a real deployment by accident.
   DEMO_MODE: z.enum(['true', 'false']).default('false'),

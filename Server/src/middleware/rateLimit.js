@@ -27,6 +27,9 @@ const noLimit = (req, res, next) => next();
  * /api/, a handful of ordinary vault reads spends the auth budget and
  * locks every visitor out of login. Measured, not theorised: five GETs
  * to /api/vault turned three logins into 429s.
+ *
+ * Three prefixes now, all distinct and none a prefix of another:
+ * rl:auth:, rl:api:, rl:signup:.
  */
 let client = null;
 
@@ -84,10 +87,32 @@ const authLimiter = build('rl:auth:', {
   message: { error: 'TOO_MANY_ATTEMPTS' }
 });
 
+/**
+ * Signup, on its own counter.
+ *
+ * Split out of authLimiter because the two bound different things and
+ * pulling in opposite directions on one number served neither. The
+ * auth budget defends credential guessing and wants to stay small;
+ * this one bounds account creation and is measured in accounts, so it
+ * can be more generous without loosening anything about guessing.
+ *
+ * The concrete failure it fixes: creating a demo vault cost three
+ * requests from the shared bucket, and running it dry mid-flight left
+ * a visitor with an account they could not log into.
+ *
+ * Same TOO_MANY_ATTEMPTS body as authLimiter, deliberately. A client
+ * that already handles one 429 shape should not need a second.
+ */
+const signupLimiter = build('rl:signup:', {
+  windowMs,
+  max: config.SIGNUP_RATE_LIMIT_MAX,
+  message: { error: 'TOO_MANY_ATTEMPTS' }
+});
+
 const apiLimiter = build('rl:api:', {
   windowMs,
   max: config.API_RATE_LIMIT_MAX,
   message: { error: 'TOO_MANY_REQUESTS' }
 });
 
-module.exports = { authLimiter, apiLimiter };
+module.exports = { authLimiter, apiLimiter, signupLimiter };

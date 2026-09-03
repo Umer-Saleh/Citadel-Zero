@@ -6,7 +6,7 @@ const vaultService = require('./services/vaultService');
 const { AppError } = require('./errors/AppError');
 
 const { requireAuth } = require('./middleware/requireAuth');
-const { authLimiter, apiLimiter } = require('./middleware/rateLimit');
+const { authLimiter, apiLimiter, signupLimiter } = require('./middleware/rateLimit');
 const { validate } = require('./middleware/validate');
 const {
   signupSchema, loginSchema, kdfParamsQuerySchema,
@@ -54,7 +54,11 @@ app.use(express.json({ limit: '64kb' }));
 app.use('/api/', apiLimiter);
 app.use('/api/auth/refresh', authLimiter);
 app.use('/api/auth/login', authLimiter);
-app.use('/api/auth/signup', authLimiter);
+// Its own bucket, not authLimiter. Account creation and credential
+// guessing want different limits, and sharing one counter meant the
+// tighter of the two governed both. Every other route below is
+// unchanged.
+app.use('/api/auth/signup', signupLimiter);
 app.use('/api/user/kdf-params', authLimiter);   // also an enumeration oracle
 app.use('/api/account/password', authLimiter);
 app.use('/api/account/recovery-material', authLimiter);
