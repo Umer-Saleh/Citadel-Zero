@@ -48,7 +48,33 @@ export function VaultLayout({selected, onSelect, forgedPassword, onForgedConsume
             // passing it through raw let an id survive into what the
             // user sees as a blank form, which then offered DELETE.
             itemId={selected ?? null}
-            onDone={() => onSelect(undefined)}
+            // FINISHED **OR** ABANDONED. Saving, deleting and closing
+            // all land here, because all three mean the same thing to
+            // this layout: nothing is selected any more.
+            //
+            // undefined, never null. null is the "blank new entry"
+            // state, so closing with null would drop the user into an
+            // empty ADD form instead of the hint.
+            onDone={() => {
+              onSelect(undefined);
+
+              // Stacked layout only. On a phone an open entry renders
+              // ABOVE the list (vk-r-first, order:-1), so closing
+              // deletes the content the user is scrolled into and
+              // leaves them somewhere arbitrary in the list. Side by
+              // side at desktop widths nothing moves, so scrolling
+              // there would be a jump with no cause.
+              // Instant, NOT smooth. A smooth scroll starts animating
+              // from the current offset and is still running when React
+              // unmounts the panel in this same commit; the document
+              // then shrinks and the animation is clamped partway.
+              // Measured: closing from 900px landed at 238px rather
+              // than 0. An instant scroll cannot be interrupted by the
+              // reflow it precedes.
+              if (window.matchMedia?.('(max-width: 640px)').matches) {
+                window.scrollTo(0, 0);
+              }
+            }}
             injectedPassword={forgedPassword}
             // Cleared as soon as the panel has it, so a later close
             // can't leave a live password sitting in App's state.

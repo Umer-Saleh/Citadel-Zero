@@ -25,6 +25,11 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
 
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  // Set when Escape was pressed on a form with unsaved edits, so the
+  // key can explain why it did nothing. A key that appears broken is
+  // worse than one that refuses out loud.
+  const [escapeBlocked, setEscapeBlocked] = useState(false);
+
   // Seconds left before the clipboard is wiped, and which field is on
   // it. null = nothing of ours is there, so no meter renders.
   const [copyLeft, setCopyLeft] = useState(null);
@@ -41,6 +46,13 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
     it.id !== itemId &&
     (it.data.site || '').trim().toLowerCase() === form.site.trim().toLowerCase()
   );
+
+  // Unsaved edits, compared field by field against what this panel
+  // opened with — `base` is the stored entry, or EMPTY for a new one.
+  // Drives ONLY the Escape refusal below. The X ignores it and closes
+  // regardless: a deliberate click on a close control is an answer,
+  // whereas Escape is a key people hit by reflex, often mid-password.
+  const dirty = Object.keys(EMPTY).some(k => (form[k] || '') !== (base[k] || ''));
 
   // A soft warning, not a rule.
   //
@@ -104,6 +116,50 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
   // right after copying, the clear must still happen.
   useEffect(() => () => detachClip.current?.(), []);
 
+  /**
+   * Escape closes the panel.
+   *
+   * Scoped to this component and torn down with it, rather than a
+   * global handler: nothing outside an open entry should be listening
+   * for this key.
+   *
+   * ORDER MATTERS. The delete confirmation is portalled to
+   * document.body, so a listener that went straight to onDone() would
+   * unmount ItemDetail and take the modal down with it — visually
+   * identical to the delete having gone through. Escape therefore
+   * dismisses the modal first and only closes the entry when no modal
+   * is open.
+   *
+   * A dirty form refuses and says so. See `dirty` above for why the X
+   * does not.
+   *
+   * This does not interfere with the idle auto-lock, which listens for
+   * keydown on window purely to reset its timer and never inspects the
+   * key or stops propagation — so Escape still counts as activity.
+   */
+  useEffect(() => {
+    function onKeyDown(e) {
+      if (e.key !== 'Escape') return;
+
+      if (confirmDelete) { setConfirmDelete(false); return; }
+      if (dirty) { setEscapeBlocked(true); return; }
+
+      onDone();
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [confirmDelete, dirty, onDone]);
+
+  // The refusal is transient. Leaving it up would turn a one-off
+  // explanation into a permanent warning about a state the user is
+  // deliberately in.
+  useEffect(() => {
+    if (!escapeBlocked) return;
+    const t = setTimeout(() => setEscapeBlocked(false), 5000);
+    return () => clearTimeout(t);
+  }, [escapeBlocked]);
+
   // A password arrived from the forge. Merge it into whatever the user
   // has already typed, rather than remounting to seed it — a remount
   // would deliver the password at the cost of the entire draft.
@@ -154,7 +210,53 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
               </a>
             )}
           </div>
+
+          {/* Pushes the close control to the right edge. The title
+              column above carries minWidth:0 and ellipsis, so it is
+              the part that gives way when the header runs out of
+              room — the avatar and this button keep their size. */}
+          <div style={{ flex: 1 }} />
+
+          {/* Closes unconditionally, including with unsaved edits.
+              vk-r-touch raises it to the 44px minimum at <=640px and
+              leaves the desktop size alone, since the rule is a
+              minimum rather than a fixed size. */}
+          <IconButton
+            title="Close entry"
+            aria-label="Close entry"
+            onClick={onDone}
+            className="vk-r-touch"
+            // Square, because a centre-aligned header gives it no
+            // height to inherit. vk-r-touch raises this to 44 at
+            // <=640px — min-width/min-height outrank width/height, so
+            // the two do not fight.
+            style={{ width: 32, height: 32, padding: 0 }}
+          >
+            <Icon name="x" />
+          </IconButton>
         </div>
+
+        {/* Escape was pressed on a form with unsaved edits. Its own
+            row beneath the divider rather than inside the header, so
+            it never competes with the entry name for width at 375px.
+            Same amber, glyph and mono scale as the password-reuse
+            warning further down — one visual language for "careful". */}
+        {escapeBlocked && (
+          <div style={{
+            display: 'flex', gap: 8, alignItems: 'flex-start',
+            animation: 'riseIn .22s cubic-bezier(.2,.9,.3,1) both'
+          }}>
+            <span style={{ color: 'var(--amber)', marginTop: 1 }}>
+              <Icon name="shield" size={14} />
+            </span>
+            <span style={{
+              font: "500 12px 'Geist Mono', monospace",
+              letterSpacing: '.06em', color: 'var(--amber)', textWrap: 'pretty'
+            }}>
+              UNSAVED CHANGES — ESCAPE WILL NOT CLOSE. SAVE, OR USE X TO DISCARD THEM.
+            </span>
+          </div>
+        )}
 
         {/* ---- NAME ---- */}
         <Field label="Name">
@@ -399,7 +501,12 @@ function PanelTextarea(props) {
   );
 }
 
-function IconButton({ children, ...props }) {
+// `style` is merged rather than ignored. The copy and reveal buttons
+// sit in a flex row beside an input and stretch to its height for
+// free; the close button sits in a centre-aligned header and would
+// otherwise collapse to the icon's own 16px. No existing caller passes
+// a style, so this changes nothing that already worked.
+function IconButton({ children, style, ...props }) {
   const [down, setDown] = useState(false);
   return (
     <button
@@ -414,7 +521,8 @@ function IconButton({ children, ...props }) {
         color: 'var(--muted)', cursor: 'pointer',
         boxShadow: down ? '0 0 0 var(--edge)' : '0 2px 0 var(--edge)',
         transform: down ? 'translateY(2px)' : 'none',
-        transition: 'transform .05s, box-shadow .05s'
+        transition: 'transform .05s, box-shadow .05s',
+        ...style
       }}
     >
       {children}
