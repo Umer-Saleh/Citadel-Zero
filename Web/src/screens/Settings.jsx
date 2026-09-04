@@ -435,7 +435,15 @@ function ChangePassword({ email, changePassword }) {
 // blobs: a stolen password alone can no longer pull them down.
 // ---------------------------------------------------------------
 function TwoFactor({ email }) {
-  // 'loading' | 'off' | 'scanning' | 'codes' | 'on' | 'disabling'
+  // 'loading' | 'unknown' | 'off' | 'scanning' | 'codes' | 'on' | 'disabling'
+  //
+  // 'unknown' is not a nicety. The probe below used to fail into 'off',
+  // which is a claim — and for the user it most matters to, a false
+  // one: someone with 2FA ON, on a flaky connection, was shown a
+  // section saying it was off and inviting them to enable it. Enrolment
+  // from there returns TOTP_ALREADY_ENABLED and reads as a broken app.
+  // "We could not check" and "it is off" are different facts and now
+  // render differently.
   const [phase, setPhase] = useState('loading');
   const [secret, setSecret] = useState('');
   const [qr, setQr] = useState('');
@@ -445,15 +453,38 @@ function TwoFactor({ email }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
+  // Why the status check failed. Separate from `error`, which belongs
+  // to an action the user took — nobody pressed anything to get this
+  // one, and the two are never on screen together.
+  const [probeError, setProbeError] = useState('');
+
+  // Bumping this re-runs the probe. RECHECK goes through the effect so
+  // a second failure takes the same path as the first.
+  const [probeNonce, setProbeNonce] = useState(0);
+
   useEffect(() => {
     let alive = true;
     totpApi.isEnabled(email)
       .then(on => { if (alive) setPhase(on ? 'on' : 'off'); })
-      .catch(() => { if (alive) setPhase('off'); });
+      .catch(e => {
+        console.error('[totp] status check failed:', e);
+        if (!alive) return;
+        setProbeError(
+          e?.code === 'NETWORK_ERROR' ? 'Cannot reach the server.'
+          : `The check failed${e?.code ? ` (${e.code})` : ''}.`
+        );
+        setPhase('unknown');
+      });
     // `alive` guards against setting state after the user navigates
     // away mid-request.
     return () => { alive = false; };
-  }, [email]);
+  }, [email, probeNonce]);
+
+  function recheck() {
+    setProbeError('');
+    setPhase('loading');
+    setProbeNonce(n => n + 1);
+  }
 
   function fail(e, fallback) {
     setError(
@@ -555,6 +586,46 @@ function TwoFactor({ email }) {
 
       {phase === 'loading' && (
         <div style={{ fontSize: 13, color: 'var(--muted)' }}>Checking…</div>
+      )}
+
+      {/* ---- UNKNOWN — the status check failed ----
+          Amber, not red, and no ENABLE button. Nothing is broken and
+          the user did nothing wrong; we simply do not know the answer,
+          and a control that acts on an unknown state is how the old
+          behaviour turned one failed request into a confusing
+          TOTP_ALREADY_ENABLED. RECHECK is the only thing on offer. */}
+      {phase === 'unknown' && (
+        <>
+          <div
+            role="alert"
+            style={{
+              display: 'flex', gap: 10, alignItems: 'flex-start',
+              border: '1px solid color-mix(in srgb, var(--amber) 55%, var(--edge))',
+              borderRadius: 'var(--radius)', padding: '14px 16px'
+            }}
+          >
+            <span style={{ color: 'var(--amber)', marginTop: 2, flexShrink: 0 }}>
+              <Icon name="shield" size={16} />
+            </span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span style={{ font: "600 11px 'Geist Mono', monospace", letterSpacing: '.16em', color: 'var(--amber)' }}>
+                STATUS UNKNOWN
+              </span>
+              <span style={{ fontSize: 13, color: 'var(--muted)', textWrap: 'pretty' }}>
+                {probeError} We could not check whether two-factor is on for this
+                account, so nothing is offered here until we can. This does not
+                change your current setting either way.
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <Button variant="secondary" onClick={recheck}
+              style={{ font: '600 12px Geist, sans-serif', padding: '11px 18px' }}>
+              RECHECK
+            </Button>
+          </div>
+        </>
       )}
 
       {/* ---- OFF ---- */}

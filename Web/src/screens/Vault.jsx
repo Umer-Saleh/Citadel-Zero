@@ -17,9 +17,58 @@ export function Vault({ onSelectItem, onAddItem, selectedId }) {
   const [loading, setLoading] = useState(true);
   const [searchFocus, setSearchFocus] = useState(false);
 
+  // The load FAILED, as opposed to succeeding with nothing in it.
+  //
+  // This used to be `.finally(() => setLoading(false))` — no catch at
+  // all. A rejected load left `items` at its initial [], cleared the
+  // loading flag, and rendered the dashed empty state: a vault that
+  // could not be reached was reported to its owner as a vault with
+  // nothing in it. In a password manager that is the worst thing this
+  // screen can say, and it said it for every cause — a dead network,
+  // a 500, an expired session, a failed decrypt.
+  //
+  // Kept as its own state rather than folded into `loading` so the
+  // three outcomes stay three: still working, failed, empty.
+  const [loadError, setLoadError] = useState('');
+
+  // Bumping this re-runs the effect below. RETRY goes through the
+  // effect rather than calling loadItems() directly, so a second
+  // failure takes exactly the same path as the first.
+  const [reloadNonce, setReloadNonce] = useState(0);
+
+  // The retry's own reset lives here rather than at the top of the
+  // effect. Same result, and it keeps the effect free of a synchronous
+  // setState — `loading` and `loadError` already hold these values on
+  // first mount, so only a retry has anything to reset.
+  function retry() {
+    setLoading(true);
+    setLoadError('');
+    setReloadNonce(n => n + 1);
+  }
+
   useEffect(() => {
-    loadItems().finally(() => setLoading(false));
-  }, [loadItems]);
+    let alive = true;
+
+    loadItems()
+      .catch(e => {
+        // Always logged. The message below is deliberately vague about
+        // the cause — a visitor cannot act on VALIDATION_FAILED — but
+        // whoever is debugging this needs the real exception, and a
+        // DOMException out of the decrypt path carries no .code at all.
+        console.error('[vault] load failed:', e);
+        if (!alive) return;
+        setLoadError(
+          e?.code === 'NETWORK_ERROR' ? 'Cannot reach the server.'
+          : `Could not load your vault${e?.code ? ` (${e.code})` : ''}.`
+        );
+      })
+      .finally(() => { if (alive) setLoading(false); });
+
+    // The vault re-locks on unmount often enough — idle timeout, LOCK,
+    // a dead refresh token — that a late rejection landing on a
+    // component that is gone is routine, not exceptional.
+    return () => { alive = false; };
+  }, [loadItems, reloadNonce]);
 
   const q = search.toLowerCase();
   const filtered = items
@@ -75,6 +124,11 @@ export function Vault({ onSelectItem, onAddItem, selectedId }) {
 
       {loading ? (
         <div style={{ color: 'var(--muted)', padding: 24, font: "500 13px 'Geist Mono', monospace" }}>Decrypting your vault…</div>
+      ) : loadError ? (
+        /* Checked BEFORE items.length. A failed load leaves `items`
+           empty, so the empty state would otherwise win and tell the
+           user their vault has nothing in it. */
+        <LoadFailed message={loadError} onRetry={retry} />
       ) : items.length === 0 ? (
         <EmptyState />
       ) : (
@@ -189,6 +243,54 @@ function ItemRow({ item, index, onClick, selected }) {
   );
 }
 
+/**
+ * The vault could not be loaded.
+ *
+ * Deliberately NOT a variant of EmptyState. It reads as a different
+ * kind of thing at a glance — red edge instead of a dashed one, the
+ * guarding pose instead of the floating at-ease one, no "PRESS + ADD"
+ * invitation — because the two states were previously indistinguishable
+ * and that is the whole point of this screen.
+ *
+ * The retry is what makes it actionable. Every cause here is transient
+ * or fixable (a dropped connection, a 500, a session that just died and
+ * will bounce the user to unlock on the next request), so offering the
+ * request again is nearly always the right next move.
+ */
+function LoadFailed({ message, onRetry }) {
+  return (
+    <div
+      role="alert"
+      style={{
+        border: '1px solid var(--red)', borderRadius: 'var(--radius)', background: 'var(--surface)',
+        padding: '64px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20,
+        textAlign: 'center',
+        animation: 'riseIn .5s cubic-bezier(.2,.9,.3,1) both'
+      }}
+    >
+      <Paladin pose="guard" size={96} />
+
+      <div style={{ fontFamily: "'Press Start 2P', monospace", fontSize: 13, color: 'var(--red)', lineHeight: 1.6 }}>
+        VAULT UNREACHABLE
+      </div>
+
+      {/* The distinction that matters, said in words as well as in
+          colour: this is not an empty vault. */}
+      <div style={{ fontSize: 13, color: 'var(--muted)', maxWidth: 340, textWrap: 'pretty' }}>
+        {message} Your entries are safe — this is the request failing, not your
+        vault being empty.
+      </div>
+
+      {/* No icon: the pixel family has no reload glyph, and Icon
+          renders nothing for a name it doesn't know rather than
+          failing loudly. A word is the safer control. */}
+      <button onClick={onRetry} className="vk-r-touch-y" style={retryBtn}>
+        RETRY
+      </button>
+    </div>
+  );
+}
+
 function EmptyState() {
   return (
     <div style={{
@@ -215,6 +317,19 @@ const primaryBtn = {
   padding: '0 20px', borderRadius: 'var(--radius)',
   border: '1px solid var(--green-deep)', background: 'var(--green)', color: 'var(--on-green)',
   cursor: 'pointer', boxShadow: '0 3px 0 var(--green-deep), 0 14px 28px -10px var(--glow)'
+};
+
+
+// Outlined rather than filled: retrying a load is a recovery action,
+// not the screen's primary call to action, and a second green button
+// competing with ADD would misrepresent that. Same depth shadow and
+// 3px radius as everything else.
+const retryBtn = {
+  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+  font: "600 12px 'Geist Mono', monospace", letterSpacing: '.12em',
+  padding: '12px 28px', borderRadius: 'var(--radius)',
+  border: '1px solid var(--edge)', background: 'transparent', color: 'var(--text)',
+  cursor: 'pointer', boxShadow: '0 2px 0 var(--edge)'
 };
 
 

@@ -25,6 +25,16 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
 
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  // A save or a delete that FAILED.
+  //
+  // Both handlers below used to be bare `catch { setSaving(false) }`.
+  // The button un-busied, the panel stayed open, and nothing else
+  // changed — so a failed save was pixel-identical to a save the user
+  // had not pressed yet, and the natural response was to press it
+  // again against a server that had just refused. One slot for both,
+  // because only one of the two can be in flight at a time.
+  const [actionError, setActionError] = useState('');
+
   // Set when Escape was pressed on a form with unsaved edits, so the
   // key can explain why it did nothing. A key that appears broken is
   // worse than one that refuses out loud.
@@ -67,6 +77,7 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
 
   async function save() {
     if (nameTaken) return;   // the button is disabled, but don't rely on that alone
+    setActionError('');
     setSaving(true);
     try {
       // Encryption happens inside addItem/updateItem (VaultContext),
@@ -75,8 +86,16 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
       else await addItem(form);
       react('save');
       onDone();
-    } catch {
+    } catch (e) {
+      // Logged before anything is rendered. encryptItem can throw a
+      // DOMException out of crypto.subtle with no .code at all, so the
+      // console line is the only place the real cause survives.
+      console.error('[vault] save failed:', e);
       setSaving(false);
+      setActionError(
+        e?.code === 'NETWORK_ERROR' ? 'Cannot reach the server — nothing was saved.'
+        : `Could not save this entry${e?.code ? ` (${e.code})` : ''}. Your changes are still here — try again.`
+      );
     }
   }
 
@@ -85,6 +104,7 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
     // gated on itemId, but a stale id reaching here would send a
     // DELETE for someone else's row.
     if (!itemId) { setConfirmDelete(false); return; }
+    setActionError('');
     setDeleting(true);
     try {
       await deleteItem(itemId);
@@ -92,8 +112,21 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
       // irreversible happened, which is worth more here than anywhere.
       react('remove');
       onDone();
-    } catch {
+    } catch (e) {
+      console.error('[vault] delete failed:', e);
       setDeleting(false);
+
+      // Close the confirmation. The modal is portalled over the panel,
+      // so leaving it up would hide the message explaining why the
+      // entry is still there — and re-offering a red DELETE button
+      // invites exactly the retry that just failed. Dropping back to
+      // the panel puts the reason directly above the control that
+      // started this.
+      setConfirmDelete(false);
+      setActionError(
+        e?.code === 'NETWORK_ERROR' ? 'Cannot reach the server — this entry was not deleted.'
+        : `Could not delete this entry${e?.code ? ` (${e.code})` : ''}. It is still in your vault.`
+      );
     }
   }
 
@@ -351,6 +384,17 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
         <Field label="Notes">
           <PanelTextarea value={form.notes} onChange={set('notes')} name="vk-entry-notes" />
         </Field>
+
+        {/* A save or delete that failed. Its own row immediately above
+            the buttons, so the explanation sits between the form and
+            the control that produced it — and, at 375px where the
+            actions row is the last thing on screen, it cannot be
+            scrolled past on the way to pressing SAVE again. */}
+        {actionError && (
+          <div role="alert" style={{ fontSize: 13, color: 'var(--red)', textWrap: 'pretty' }}>
+            {actionError}
+          </div>
+        )}
 
         {/* ---- ACTIONS: delete left, save right, spacer between ---- */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingTop: 4 }}>
