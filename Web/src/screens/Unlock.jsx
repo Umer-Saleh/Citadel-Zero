@@ -8,6 +8,21 @@ import {
   provisionDemoVault, resumeDemoVault, loadDemoCredentials
 } from '../lib/provisionDemo';
 
+// One string, two callers. Provisioning and resuming both spend the
+// auth rate limit and can be refused for the same reason, so both say
+// the same thing — declared once so the two cannot drift apart.
+const RATE_LIMITED =
+  'Too many demo vaults have been created from this network recently. Wait a few minutes and try again.';
+
+// Why a resumed vault can be unreachable. Two causes, two
+// explanations: only one of them is the nightly wipe, and saying "your
+// vault was deleted at 03:00" to someone who locked themselves out
+// with an authenticator would be false.
+const RESUME_NOTICE = {
+  gone: 'The demo vault from earlier in this tab is gone — the whole database is deleted at 03:00 UTC. Start a new one below.',
+  totp: "You turned on two-factor authentication for this vault. Reopening it needs a code from your authenticator, and the demo has no way to ask for one — so this vault can't be reopened. Everything here is deleted at 03:00 UTC regardless. Start a fresh one below."
+};
+
 export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
   const { login, signup, addItem } = useVault();
   const { pose: pixPose, says: pixSays } = usePix();
@@ -76,8 +91,7 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
       setDemoBusy('idle');
       setError(
         e.code === 'NETWORK_ERROR' ? 'Cannot reach the server.'
-        : e.code === 'TOO_MANY_ATTEMPTS'
-          ? 'Too many demo vaults have been created from this network recently. Wait a few minutes and try again.'
+        : e.code === 'TOO_MANY_ATTEMPTS' ? RATE_LIMITED
         // Fall back to the message when there is no code. Ugly on
         // screen, but an unexpected failure should be identifiable
         // from the UI alone rather than only from the console.
@@ -94,17 +108,21 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
     setDemoBusy('resuming');
 
     try {
-      const reopened = await resumeDemoVault({ login });
+      // true, or the REASON it could not be reopened.
+      const outcome = await resumeDemoVault({ login });
 
-      if (!reopened) {
-        // The account is gone — the nightly wipe is the ordinary
-        // reason. resumeDemoVault has already dropped the stale
-        // credentials. Say what happened plainly and offer a new
-        // vault; do NOT create one unasked.
+      if (outcome !== true) {
+        // The vault is unreachable — wiped overnight, or locked behind
+        // an authenticator this screen cannot ask for.
+        // resumeDemoVault has already dropped the stale credentials.
+        // Say which of the two happened and offer a new vault; do NOT
+        // create one unasked.
+        //
+        // demoNotice, not the red error slot: nothing failed here. The
+        // demo behaved exactly as designed and the visitor needs an
+        // explanation, not an alarm.
         setHasStoredDemo(false);
-        setDemoNotice(
-          'The demo vault from earlier in this tab is gone — the whole database is deleted at 03:00 UTC. Start a new one below.'
-        );
+        setDemoNotice(RESUME_NOTICE[outcome] ?? RESUME_NOTICE.gone);
         setDemoBusy('idle');
       }
     } catch (e) {
@@ -113,7 +131,16 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
       setDemoBusy('idle');
       setError(
         e.code === 'NETWORK_ERROR' ? 'Cannot reach the server.'
-        : `Could not reopen that demo vault${e.code ? ` (${e.code})` : e.message ? `: ${e.message}` : '.'}`
+        : e.code === 'TOO_MANY_ATTEMPTS' ? RATE_LIMITED
+        // Everything else. Seven other codes can land here —
+        // VALIDATION_FAILED, INTERNAL_ERROR, REQUEST_FAILED among
+        // them — and a bare code was the whole message before, which
+        // told a visitor nothing and looked broken. The code is kept
+        // because it costs a visitor nothing and is the first thing
+        // anyone debugging this will ask for; the sentence around it
+        // is what makes the screen usable. The full exception is in
+        // the console line above.
+        : `Something went wrong reopening that demo vault${e.code ? ` (${e.code})` : ''}. Starting a fresh one below should work.`
       );
     }
   }

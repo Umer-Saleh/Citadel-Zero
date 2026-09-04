@@ -203,19 +203,27 @@ export async function provisionDemoVault({ signup, login, addItem }) {
  * Log back into a demo vault provisioned earlier in this tab.
  *
  * Separate from provisioning on purpose: resuming must never fall back
- * to creating. If the account is gone — the nightly wipe is the
- * ordinary reason — this clears the stale credentials and reports it,
- * and the caller offers to provision a new vault. It does not do so
- * itself, because that would put account creation behind a code path
- * the visitor did not aim at.
+ * to creating. When the vault cannot be reopened this clears the stale
+ * credentials and reports WHY, and the caller offers to provision a new
+ * one. It does not do so itself, because that would put account
+ * creation behind a code path the visitor did not aim at.
  *
- * @returns true if the vault was reopened, false if it no longer
- *          exists. Any other failure throws and is the caller's to
- *          report.
+ * @returns true      the vault was reopened
+ *          'gone'    the account no longer exists, or was never stored
+ *          'totp'    the visitor enabled 2FA and we cannot ask for a
+ *                    code, so this vault is unreachable for good
+ *
+ *          Any other failure throws and is the caller's to report.
+ *
+ * The reason is returned rather than a bare boolean because the two
+ * cases need different explanations and only one of them is the
+ * nightly wipe. Telling a visitor their vault was deleted at 03:00
+ * when they had in fact locked themselves out with an authenticator
+ * would be false.
  */
 export async function resumeDemoVault({ login }) {
   const credentials = loadDemoCredentials();
-  if (!credentials) return false;
+  if (!credentials) return 'gone';
 
   try {
     await login(credentials.email, credentials.password);
@@ -226,8 +234,25 @@ export async function resumeDemoVault({ login }) {
     // mean the stored credentials are dead.
     if (err.code === 'NOT_FOUND' || err.code === 'INVALID_CREDENTIALS') {
       clearDemoCredentials();
-      return false;
+      return 'gone';
     }
+
+    // The visitor turned on 2FA from Settings — which the demo keeps
+    // enabled on purpose, because exercising it is the point. login()
+    // throws this client-side, before deriving, once kdf-params
+    // reports totpEnabled and no code was supplied.
+    //
+    // There is no way back. The vault's password is 32 random
+    // characters generated during provisioning and never shown to
+    // anyone, so "log in again with your code" is not an option — and
+    // a visitor who scanned this vault with a throwaway authenticator
+    // usually cannot produce a code anyway. Clearing and explaining is
+    // the honest outcome; prompting would mostly fail after asking.
+    if (err.code === 'TOTP_REQUIRED') {
+      clearDemoCredentials();
+      return 'totp';
+    }
+
     throw err;
   }
 }

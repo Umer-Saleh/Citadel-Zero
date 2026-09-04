@@ -126,9 +126,13 @@ describe('provisioning', () => {
 });
 
 describe('resume', () => {
-  test('returns false with no stored credentials, and does NOT provision', async () => {
+  test("reports 'gone' with no stored credentials, and does NOT provision", async () => {
     const login = vi.fn();
-    expect(await resumeDemoVault({ login })).toBe(false);
+    const outcome = await resumeDemoVault({ login });
+    // Was toBe(false) before the return became a reason. Asserting the
+    // exact reason is stricter than asserting falsiness was.
+    expect(outcome).toBe('gone');
+    expect(outcome).not.toBe(true);
     expect(login).not.toHaveBeenCalled();
   });
 
@@ -139,11 +143,43 @@ describe('resume', () => {
     expect(login).toHaveBeenCalledWith('demo-x@demo.invalid', 'pw');
   });
 
-  test('a wiped account clears the stale credentials and reports false', async () => {
+  test("a wiped account clears the stale credentials and reports 'gone'", async () => {
     saveDemoCredentials({ email: 'demo-y@demo.invalid', password: 'pw' });
     const login = async () => { const e = new Error('gone'); e.code = 'NOT_FOUND'; throw e; };
-    expect(await resumeDemoVault({ login })).toBe(false);
+    const outcome = await resumeDemoVault({ login });
+    expect(outcome).toBe('gone');
+    expect(outcome).not.toBe(true);
     expect(loadDemoCredentials()).toBeNull();
+  });
+
+  test("2FA on the vault clears the credentials and reports 'totp'", async () => {
+    // The visitor enabled TOTP from Settings. auth.login throws this
+    // client-side once kdf-params reports totpEnabled and no code was
+    // given — the server is never reached.
+    saveDemoCredentials({ email: 'demo-t@demo.invalid', password: 'pw' });
+    const login = async () => { const e = new Error('TOTP_REQUIRED'); e.code = 'TOTP_REQUIRED'; throw e; };
+
+    const outcome = await resumeDemoVault({ login });
+
+    // Distinct from 'gone' on purpose: the vault was not wiped, and
+    // telling the visitor it was would be false.
+    expect(outcome).toBe('totp');
+
+    // Cleared, so the screen stops offering RESUME for a vault that
+    // can never be reopened.
+    expect(loadDemoCredentials()).toBeNull();
+  });
+
+  test('an unrecognised error code still throws rather than reporting a reason', async () => {
+    // The reason channel is for outcomes we understand. Anything else
+    // must reach the caller's catch, not be flattened into 'gone' —
+    // which would hide a real fault behind a calm notice and leave the
+    // credentials silently destroyed.
+    saveDemoCredentials({ email: 'demo-u@demo.invalid', password: 'pw' });
+    const login = async () => { const e = new Error('nope'); e.code = 'INTERNAL_ERROR'; throw e; };
+
+    await expect(resumeDemoVault({ login })).rejects.toThrow('nope');
+    expect(loadDemoCredentials()).not.toBeNull();
   });
 
   test('an unexpected failure propagates rather than silently clearing', async () => {
@@ -157,7 +193,9 @@ describe('resume', () => {
     sessionStorage.setItem('cz.demo.vault', '{not json');
     expect(loadDemoCredentials()).toBeNull();
     const login = vi.fn();
-    expect(await resumeDemoVault({ login })).toBe(false);
+    const outcome = await resumeDemoVault({ login });
+    expect(outcome).toBe('gone');
+    expect(outcome).not.toBe(true);
     expect(login).not.toHaveBeenCalled();
   });
 });
