@@ -392,6 +392,60 @@ img, svg, video, canvas {
     display: none !important;
   }
 
+  /* PIX's line, on a phone.
+     ---------------------------------------------------------------
+     It used to carry vk-r-hide-sm, so the only surface that renders
+     SEALED!, REMOVED., GOT IT. and CLIP CLEARED. was display:none
+     here — save, delete and copy produced no visible feedback at all
+     at this width.
+
+     Giving the brand group wrap and the line a full basis puts it on
+     its own row beneath the wordmark, still INSIDE AppShell's header.
+     That matters: the header is sticky at top:var(--demo-banner-h),
+     so the line inherits that offset and nothing is newly
+     fixed-positioned. It cannot land over the demo banner, which
+     sticks at top:0 with a higher z-index.
+
+     No feedback loop with the banner's ResizeObserver either. That
+     observer measures the BANNER, whose height depends on its own
+     content and the viewport width — never on the header. The header
+     growing changes what sits below it, not what is published as
+     --demo-banner-h.
+
+     row-gap is tighter than the 12px column gap on purpose: 12px
+     between the wordmark and a 10px line reads as a gap rather than
+     a caption.
+
+     The row is deliberately not reserved: the header grows while a
+     moment is live and shrinks back, rather than costing that space on
+     every mobile screen for something on it a few seconds a session.
+
+     MEASURED at 375px: the header goes 121px -> 182px for the 1.5-2.5s
+     a moment lasts. The brand group itself grows only 32 -> 49, which
+     is the new row; the rest is a second-order reflow. A wrapping flex
+     container's max-content is the SUM of its items, so the group also
+     widens, and row one of this header sits within about 4px of full —
+     so LOCK drops to a line of its own while the moment is up.
+
+     That reflow was tempting to shave off by capping the line's width
+     contribution, and is deliberately left alone. The longest moments
+     — CLIP CLEARED., THE VAULT IS YOURS. — are wider than the margin
+     regardless, so a width cap would hold for short strings and fail
+     for long ones. One consistent behaviour for every moment beats a
+     marginal one that depends on the message. */
+  .vk-r-brand {
+    flex-wrap: wrap !important;
+    row-gap: 4px !important;
+  }
+
+  .vk-r-pix-line {
+    flex-basis: 100% !important;
+    /* The inline style sets nowrap for the desktop case, where the
+       line shares a row. With a row to itself it should wrap rather
+       than push the header wider than the viewport. */
+    white-space: normal !important;
+  }
+
   /* Tighter gutters: 24px each side costs 15% of a 320px screen. */
   .vk-r-pad {
     padding-left: 16px !important;

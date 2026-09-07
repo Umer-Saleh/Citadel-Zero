@@ -46,8 +46,11 @@ export function AppShell({ children, view = 'vault', onNavigate }) {
           maxWidth: 1120, margin: '0 auto', padding: '0 24px', height: 64,
           display: 'flex', alignItems: 'center', gap: 32
         }}>
-          {/* PIX + wordmark */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {/* PIX + wordmark. vk-r-brand lets this group wrap at <=640
+              so PIX's line can take a row of its own beneath the
+              wordmark; above that breakpoint it does not wrap and the
+              line sits inline exactly as before. */}
+          <div className="vk-r-brand" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <Paladin pose={pose} size={32} />
             {/* A button, not an anchor: navigation here is App's `view`
                 state, not a URL, so an <a href> would reload the page and
@@ -74,8 +77,25 @@ export function AppShell({ children, view = 'vault', onNavigate }) {
             >
               CITADEL<span style={{ color: 'var(--green)' }}>ZERO</span>
             </button>
+            {/* PIX's line was vk-r-hide-sm — display:none at <=640 —
+                which meant SEALED!, REMOVED. and GOT IT. rendered
+                nowhere on a phone. Saving an entry, deleting one and
+                copying a password each produced no visible feedback at
+                all, and ItemDetail closing on save looks identical to
+                pressing Escape.
+
+                It now takes its own row here instead of being hidden.
+                Inside this header, so it inherits the sticky offset
+                against --demo-banner-h and nothing new is fixed —
+                nothing can end up over the banner.
+
+                The row is NOT reserved. The header grows for the 1.5–2.5
+                seconds a moment is live and shrinks back, which shifts
+                the content below by about one line. Reserving it
+                permanently would cost that space on every mobile screen
+                for something visible a few seconds a session. */}
             {says && (
-              <span className="vk-r-hide-sm" style={{
+              <span className="vk-r-pix-line" style={{
                 font: "500 10px 'Geist Mono', monospace", letterSpacing: '.12em',
                 color: 'var(--muted)', whiteSpace: 'nowrap', animation: 'riseIn .25s both'
               }}>
