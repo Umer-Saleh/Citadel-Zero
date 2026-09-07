@@ -40,6 +40,20 @@ describe('codes that had no copy anywhere', () => {
   });
 });
 
+describe('VAULT_FULL', () => {
+  test('reads as a sentence and says what the limit is', () => {
+    const message = codeToMessage(err('VAULT_FULL'), 'Could not save this entry');
+
+    expect(isHuman(message, 'VAULT_FULL')).toBe(true);
+    expect(message).not.toContain('VAULT_FULL');
+    // The number has to appear, or the person cannot tell whether they
+    // are near the limit or far past it.
+    expect(message).toContain('1,000');
+    // And it has to say what to do about it.
+    expect(message).toContain('Delete');
+  });
+});
+
 describe('codes that were inconsistent across screens', () => {
   test.each([
     'TOO_MANY_ATTEMPTS',

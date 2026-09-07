@@ -11,6 +11,21 @@ async function listByUser(userId) {
   return rows;
 }
 
+/**
+ * How many items this user already holds.
+ *
+ * Served entirely by the vault_items(user_id) index the baseline
+ * migration already creates, so this is an index-only count rather
+ * than a heap scan — negligible beside the insert it guards.
+ */
+async function countByUser(userId) {
+  const { rows } = await query(
+    'SELECT count(*)::int AS count FROM vault_items WHERE user_id = $1',
+    [userId]
+  );
+  return rows[0].count;
+}
+
 async function create(userId, { ciphertext, nonce, authTag }) {
   const { rows } = await query(
     `INSERT INTO vault_items (user_id, encrypted_data, nonce, auth_tag)
@@ -39,4 +54,4 @@ async function remove(userId, itemId) {
   return rowCount > 0;
 }
 
-module.exports = { listByUser, create, update, remove };
+module.exports = { listByUser, countByUser, create, update, remove };

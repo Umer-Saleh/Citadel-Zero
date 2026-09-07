@@ -99,6 +99,16 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
       // server sentence, and a shared map cannot carry it.
       setActionError(
         e?.code === 'NETWORK_ERROR' ? 'Cannot reach the server — nothing was saved.'
+        // Its own sentence rather than the shared VAULT_FULL one,
+        // because the shared version cannot say the thing that matters
+        // most to someone mid-edit: their draft survived. Same reason
+        // this handler keeps its other messages out of the shared map.
+        //
+        // KEEP IN STEP with:
+        //   Server/src/services/vaultService.js   MAX_ITEMS_PER_USER
+        //   Web/src/lib/errors.js                 the shared VAULT_FULL
+        : e?.code === 'VAULT_FULL'
+          ? 'This vault is full — 1,000 entries. Your changes are still here; delete an entry to make room.'
         : `Could not save this entry${e?.code ? ` (${e.code})` : ''}. Your changes are still here — try again.`
       );
     }

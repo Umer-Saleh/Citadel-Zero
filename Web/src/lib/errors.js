@@ -73,6 +73,18 @@ const SHARED = {
   INVALID_TOTP_CODE:
     'That code was not accepted. Codes change every 30 seconds — try the current one.',
 
+  // --- the vault is full ---------------------------------------------
+  // The 1,000 is written out rather than interpolated: this file has no
+  // access to the server's constant, so the number is duplicated on
+  // purpose and has to be kept in step by hand.
+  //
+  // KEEP IN STEP with:
+  //   Server/src/services/vaultService.js   MAX_ITEMS_PER_USER (the
+  //                                         value actually enforced)
+  //   Web/src/screens/ItemDetail.jsx        the save handler's own line
+  VAULT_FULL:
+    'This vault has reached its limit of 1,000 entries. Delete something you no longer need to make room.',
+
   // --- account -------------------------------------------------------
   EMAIL_TAKEN: 'An account with this email already exists.',
   WEAK_KDF_PARAMS: 'The server refused those key-derivation parameters as too weak.'
