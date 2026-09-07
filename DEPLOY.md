@@ -242,6 +242,45 @@ which is how a table added by a new migration gets picked up. `seed` does
 nothing at all now — visitors provision their own vaults — but it still runs and
 still exits 0, because compose declares the service.
 
+> **`up -d` on its own NEVER rebuilds anything.** It compares the compose file
+> against what is running and starts whatever is missing or changed — always
+> from the images already on the host. Source you have just pulled is invisible
+> to it. The `--build` in the command above is the entire difference between a
+> deploy and a restart.
+
+The same trap has a second half: **naming a service on `build` rebuilds only
+that service.** `build --no-cache web` followed by a bare `up -d` rebuilds the
+frontend and leaves `server`, `migrate`, `seed` and `wipe` on whatever images
+the host already had — which may be weeks old. That exact sequence shipped a
+current frontend against a stale API for about a week; see *When a deploy half
+lands* below.
+
+So the full deploy, **with no service name**, is what you want in almost every
+case:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod build --no-cache
+```
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+```
+
+`--no-cache` costs several minutes on 2 vCPU because `argon2` recompiles from
+source. Pay it. A cached layer that silently keeps old source in the image is
+the failure this section exists to prevent, and it does not announce itself.
+
+### What Compose prints is not evidence
+
+`Started`, `Recreated` and `Running` all mean **a container exists**, not that
+the code inside it is the code you pulled. Compose will happily recreate a
+container from a stale image and report success in exactly the same words it
+uses for a correct deploy. There is no output that distinguishes the two.
+
+Treat the deploy as unverified until you have looked inside the container.
+See *Verify the deploy actually shipped*, immediately after the frontend note
+below.
+
 ### When you must rebuild the frontend from scratch
 
 > **Vite inlines `VITE_*` values into the bundle at build time.** They are baked
@@ -258,8 +297,81 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod build --no-cache 
 docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
 ```
 
+> **This recipe rebuilds `web` and nothing else.** It is correct for a
+> frontend-only change. If the same push also carried server-side work, run the
+> full unnamed `build --no-cache` above instead — or you will ship exactly the
+> split described below. Note the trailing `up -d` here has no `--build`: on its
+> own it will not rebuild the services the line above did not name.
+
 Changing `DOMAIN` also means a new certificate, so keep the `caddy_data` volume
 and let Caddy request one for the new name.
+
+### Verify the deploy actually shipped
+
+Two checks, both cheap, both after every deploy that carried server-side work.
+
+**1. Look inside the running container.** Grep for a string the change should
+have added or removed. The concrete one that caught this incident:
+`resolveDemoUserId` was deleted from `demoService.js` when the demo route moved
+to ownership scoping, so a correct deploy has zero occurrences.
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod exec server sh -c "grep -c 'resolveDemoUserId' /app/src/services/demoService.js"
+```
+
+`0` is correct. On the broken production host this returned **`3`** — proving
+the container was running pre-scoping code that the checkout no longer
+contained, weeks after it was merged. Pick the equivalent string for whatever
+you just shipped: a function you deleted, a route guard you added, a constant
+you renamed. A `grep -c` against the running container is the only check that
+cannot be satisfied by a stale image.
+
+**2. Check image and container ages.**
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod ps -a
+```
+
+`-a`, not plain `ps`: `migrate` and `seed` run once and exit, so plain `ps`
+hides them and a failed migration looks like it never ran. Any image older than
+your last `git pull` did not get rebuilt. To see the timestamps directly:
+
+```bash
+docker inspect --format '{{.Created}} {{.Config.Image}}' $(docker compose -f docker-compose.prod.yml --env-file .env.prod ps -q server)
+```
+
+Where the change has an externally visible effect, assert on that too. For the
+demo route, one unauthenticated request is a complete check — it must be
+refused:
+
+```bash
+curl -s -w '\n%{http_code}\n' https://YOUR_DOMAIN/api/demo/stored-material
+```
+
+`401` with `{"error":"NO_TOKEN"}` is correct. A `200` carrying an account
+payload means the pre-scoping build is still running.
+
+### When a deploy half lands
+
+Worth recognising by shape, because it is quiet and it persists.
+
+**The symptom: a frontend change appears live while a server change does not,
+and the two halves disagree about the state of the world.** Nothing errors.
+Both sides are individually healthy — the site loads, the API answers 200, logs
+are clean — and they are simply built against different versions of reality.
+
+It surfaced here as the "what the server actually stores" panel showing every
+`vault_items` row as *(not loaded in this session)*. The current frontend was
+provisioning a per-visitor demo vault while the stale API was still answering
+for the retired shared account, so the row ids on the two sides had no overlap
+and the panel silently compared unrelated vaults. It went unnoticed for roughly
+a week, because the deploy sequence in use rebuilt `web` on every push and
+never rebuilt anything else.
+
+If two parts of the app disagree about data that should be shared, check
+whether they are running the same build **before** debugging the disagreement.
+Run the `grep -c` above first; it takes a second and it removes the whole class
+from consideration.
 
 ---
 
