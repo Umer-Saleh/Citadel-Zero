@@ -8,7 +8,22 @@ import { Generator } from './screens/Generator';
 import { AppShell } from './components/AppShell';
 import { Settings } from './screens/Settings';
 import { Recover } from './screens/Recover';
+import { NotFound } from './screens/NotFound';
+import { isAppPath } from './lib/appPaths';
 import { usePix } from './context/PixContext';
+
+/**
+ * Read ONCE, at module scope.
+ *
+ * Not state, not an effect, not a render-time read. The value cannot
+ * change without a page load — there is no router and nothing in the
+ * app calls history.pushState — so re-deriving it would be pretending
+ * it might, and an effect would let the unlock screen paint first.
+ *
+ * The allowlist it checks against is load-bearing; see lib/appPaths.js
+ * for what must be updated if this origin ever serves a new path.
+ */
+const IS_APP_PATH = isAppPath(window.location.pathname);
 
 /**
  * Top-level router.
@@ -59,6 +74,46 @@ export default function App() {
   // be lost on the way back.
   const [selected, setSelected] = useState(undefined);
 
+  // Whether the NEXT unlock will be this account's first.
+  //
+  // Set by the three flows that mint credentials — signup, recovery,
+  // and a demo provision — and read once, when isUnlocked flips. Without
+  // it PIX greeted a brand new account with "WELCOME BACK.", which
+  // there is no "back" for.
+  //
+  // WHY NOT THE FRESH_SIGNUP BRAND
+  // ------------------------------
+  // auth.js already stamps the kdfMaterial signup() returns with a
+  // module-private FRESH_SIGNUP symbol, and that is genuinely the only
+  // existing "this account is seconds old" signal in the codebase. It
+  // threads cleanly for exactly ONE of the three cases: demo
+  // provisioning, which is the only caller that hands the material
+  // straight back to login().
+  //
+  // The ordinary signup path cannot use it without a change to the auth
+  // path itself. Signup ends at RecoveryKit, then the user types their
+  // password into Unlock — so the brand would have to be carried across
+  // two screens and passed to a login() the user initiated. That is not
+  // inert: knownKdf also skips the kdf-params fetch AND the totpEnabled
+  // pre-check, which auth.js is explicit are only safe immediately after
+  // a signup in the same tab. Recovery has no signup() call at all, so
+  // there is no branded material to carry in the first place.
+  //
+  // Rewriting login's contract to change a mascot's line would be the
+  // wrong trade, and a hybrid — the brand for demo, a flag for the other
+  // two — would be two mechanisms for one fact. So: one flag, set at
+  // all three sites, and FRESH_SIGNUP left doing its own job.
+  //
+  // A REF, NOT STATE, and that is load-bearing rather than a
+  // micro-optimisation. Nothing renders from this — it is read once,
+  // inside the effect below, at the moment isUnlocked flips. As state it
+  // would have to be a dependency of that effect, and then SETTING it
+  // would re-run the effect while still locked: signup would fire a
+  // spurious 'lock' reaction and immediately clear the flag it had just
+  // set, so the first unlock it exists to catch would still say
+  // "WELCOME BACK.". A ref has no such coupling.
+  const freshAccount = useRef(false);
+
   // PIX reacts to saves, copies, and deletes. The context is provided
   // at the top level, but the reactions happen in the header, three
   // levels up and a sibling of all of them.
@@ -87,7 +142,7 @@ export default function App() {
   const firstRender = useRef(true);
   useEffect(() => {
     if (firstRender.current) { firstRender.current = false; return; }
-    react(isUnlocked ? 'unlock' : 'lock');
+    react(isUnlocked ? (freshAccount.current ? 'firstUnlock' : 'unlock') : 'lock');
 
     // Locking resets the view. Otherwise unlocking drops you back
     // into Settings or the generator, which is not where anyone
@@ -101,8 +156,26 @@ export default function App() {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setView('vault');
       setSelected(undefined);
+
+      // Consumed here rather than immediately after the reaction
+      // fires. Locking is the only way back to a pre-auth screen, so it
+      // is the only moment a NEW account could be minted — which makes
+      // this the correct place to reset. Leaving it set for the rest of
+      // an unlocked session is harmless: it is read once, at the
+      // transition.
+      freshAccount.current = false;
     }
   }, [isUnlocked, react]);
+
+  // ---------------------------------------------------------------
+  // NOT A REAL PAGE — above every branch below.
+  //
+  // After the hooks, because it has to be: an early return before them
+  // would change the hook order between a real page and a 404. Nothing
+  // above this point touches the network or the key, so running them
+  // and then returning costs a render and nothing else.
+  // ---------------------------------------------------------------
+  if (!IS_APP_PATH) return <NotFound />;
 
   // ---------------------------------------------------------------
   // UNLOCKED — the real application.
@@ -158,6 +231,7 @@ export default function App() {
         onComplete={(key, userEmail) => {
           setRecoveryKey(key);
           setEmail(userEmail);
+          freshAccount.current = true;   // the unlock after this one is their first
           setAuthScreen('recovery');
         }}
         onGoLogin={() => setAuthScreen('unlock')}
@@ -190,6 +264,11 @@ export default function App() {
         onRecovered={(key, userEmail) => {
           setRecoveryKey(key);
           setEmail(userEmail);
+          // A recovered vault is opened under a password that did not
+          // exist a moment ago. "WELCOME BACK." to someone who just
+          // fought their way back in with a printed key is the wrong
+          // note; the vault is theirs again, which is what this says.
+          freshAccount.current = true;
           setAuthScreen('recovery');
         }}
         onBack={() => setAuthScreen('unlock')}
@@ -206,7 +285,16 @@ export default function App() {
     <Unlock
       onUnlocked={() => { /* isUnlocked flips true; the unlocked branch renders the vault */ }}
       onGoSignup={() => setAuthScreen('signup')}
-      onGoRecovery={() => setAuthScreen('recover')} 
+      onGoRecovery={() => setAuthScreen('recover')}
+      // Provisioning a demo vault creates an account and unlocks it
+      // without passing back through App, so Unlock has to say so. Only
+      // creating one — RESUME reopens a vault from earlier in this tab,
+      // which is a returning unlock and keeps "WELCOME BACK."
+      //
+      // Takes a boolean because a failed provision must be able to
+      // withdraw the claim: nothing unlocked, so it was never read, and
+      // left set it would mis-greet whatever unlocked next.
+      onFreshVault={fresh => { freshAccount.current = fresh; }}
     />
   );
 }

@@ -34,6 +34,23 @@ const MOMENTS = {
   levelup:   { pose: 'levelup', says: 'LEVEL UP!',     ms: 2500 },
   unlock:    { pose: 'gate',    says: 'WELCOME BACK.', ms: 2000 },
 
+  // The same moment for an account that did not exist a minute ago.
+  //
+  // "WELCOME BACK." was shown to everyone, including someone who had
+  // just created the vault they were opening for the first time —
+  // there is no "back" to welcome them to. That reached production
+  // through the demo provision, the ordinary signup path and recovery
+  // alike, because all three end at the unlock screen and the reaction
+  // was fired from the isUnlocked transition alone.
+  //
+  // A full stop, not an exclamation mark, and the same 'gate' pose and
+  // beat as `unlock`. Per the stillness rule above it belongs with its
+  // sibling: crossing a threshold for the first time is the gravest of
+  // the entry moments, not a trick pulled off, and giving it an
+  // exclamation mark would make the first-time visitor's greeting
+  // louder than the returning owner's for no reason.
+  firstUnlock: { pose: 'gate',  says: 'THE VAULT IS YOURS.', ms: 2000 },
+
   // solemn — static pose, full stop, a longer beat. Destructive and
   // irreversible actions get an acknowledgement, not a celebration.
   remove:    { pose: 'guard',   says: 'REMOVED.',      ms: 2000 },

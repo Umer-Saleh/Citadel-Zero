@@ -33,6 +33,8 @@ let stateIndex = 0;
 let refSlots = {};
 let refIndex = 0;
 let effects = [];
+let effectIndex = 0;
+let effectDeps = {};
 
 /** Drop all hook state. Call before the FIRST render of a component. */
 export function resetHooks() {
@@ -41,6 +43,8 @@ export function resetHooks() {
   refSlots = {};
   refIndex = 0;
   effects = [];
+  effectIndex = 0;
+  effectDeps = {};
 }
 
 /**
@@ -50,6 +54,7 @@ export function resetHooks() {
 export function beginRender() {
   stateIndex = 0;
   refIndex = 0;
+  effectIndex = 0;
   effects = [];
 }
 
@@ -85,10 +90,33 @@ export const reactMock = {
   },
   useCallback: (fn) => fn,
   useMemo: (fn) => fn(),
-  // Queued, not run. The test decides when — and, for a probe that
-  // rejects, the point of the test is what happens between the effect
-  // firing and the next render.
-  useEffect: (fn) => { effects.push(fn); },
+  /**
+   * Queued, not run. The test decides when — and, for a probe that
+   * rejects, the point of the test is what happens between the effect
+   * firing and the next render.
+   *
+   * DEPENDENCIES ARE HONOURED, and they have to be. A shim that queued
+   * every effect on every render would report failures React would
+   * never produce: an effect whose deps did not change would re-run
+   * mid-flow and take its `if` branches against state the real app
+   * would never have re-read them with. That is not a hypothetical —
+   * it produced a false failure the first time App was driven through
+   * signup here.
+   *
+   * Omitted deps mean "every render", exactly as in React.
+   */
+  useEffect: (fn, deps) => {
+    const i = effectIndex++;
+    const prev = effectDeps[i];
+    const changed =
+      deps === undefined ||
+      prev === undefined ||
+      deps.length !== prev.length ||
+      deps.some((d, k) => !Object.is(d, prev[k]));
+
+    effectDeps[i] = deps;
+    if (changed) effects.push(fn);
+  },
   createContext: () => ({ Provider: ({ value }) => value }),
   useContext: () => null
 };

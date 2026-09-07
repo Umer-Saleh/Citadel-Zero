@@ -23,7 +23,7 @@ const RESUME_NOTICE = {
   totp: "You turned on two-factor authentication for this vault. Reopening it needs a code from your authenticator, and the demo has no way to ask for one — so this vault can't be reopened. Everything here is deleted at 03:00 UTC regardless. Start a fresh one below."
 };
 
-export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
+export function Unlock({ onUnlocked, onGoSignup, onGoRecovery, onFreshVault }) {
   const { login, signup, addItem } = useVault();
   const { pose: pixPose, says: pixSays } = usePix();
 
@@ -74,6 +74,13 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
     setDemoNotice('');
     setDemoBusy('creating');
 
+    // Announced BEFORE the work, not after: provisioning ends by
+    // unlocking, and the vault has already swapped in by the time this
+    // function returns. Said here it is committed seconds ahead of the
+    // transition that reads it. Optional, so the screen still renders
+    // outside App — a test, a future embed.
+    onFreshVault?.(true);
+
     try {
       await provisionDemoVault({ signup, login, addItem });
       // login() put the DEK in memory, so isUnlocked has already
@@ -87,6 +94,12 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery }) {
       // That cost a full click-through to diagnose something a stack
       // trace would have named immediately.
       console.error('[demo] provisioning failed:', e);
+
+      // Taken back. Nothing unlocked, so the claim above was never
+      // read — and left standing it would greet the NEXT unlock, which
+      // could be someone signing into an account they already had, as
+      // if it were brand new.
+      onFreshVault?.(false);
 
       setDemoBusy('idle');
       setError(
