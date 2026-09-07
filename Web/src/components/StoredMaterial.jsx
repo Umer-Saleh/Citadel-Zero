@@ -20,7 +20,7 @@ import { DEMO_MODE } from '../lib/demo';
  * this component is dropped from an ordinary build along with it.
  */
 export function StoredMaterial() {
-  const { items } = useVault();
+  const { items, email } = useVault();
   const [raw, setRaw] = useState(null);
   const [error, setError] = useState('');
   const [open, setOpen] = useState(false);
@@ -42,6 +42,39 @@ export function StoredMaterial() {
   // vault list is already decrypted in memory, so nothing extra is
   // unsealed to render this.
   const byId = new Map(items.map(it => [it.id, it.data]));
+
+  // ---------------------------------------------------------------
+  // THE PANEL MUST NOT COMPARE TWO DIFFERENT ACCOUNTS.
+  //
+  // This is not hypothetical. Production served a build of
+  // /api/demo/stored-material that predated ownership scoping — still
+  // pinned to one shared DEMO_EMAIL account rather than reading the
+  // caller's own rows — against a current client that provisions a
+  // per-visitor vault. Every id in `raw.items` therefore belonged to a
+  // different account than the one this browser had unlocked, every
+  // row fell to the "(not loaded in this session)" branch below, and
+  // the panel rendered a confident, plausible, WRONG answer for as
+  // long as that skew lasted.
+  //
+  // A silent wrong answer is the worst failure available to this
+  // component specifically. Every other screen that misreports is
+  // merely broken; this one is the project's evidence that the
+  // ciphertext on the left really does correspond to the plaintext on
+  // the right, and evidence that quietly compares unrelated rows is
+  // worse than no evidence at all. So it refuses out loud instead.
+  //
+  // Compared case-insensitively and trimmed: the server stores the
+  // address as it was given, with no normalisation, so an account
+  // could legitimately differ from what was typed by case alone.
+  //
+  // Both sides must be present to claim a mismatch. A missing `email`
+  // means we cannot tell, and "cannot tell" must not render as
+  // "wrong" — that would be the same class of overclaiming this guard
+  // exists to prevent.
+  // ---------------------------------------------------------------
+  const sessionEmail = (email || '').trim().toLowerCase();
+  const panelEmail = (raw?.account?.email || '').trim().toLowerCase();
+  const accountMismatch = Boolean(sessionEmail && panelEmail && sessionEmail !== panelEmail);
 
   return (
     <section style={{ marginTop: 32 }}>
@@ -116,7 +149,14 @@ export function StoredMaterial() {
             </div>
           )}
 
-          {raw && (
+          {/* Refused, and the account rows are refused with it. They
+              are the same wrong account's material — showing them
+              would be the identical error one row further up. */}
+          {raw && accountMismatch && (
+            <AccountMismatch sessionEmail={email} panelEmail={raw.account.email} />
+          )}
+
+          {raw && !accountMismatch && (
             <>
               <Row
                 label="wrapped_dek"
@@ -165,6 +205,63 @@ export function StoredMaterial() {
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * The endpoint answered for an account this browser has not unlocked.
+ *
+ * Says which two accounts, because the whole value of catching this is
+ * that the next person sees the cause instead of rediscovering it: the
+ * two addresses side by side name a server/client version skew
+ * immediately. Both are demo addresses on a demo instance — this
+ * component does not render on any other build.
+ */
+function AccountMismatch({ sessionEmail, panelEmail }) {
+  const mono = { font: "500 11px 'Geist Mono', monospace", wordBreak: 'break-all' };
+
+  return (
+    <div
+      role="alert"
+      style={{
+        border: '1px solid var(--red)', borderRadius: 'var(--radius)',
+        padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12
+      }}
+    >
+      <div style={{
+        font: "600 11px 'Geist Mono', monospace", letterSpacing: '.16em',
+        color: 'var(--red)'
+      }}>
+        COMPARISON REFUSED — ACCOUNT MISMATCH
+      </div>
+
+      <div style={{ fontSize: 13, color: 'var(--muted)', textWrap: 'pretty', maxWidth: '72ch' }}>
+        The server returned stored material for a different account than the one
+        this browser has unlocked, so nothing here can be lined up against
+        anything. Showing the rows anyway would be a comparison between two
+        unrelated vaults, which is exactly the claim this panel exists to make
+        honestly — so it makes none.
+      </div>
+
+      {/* Stacks with the same class the Row grid uses, so the two
+          addresses stay readable at 375px instead of being squeezed
+          into two unreadable columns. */}
+      <div className="vk-r-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div>
+          <div style={{ ...mono, color: 'var(--muted)', marginBottom: 4 }}>SERVER ANSWERED FOR</div>
+          <div className="vk-r-break" style={{ ...mono, color: 'var(--text)' }}>{panelEmail}</div>
+        </div>
+        <div>
+          <div style={{ ...mono, color: 'var(--muted)', marginBottom: 4 }}>THIS BROWSER UNLOCKED</div>
+          <div className="vk-r-break" style={{ ...mono, color: 'var(--text)' }}>{sessionEmail}</div>
+        </div>
+      </div>
+
+      <div style={{ fontSize: 12, color: 'var(--muted)', textWrap: 'pretty', maxWidth: '72ch' }}>
+        This is a deployment fault, not something you did — the API and the
+        frontend are running different versions. Your vault is unaffected.
+      </div>
+    </div>
   );
 }
 
