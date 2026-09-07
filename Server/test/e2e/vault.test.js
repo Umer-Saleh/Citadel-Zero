@@ -198,3 +198,87 @@ test('user A cannot delete user B items', async () => {
 
   assert.strictEqual(bobView.body.items.length, 1, 'Alice deleted Bob item');
 });
+test('the vault refuses a new item once it is full', async () => {
+  const { token, dek } = await createUserAndLogin();
+  const { MAX_ITEMS_PER_USER } = require('../../src/services/vaultService');
+  const { query } = require('../../src/db');
+
+  // Filled with one statement rather than MAX_ITEMS_PER_USER HTTP
+  // round trips. What is under test is the service's refusal, not the
+  // insert path, and a thousand requests would dominate the suite.
+  const userId = (await query('SELECT id FROM users LIMIT 1')).rows[0].id;
+  await query(
+    `INSERT INTO vault_items (user_id, encrypted_data, nonce, auth_tag)
+     SELECT $1, 'ciphertext', 'nonce', 'tag' FROM generate_series(1, $2)`,
+    [userId, MAX_ITEMS_PER_USER]
+  );
+
+  const blob = encryptItem({ site: 'one too many' }, dek);
+  const res = await request(app)
+    .post('/api/vault')
+    .set('Authorization', `Bearer ${token}`)
+    .send(blob);
+
+  assert.strictEqual(res.status, 409);
+  assert.strictEqual(res.body.error, 'VAULT_FULL');
+});
+
+test('the item at the limit still stores, and the vault still reads', async () => {
+  // The other half. A cap that refused one early — or that broke
+  // listing once the vault was large — would pass the test above.
+  const { token, dek } = await createUserAndLogin();
+  const { MAX_ITEMS_PER_USER } = require('../../src/services/vaultService');
+  const { query } = require('../../src/db');
+
+  const userId = (await query('SELECT id FROM users LIMIT 1')).rows[0].id;
+  await query(
+    `INSERT INTO vault_items (user_id, encrypted_data, nonce, auth_tag)
+     SELECT $1, 'ciphertext', 'nonce', 'tag' FROM generate_series(1, $2)`,
+    [userId, MAX_ITEMS_PER_USER - 1]
+  );
+
+  const res = await request(app)
+    .post('/api/vault')
+    .set('Authorization', `Bearer ${token}`)
+    .send(encryptItem({ site: 'the thousandth' }, dek));
+
+  assert.strictEqual(res.status, 201);
+
+  const list = await request(app)
+    .get('/api/vault')
+    .set('Authorization', `Bearer ${token}`);
+
+  assert.strictEqual(list.status, 200);
+  assert.strictEqual(list.body.items.length, MAX_ITEMS_PER_USER);
+});
+
+test('the cap is per user, not global', async () => {
+  // A COUNT(*) missing its WHERE would pass every assertion above.
+  const first = await createUserAndLogin('full@example.com');
+  const { query } = require('../../src/db');
+  const { MAX_ITEMS_PER_USER } = require('../../src/services/vaultService');
+
+  const fullUserId = (await query(
+    'SELECT id FROM users WHERE email = $1', ['full@example.com']
+  )).rows[0].id;
+  await query(
+    `INSERT INTO vault_items (user_id, encrypted_data, nonce, auth_tag)
+     SELECT $1, 'ciphertext', 'nonce', 'tag' FROM generate_series(1, $2)`,
+    [fullUserId, MAX_ITEMS_PER_USER]
+  );
+
+  // The first account is full.
+  const refused = await request(app)
+    .post('/api/vault')
+    .set('Authorization', `Bearer ${first.token}`)
+    .send(encryptItem({ site: 'nope' }, first.dek));
+  assert.strictEqual(refused.status, 409);
+
+  // A second account is unaffected.
+  const second = await createUserAndLogin('empty@example.com');
+  const allowed = await request(app)
+    .post('/api/vault')
+    .set('Authorization', `Bearer ${second.token}`)
+    .send(encryptItem({ site: 'fine' }, second.dek));
+  assert.strictEqual(allowed.status, 201);
+});

@@ -40,6 +40,53 @@ describe('codes that had no copy anywhere', () => {
   });
 });
 
+describe('the request-level codes express.json raises', () => {
+  // All three used to arrive as INTERNAL_ERROR, so the server looked
+  // broken when it had refused something specific.
+  test.each([
+    'PAYLOAD_TOO_LARGE',
+    'MALFORMED_JSON',
+    'UNSUPPORTED_ENCODING'
+  ])('%s reads as a sentence', (code) => {
+    const message = codeToMessage(err(code), 'Could not save this entry');
+
+    expect(isHuman(message, code)).toBe(true);
+    expect(message).not.toContain(code);
+    expect(message).not.toContain('Could not save this entry');
+  });
+
+  test('PAYLOAD_TOO_LARGE says what the limit is and what to do', () => {
+    // The only one of the three an ordinary person can reach: a long
+    // enough notes field on a vault entry exceeds the 64 KB body limit.
+    const message = codeToMessage(err('PAYLOAD_TOO_LARGE'), 'Could not save this entry');
+
+    expect(message).toContain('64 KB');
+    expect(message).toContain('notes');
+  });
+
+  test('the two that only a client bug can cause say so', () => {
+    // Neither is reachable by using the app correctly, so the honest
+    // thing is to say it is not the reader's fault.
+    for (const code of ['MALFORMED_JSON', 'UNSUPPORTED_ENCODING']) {
+      expect(codeToMessage(err(code), 'x')).toContain('not something you did');
+    }
+  });
+});
+
+describe('VAULT_FULL', () => {
+  test('reads as a sentence and says what the limit is', () => {
+    const message = codeToMessage(err('VAULT_FULL'), 'Could not save this entry');
+
+    expect(isHuman(message, 'VAULT_FULL')).toBe(true);
+    expect(message).not.toContain('VAULT_FULL');
+    // The number has to appear, or the person cannot tell whether they
+    // are near the limit or far past it.
+    expect(message).toContain('1,000');
+    // And it has to say what to do about it.
+    expect(message).toContain('Delete');
+  });
+});
+
 describe('codes that were inconsistent across screens', () => {
   test.each([
     'TOO_MANY_ATTEMPTS',
