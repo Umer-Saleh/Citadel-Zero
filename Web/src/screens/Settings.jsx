@@ -3,7 +3,8 @@ import QRCode from 'qrcode';
 import { useVault } from '../context/VaultContext';
 import { useTheme } from '../context/ThemeContext';
 import { usePix } from '../context/PixContext';
-import { Card, Input, Button, Meter, Switch, DeriveBar } from '../components/ui';
+import { Card, Input, Button, Meter, Switch, DeriveBar, ErrorNote } from '../components/ui';
+import { codeToMessage } from '../lib/errors';
 import { calcStrength } from '../lib/strength';
 import { Icon } from '../components/Icon';
 import * as totpApi from '../api/totp';
@@ -78,11 +79,9 @@ function RecoveryKitSection({ email }) {
       setPhase('done');
     } catch (e) {
       setPhase('confirm');
-      setError(
-        e.code === 'INVALID_CREDENTIALS' ? 'Wrong master password.'
-        : e.code === 'NETWORK_ERROR' ? 'Cannot reach the server.'
-        : `Could not issue a new kit${e.code ? ` (${e.code})` : ''}.`
-      );
+      setError(codeToMessage(e, 'Could not issue a new kit', {
+        INVALID_CREDENTIALS: 'Wrong master password.'
+      }));
     }
   }
 
@@ -130,7 +129,7 @@ function RecoveryKitSection({ email }) {
             autoComplete="current-password" name="vk-kit-confirm"
             value={pw} onChange={e => setPw(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && run()} />
-          {error && <div style={{ fontSize: 13, color: 'var(--red)' }}>{error}</div>}
+          <ErrorNote message={error} />
           <div style={{ display: 'flex', gap: 12 }}>
             <Button variant="secondary" onClick={() => { setPhase('idle'); setPw(''); setError(''); }}
               style={{ font: '600 12px Geist, sans-serif', padding: '11px 18px' }}>
@@ -248,17 +247,15 @@ function KdfUpgrade({ email, upgradeKdf }) {
       react('levelup');
     } catch (e) {
       setPhase('confirm');
-      setError(
-        e.code === 'INVALID_CREDENTIALS' ? 'Wrong master password.'
-        : e.code === 'WEAK_KDF_PARAMS' ? 'The server refused these parameters as too weak. Check DEFAULT_KDF_PARAMS in the client.'
-        : e.code === 'VALIDATION_FAILED' ? 'The upgrade request was malformed. This is a bug, not something you did.'
-        : e.code === 'NETWORK_ERROR' ? 'Cannot reach the server.'
-        // Surface unmapped codes rather than swallowing them. The
-        // backend returns machine-readable codes precisely so this
-        // screen doesn't have to guess — throwing them away wastes
-        // the design.
-        : `Upgrade failed${e.code ? ` (${e.code})` : ''}.`
-      );
+      // This handler was already the model for the others: four codes,
+      // and the only place VALIDATION_FAILED had human copy. Its
+      // specific wording is kept as overrides; the rest now comes from
+      // the shared map rather than being re-typed.
+      setError(codeToMessage(e, 'Upgrade failed', {
+        INVALID_CREDENTIALS: 'Wrong master password.',
+        WEAK_KDF_PARAMS: 'The server refused these parameters as too weak. Check DEFAULT_KDF_PARAMS in the client.',
+        VALIDATION_FAILED: 'The upgrade request was malformed. This is a bug, not something you did.'
+      }));
     }
   }
 
@@ -308,7 +305,7 @@ function KdfUpgrade({ email, upgradeKdf }) {
                   autoComplete="current-password"
                   value={pw} onChange={e => setPw(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && run()} />
-                {error && <span style={{ fontSize: 13, color: 'var(--red)' }}>{error}</span>}
+                <ErrorNote message={error} />
                 <Button onClick={run} style={{ alignSelf: 'flex-start', font: '600 12px Geist, sans-serif', padding: '11px 18px' }}>
                   UPGRADE NOW
                 </Button>
@@ -370,12 +367,10 @@ function ChangePassword({ email, changePassword }) {
       // changePassword() calls lock() on success → App drops to unlock.
     } catch (e) {
       setBusy(false);
-      setError(
-        e.code === 'INVALID_CREDENTIALS' ? 'Current password is wrong.'
-        : e.code === 'WEAK_KDF_PARAMS' ? 'The server rejected the proposed key-derivation parameters.'
-        : e.code === 'NETWORK_ERROR' ? 'Cannot reach the server.'
-        : `Could not change password${e.code ? ` (${e.code})` : ''}.`
-      );
+      setError(codeToMessage(e, 'Could not change password', {
+        INVALID_CREDENTIALS: 'Current password is wrong.',
+        WEAK_KDF_PARAMS: 'The server rejected the proposed key-derivation parameters.'
+      }));
     }
   }
 
@@ -414,7 +409,7 @@ function ChangePassword({ email, changePassword }) {
         </div>
       )}
 
-      {error && <div style={{ fontSize: 13, color: 'var(--red)' }}>{error}</div>}
+      <ErrorNote message={error} />
 
       <div>
         <Button onClick={run} disabled={busy} style={{ padding: '12px 28px', letterSpacing: '.12em' }}>
@@ -486,14 +481,11 @@ function TwoFactor({ email }) {
     setProbeNonce(n => n + 1);
   }
 
+  // TOTP_NOT_ENABLED is reachable from turnOff and had no copy
+  // anywhere before; it comes from the shared map now, along with the
+  // three that were already handled here.
   function fail(e, fallback) {
-    setError(
-      e.code === 'INVALID_TOTP_CODE' ? 'That code was not accepted. Codes change every 30 seconds — try the current one.'
-      : e.code === 'TOTP_ALREADY_ENABLED' ? 'Two-factor is already on for this account.'
-      : e.code === 'TOTP_NOT_STARTED' ? 'Start enrolment again — no setup is in progress.'
-      : e.code === 'NETWORK_ERROR' ? 'Cannot reach the server.'
-      : `${fallback}${e.code ? ` (${e.code})` : ''}.`
-    );
+    setError(codeToMessage(e, fallback));
   }
 
   async function begin() {
@@ -637,7 +629,7 @@ function TwoFactor({ email }) {
             password, which never reaches the server. What it stops is someone with
             a stolen password downloading the encrypted vault at all.
           </div>
-          {error && <div style={{ fontSize: 13, color: 'var(--red)' }}>{error}</div>}
+          <ErrorNote message={error} />
           <div>
             <Button onClick={begin} disabled={busy} style={{ padding: '12px 28px', letterSpacing: '.12em' }}>
               {busy ? 'STARTING…' : 'ENABLE'}
@@ -673,7 +665,7 @@ function TwoFactor({ email }) {
           </div>
 
           {codeInput('Code from your app', confirm)}
-          {error && <div style={{ fontSize: 13, color: 'var(--red)' }}>{error}</div>}
+          <ErrorNote message={error} />
 
           <div style={{ display: 'flex', gap: 12 }}>
             <Button variant="secondary" onClick={() => { setPhase('off'); setCode(''); setError(''); }}
@@ -776,7 +768,7 @@ function TwoFactor({ email }) {
             enrolled, wait for the next code — the one you set up with has already
             been used and can't be reused.
           </div>
-          {error && <div style={{ fontSize: 13, color: 'var(--red)' }}>{error}</div>}
+          <ErrorNote message={error} />
           <div>
             <Button variant="secondary" onClick={() => { setPhase('disabling'); setError(''); }}
               style={{ font: '600 12px Geist, sans-serif', padding: '11px 18px', color: 'var(--red)' }}>
@@ -794,7 +786,7 @@ function TwoFactor({ email }) {
             who borrowed an unlocked session from quietly removing it.
           </div>
           {codeInput('Code from your app', turnOff)}
-          {error && <div style={{ fontSize: 13, color: 'var(--red)' }}>{error}</div>}
+          <ErrorNote message={error} />
           <div style={{ display: 'flex', gap: 12 }}>
             <Button variant="secondary" onClick={() => { setPhase('on'); setCode(''); setError(''); }}
               style={{ font: '600 12px Geist, sans-serif', padding: '11px 18px' }}>

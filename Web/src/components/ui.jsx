@@ -147,6 +147,36 @@ export function Input({ label, error, revealable, revealed: revealedProp, onTogg
 }
 
 // ---------------------------------------------------------------
+// ERROR NOTE — the one red line, adjacent to whatever produced it.
+//
+// This literal was copied thirteen times across six files, always the
+// same 13px red div, and not one copy was announced: no role, no
+// aria-live, so a screen reader was never told an error had appeared.
+// Someone who could not see the screen pressed UNLOCK and got silence.
+//
+// role="alert" is assertive on purpose. It interrupts, which is right
+// for "that did not work" — the user has just acted and is waiting.
+// The non-failure explanations (the demo's amber notice) deliberately
+// do NOT come through here: an explanation of something working as
+// designed must not read, or sound, like a failure.
+//
+// Renders nothing for an empty message, so callers keep writing
+// `<ErrorNote message={error} />` with no surrounding guard.
+// ---------------------------------------------------------------
+export function ErrorNote({ message, style }) {
+  if (!message) return null;
+
+  return (
+    <div
+      role="alert"
+      style={{ fontSize: 13, color: 'var(--red)', textWrap: 'pretty', ...style }}
+    >
+      {message}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------
 // CARD — soft shadow + crisp pixel border, the signature hybrid.
 // ---------------------------------------------------------------
 export function Card({ children, style, className }) {

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useVault } from '../context/VaultContext';
-import { Card, Input, Button, Meter } from '../components/ui';
+import { Card, Input, Button, Meter, ErrorNote } from '../components/ui';
+import { codeToMessage } from '../lib/errors';
 import { Paladin } from '../components/Paladin';
 import { Icon } from '../components/Icon';
 import { checkPolicy } from '../lib/policy';
@@ -36,11 +37,13 @@ export function Signup({ onComplete, onGoLogin }) {
       const { recoveryKey } = await signup(email, pw);
       onComplete(recoveryKey, email);
     } catch (e) {
-      setError(
-        e.code === 'EMAIL_TAKEN' ? 'An account with this email already exists.'
-        : e.code === 'NETWORK_ERROR' ? 'Cannot reach the server.'
-        : 'Something went wrong. Please try again.'
-      );
+      // This handler used to end in a bare "Something went wrong.
+      // Please try again." — the only one in the app that threw the
+      // code away entirely, so a rate limit, a malformed request and a
+      // server crash were one indistinguishable sentence. On the screen
+      // where a typo in an email costs a full Argon2id derivation
+      // first, that was the worst place for it.
+      setError(codeToMessage(e, 'Could not create your vault'));
       setBusy(false);
     }
   }
@@ -113,7 +116,7 @@ export function Signup({ onComplete, onGoLogin }) {
             error={mismatch ? "Passwords don't match yet." : ''}
           />
 
-          {error && <div style={{ fontSize: 13, color: 'var(--red)' }}>{error}</div>}
+          <ErrorNote message={error} />
 
           {/* prototype's create button is taller than the default Button */}
           <Button onClick={handleSubmit} disabled={busy} style={{ padding: '14px 24px', letterSpacing: '.12em', justifyContent: 'center' }}>

@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useVault } from '../context/VaultContext';
 import { api } from '../api/client';
 import { DEMO_MODE } from '../lib/demo';
+import { ErrorNote } from './ui';
+import { codeToMessage } from '../lib/errors';
 
 /**
  * "What the server actually stores."
@@ -31,7 +33,10 @@ export function StoredMaterial() {
     let cancelled = false;
     api.get('/api/demo/stored-material')
       .then(d => { if (!cancelled) setRaw(d); })
-      .catch(e => { if (!cancelled) setError(e.code || 'Could not load stored material.'); });
+      // e.code used to be the WHOLE message, so a visitor read the
+      // bare string "INTERNAL_ERROR" in red with no sentence around
+      // it — the rawest surfacing anywhere in the client.
+      .catch(e => { if (!cancelled) setError(codeToMessage(e, 'Could not load the stored material')); });
 
     return () => { cancelled = true; };
   }, [open, raw]);
@@ -142,7 +147,7 @@ export function StoredMaterial() {
             password.
           </p>
 
-          {error && <div style={{ fontSize: 13, color: 'var(--red)' }}>{error}</div>}
+          <ErrorNote message={error} />
           {!raw && !error && (
             <div style={{ font: "500 12px 'Geist Mono', monospace", color: 'var(--muted)' }}>
               LOADING…

@@ -58,9 +58,24 @@ const deleteButton = (tree) =>
     && Array.isArray(n.props.children)
     && n.props.children.includes(' DELETE'));
 
+/**
+ * The failure message, wherever it is rendered.
+ *
+ * The inline note became the shared <ErrorNote>, which the shim does
+ * not invoke — its role and its text live inside that component, not in
+ * the tree App returns. So render it on demand. The assertions below
+ * are unchanged; only the way the test reaches the string is.
+ */
 const alertText = (tree) => {
-  const el = find(tree, n => n.props?.role === 'alert');
-  return el ? texts(el) : '';
+  const note = find(tree, n => n.type?.name === 'ErrorNote');
+  if (!note) return '';
+
+  const rendered = note.type(note.props);
+  if (!rendered) return '';
+
+  // Still announced — the whole reason the component exists.
+  expect(rendered.props.role).toBe('alert');
+  return texts(rendered);
 };
 
 beforeEach(() => {

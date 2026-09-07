@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useVault } from '../context/VaultContext';
-import { Card, Input, Button, DeriveBar } from '../components/ui';
+import { Card, Input, Button, DeriveBar, ErrorNote } from '../components/ui';
+import { codeToMessage } from '../lib/errors';
 import { Paladin } from '../components/Paladin';
 import { usePix } from '../context/PixContext';
 import { DEMO_MODE } from '../lib/demo';
@@ -102,14 +103,13 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery, onFreshVault }) {
       onFreshVault?.(false);
 
       setDemoBusy('idle');
-      setError(
-        e.code === 'NETWORK_ERROR' ? 'Cannot reach the server.'
-        : e.code === 'TOO_MANY_ATTEMPTS' ? RATE_LIMITED
-        // Fall back to the message when there is no code. Ugly on
-        // screen, but an unexpected failure should be identifiable
-        // from the UI alone rather than only from the console.
-        : `Could not create a demo vault${e.code ? ` (${e.code})` : e.message ? `: ${e.message}` : '.'}`
-      );
+      // codeToMessage keeps the codeless-exception fallback this
+      // handler already had: a DOMException out of crypto.subtle has no
+      // .code, and reporting only the code rendered a bare sentence
+      // with nothing in the console either.
+      setError(codeToMessage(e, 'Could not create a demo vault', {
+        TOO_MANY_ATTEMPTS: RATE_LIMITED
+      }));
     }
   }
 
@@ -142,19 +142,12 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery, onFreshVault }) {
       console.error('[demo] resume failed:', e);
 
       setDemoBusy('idle');
-      setError(
-        e.code === 'NETWORK_ERROR' ? 'Cannot reach the server.'
-        : e.code === 'TOO_MANY_ATTEMPTS' ? RATE_LIMITED
-        // Everything else. Seven other codes can land here —
-        // VALIDATION_FAILED, INTERNAL_ERROR, REQUEST_FAILED among
-        // them — and a bare code was the whole message before, which
-        // told a visitor nothing and looked broken. The code is kept
-        // because it costs a visitor nothing and is the first thing
-        // anyone debugging this will ask for; the sentence around it
-        // is what makes the screen usable. The full exception is in
-        // the console line above.
-        : `Something went wrong reopening that demo vault${e.code ? ` (${e.code})` : ''}. Starting a fresh one below should work.`
-      );
+      // The seven other codes that can land here — VALIDATION_FAILED,
+      // INTERNAL_ERROR, REQUEST_FAILED among them — now have shared
+      // copy instead of arriving as bare identifiers.
+      setError(codeToMessage(e, 'Something went wrong reopening that demo vault', {
+        TOO_MANY_ATTEMPTS: RATE_LIMITED
+      }));
     }
   }
 
@@ -185,18 +178,15 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery, onFreshVault }) {
         return;
       }
 
-      setError(
-        e.code === 'INVALID_CREDENTIALS'
-          // The server deliberately can't tell us WHICH was wrong —
-          // saying "the code was wrong" would confirm the password
-          // is live. So the message covers both.
-          ? (needsCode
-              ? 'Wrong password or code. Codes expire every 30 seconds — try the current one.'
-              : 'Wrong email or master password.')
-        : e.code === 'NOT_FOUND' ? 'No vault found for that email.'
-        : e.code === 'NETWORK_ERROR' ? 'Cannot reach the server.'
-        : `Could not unlock${e.code ? ` (${e.code})` : ''}.`
-      );
+      setError(codeToMessage(e, 'Could not unlock', {
+        // The server deliberately can't tell us WHICH was wrong —
+        // saying "the code was wrong" would confirm the password is
+        // live. So the message covers both.
+        INVALID_CREDENTIALS: needsCode
+          ? 'Wrong password or code. Codes expire every 30 seconds — try the current one.'
+          : 'Wrong email or master password.',
+        NOT_FOUND: 'No vault found for that email.'
+      }));
 
       // A used code can never work again, so clear it rather than
       // letting the user retry the same six digits.
@@ -362,7 +352,7 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery, onFreshVault }) {
               </div>
             )}
 
-            {error && <div style={{ fontSize: 13, color: 'var(--red)' }}>{error}</div>}
+            <ErrorNote message={error} />
 
             <Button onClick={handleUnlock} style={{ padding: '14px 24px', letterSpacing: '.12em' }}>
               UNLOCK

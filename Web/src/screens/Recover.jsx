@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import * as auth from '../api/auth';
-import { Card, Input, Button, Meter, DeriveBar } from '../components/ui';
+import { Card, Input, Button, Meter, DeriveBar, ErrorNote } from '../components/ui';
+import { codeToMessage } from '../lib/errors';
 import { Paladin } from '../components/Paladin';
 import { Icon } from '../components/Icon';
 import { checkPolicy } from '../lib/policy';
@@ -41,19 +42,17 @@ export function Recover({ onRecovered, onBack }) {
       setMaterial(await auth.getRecoveryMaterial(email));
       setPhase('key');
     } catch (e) {
-      setError(
-        e.code === 'NOT_FOUND' ? 'No vault found for that email.'
+      setError(codeToMessage(e, 'Could not start recovery', {
+        NOT_FOUND: 'No vault found for that email.',
         // This account was created before recovery required proof of
-        // possession, so it has no stored verifier and no recovery
-        // key can be checked against it. The vault itself is fine and
-        // the password still opens it — the fix is to sign in and
-        // mint a fresh kit, which writes the verifier that was
-        // missing. Saying so beats a dead end.
-        : e.code === 'RECOVERY_UNAVAILABLE'
-          ? 'This vault was created before recovery keys could be verified, so its old kit can no longer be used. Your master password still works: sign in with it, then open Settings and issue a new recovery key. That new kit will work normally.'
-        : e.code === 'NETWORK_ERROR' ? 'Cannot reach the server.'
-        : `Could not start recovery${e.code ? ` (${e.code})` : ''}.`
-      );
+        // possession, so it has no stored verifier and no recovery key
+        // can be checked against it. The vault itself is fine and the
+        // password still opens it — the fix is to sign in and mint a
+        // fresh kit, which writes the verifier that was missing.
+        // Saying so beats a dead end.
+        RECOVERY_UNAVAILABLE:
+          'This vault was created before recovery keys could be verified, so its old kit can no longer be used. Your master password still works: sign in with it, then open Settings and issue a new recovery key. That new kit will work normally.'
+      }));
     } finally {
       setBusy(false);
     }
@@ -97,18 +96,16 @@ export function Recover({ onRecovered, onBack }) {
       onRecovered(recoveryKey, email);
     } catch (e) {
       setPhase('password');
-      setError(
-        e.code === 'NETWORK_ERROR' ? 'Cannot reach the server.'
+      setError(codeToMessage(e, 'Recovery failed', {
         // The server proves the recovery key before it writes
         // anything, and answers every failure the same way — no such
         // account, no verifier, wrong key are one response. So this
         // message cannot be more specific than the server was, and
         // should not pretend to be. Reaching it after the key already
         // unwrapped the vault means the kit changed underneath us.
-        : e.code === 'INVALID_RECOVERY_KEY'
-          ? 'The server would not accept that recovery key. If a new kit was issued for this vault since the key you used was printed, the older key no longer works — use the most recent one.'
-        : `Recovery failed${e.code ? ` (${e.code})` : ''}.`
-      );
+        INVALID_RECOVERY_KEY:
+          'The server would not accept that recovery key. If a new kit was issued for this vault since the key you used was printed, the older key no longer works — use the most recent one.'
+      }));
     }
   }
 
@@ -147,7 +144,7 @@ export function Recover({ onRecovered, onBack }) {
                 value={email} onChange={e => setEmail(e.target.value)}
                 onKeyDown={onEnter(findAccount)}
               />
-              {error && <div style={{ fontSize: 13, color: 'var(--red)' }}>{error}</div>}
+              <ErrorNote message={error} />
               <Button onClick={findAccount} disabled={busy} style={{ padding: '14px 24px', letterSpacing: '.12em' }}>
                 {busy ? 'CHECKING…' : 'CONTINUE'}
               </Button>
@@ -169,7 +166,7 @@ export function Recover({ onRecovered, onBack }) {
                 autoComplete="off"
                 name="vk-recovery-key"
               />
-              {error && <div style={{ fontSize: 13, color: 'var(--red)' }}>{error}</div>}
+              <ErrorNote message={error} />
               <div className="vk-r-col" style={{ display: 'flex', gap: 12 }}>
                 <Button variant="secondary" onClick={() => { setPhase('email'); setError(''); }}
                   style={{ font: '600 12px Geist, sans-serif', padding: '11px 18px' }}>
@@ -241,7 +238,7 @@ export function Recover({ onRecovered, onBack }) {
                 error={mismatch ? "Passwords don't match yet." : ''}
               />
 
-              {error && <div style={{ fontSize: 13, color: 'var(--red)' }}>{error}</div>}
+              <ErrorNote message={error} />
 
               <Button onClick={finish} style={{ padding: '14px 24px', letterSpacing: '.12em' }}>
                 SET NEW PASSWORD

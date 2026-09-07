@@ -4,6 +4,7 @@ import { useVault } from '../context/VaultContext';
 import { usePix } from '../context/PixContext';
 import { copySecret } from '../lib/clipboard';
 import { Icon } from '../components/Icon';
+import { ErrorNote } from '../components/ui';
 
 const EMPTY = { site: '', username: '', password: '', url: '', notes: '' };
 
@@ -92,6 +93,10 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
       // console line is the only place the real cause survives.
       console.error('[vault] save failed:', e);
       setSaving(false);
+      // NOT routed through the shared code map, deliberately. The
+      // reassurance here — your draft survived, the entry is still
+      // there — is worth more to someone mid-edit than the generic
+      // server sentence, and a shared map cannot carry it.
       setActionError(
         e?.code === 'NETWORK_ERROR' ? 'Cannot reach the server — nothing was saved.'
         : `Could not save this entry${e?.code ? ` (${e.code})` : ''}. Your changes are still here — try again.`
@@ -390,11 +395,7 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
             the control that produced it — and, at 375px where the
             actions row is the last thing on screen, it cannot be
             scrolled past on the way to pressing SAVE again. */}
-        {actionError && (
-          <div role="alert" style={{ fontSize: 13, color: 'var(--red)', textWrap: 'pretty' }}>
-            {actionError}
-          </div>
-        )}
+        <ErrorNote message={actionError} />
 
         {/* ---- ACTIONS: delete left, save right, spacer between ---- */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingTop: 4 }}>
