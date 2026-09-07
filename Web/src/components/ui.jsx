@@ -177,6 +177,44 @@ export function ErrorNote({ message, style }) {
 }
 
 // ---------------------------------------------------------------
+// SUCCESS NOTE — it worked, said where the thing happened.
+//
+// The counterpart to ErrorNote and deliberately NOT the same
+// component. Several operations used to succeed in total silence: a
+// downloaded recovery kit, downloaded backup codes, two-factor being
+// switched off. The KDF upgrade banner was the only place in the app
+// that acknowledged anything, and it is the model for this.
+//
+// role="status", not "alert". Polite, so it waits for a pause rather
+// than interrupting — a confirmation is not urgent, and announcing it
+// assertively would make success sound like a problem. That difference
+// is the whole reason this is a separate component from ErrorNote
+// rather than a `tone` prop on one.
+// ---------------------------------------------------------------
+export function SuccessNote({ label, children, style }) {
+  if (!label) return null;
+
+  return (
+    <div
+      role="status"
+      style={{ display: 'flex', flexDirection: 'column', gap: 4, ...style }}
+    >
+      <span style={{
+        font: "600 11px 'Geist Mono', monospace",
+        letterSpacing: '.16em', color: 'var(--green)'
+      }}>
+        {label}
+      </span>
+      {children && (
+        <span style={{ fontSize: 13, color: 'var(--muted)', textWrap: 'pretty' }}>
+          {children}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------
 // CARD — soft shadow + crisp pixel border, the signature hybrid.
 // ---------------------------------------------------------------
 export function Card({ children, style, className }) {

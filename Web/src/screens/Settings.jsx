@@ -3,13 +3,17 @@ import QRCode from 'qrcode';
 import { useVault } from '../context/VaultContext';
 import { useTheme } from '../context/ThemeContext';
 import { usePix } from '../context/PixContext';
-import { Card, Input, Button, Meter, Switch, DeriveBar, ErrorNote } from '../components/ui';
+import { Card, Input, Button, Meter, Switch, DeriveBar, ErrorNote, SuccessNote } from '../components/ui';
 import { codeToMessage } from '../lib/errors';
 import { calcStrength } from '../lib/strength';
 import { Icon } from '../components/Icon';
 import * as totpApi from '../api/totp';
 
-export function Settings() {
+// The props object is defaulted so the screen can be called with no
+// arguments at all — a test, a future embed. Same tolerance usePix
+// applies for the same reason: a settings page should not throw over a
+// missing optional callback.
+export function Settings({ onPasswordChanged } = {}) {
   const { email, kdfUpgradeAvailable, changePassword, upgradeKdf } = useVault();
   const { theme, toggle } = useTheme();
 
@@ -24,7 +28,8 @@ export function Settings() {
       {/* KDF upgrade — only shown when the account's params are stale */}
       {kdfUpgradeAvailable && <KdfUpgrade email={email} upgradeKdf={upgradeKdf} />}
 
-      <ChangePassword email={email} changePassword={changePassword} />
+      <ChangePassword email={email} changePassword={changePassword}
+        onPasswordChanged={onPasswordChanged} />
 
       <TwoFactor email={email} />
 
@@ -68,6 +73,12 @@ function RecoveryKitSection({ email }) {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
 
+  // DOWNLOAD used to do its work in complete silence: a Blob, an
+  // anchor, a click, and no change on screen at all. On a browser that
+  // saves without prompting, nothing whatsoever happened as far as the
+  // person could tell — for the one file they are being told to keep.
+  const [downloaded, setDownloaded] = useState(false);
+
   async function run() {
     setError('');
     if (!pw) return setError('Enter your master password.');
@@ -96,7 +107,21 @@ function RecoveryKitSection({ email }) {
     const a = document.createElement('a');
     a.href = url; a.download = 'citadel-zero-recovery-key.txt'; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 0);
+
+    // Names the file rather than claiming the save succeeded. A page
+    // cannot observe what the browser did with a download — it may go
+    // to a folder, a prompt, or nowhere — so "check for this filename"
+    // is the strongest thing that is actually true.
+    setDownloaded(true);
   }
+
+  // Transient: a confirmation that never leaves stops being one and
+  // becomes furniture. Inline and adjacent, not a floating layer.
+  useEffect(() => {
+    if (!downloaded) return;
+    const t = setTimeout(() => setDownloaded(false), 6000);
+    return () => clearTimeout(t);
+  }, [downloaded]);
 
   return (
     <Card style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -195,6 +220,13 @@ function RecoveryKitSection({ email }) {
               <Icon name="printer" /> PRINT
             </Button>
           </div>
+
+          {downloaded && (
+            <SuccessNote label="KEY DOWNLOADED" style={{ marginTop: -8 }}>
+              Look for <code style={{ color: 'var(--text)' }}>citadel-zero-recovery-key.txt</code> wherever
+              your browser saves downloads.
+            </SuccessNote>
+          )}
 
           <label className="vk-noprint" style={{ display: 'flex', gap: 14, alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}>
             <input type="checkbox" checked={saved} onChange={e => setSaved(e.target.checked)}
@@ -338,7 +370,7 @@ function KdfUpgrade({ email, upgradeKdf }) {
 // CHANGE MASTER PASSWORD — re-wraps the DEK, then forces re-login
 // (the server revokes all sessions on success).
 // ---------------------------------------------------------------
-function ChangePassword({ email, changePassword }) {
+function ChangePassword({ email, changePassword, onPasswordChanged }) {
   const [cur, setCur] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -364,7 +396,18 @@ function ChangePassword({ email, changePassword }) {
     setBusy(true);
     try {
       await changePassword(email, cur, next);
-      // changePassword() calls lock() on success → App drops to unlock.
+
+      // changePassword() calls lock() on success, so this component is
+      // already being unmounted and CANNOT show its own confirmation —
+      // the user is thrown to the unlock screen mid-sentence. That is
+      // why success here was indistinguishable from a crash: the app
+      // simply logged them out and said nothing.
+      //
+      // So the message is handed upwards, to be shown on the screen
+      // they actually land on. Delaying the lock instead would be
+      // worse: the server has already revoked every session, so the
+      // vault on screen would be backed by dead tokens.
+      onPasswordChanged?.();
     } catch (e) {
       setBusy(false);
       setError(codeToMessage(e, 'Could not change password', {
@@ -448,10 +491,34 @@ function TwoFactor({ email }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
+  // Same silence as the recovery kit: the backup codes downloaded with
+  // no acknowledgement at all.
+  const [codesDownloaded, setCodesDownloaded] = useState(false);
+
+  // Turning two-factor OFF used to re-render the section as "off" and
+  // say nothing. Switching a security control off is exactly the
+  // operation that deserves to be stated out loud, not inferred from a
+  // heading that quietly changed.
+  const [justDisabled, setJustDisabled] = useState(false);
+
   // Why the status check failed. Separate from `error`, which belongs
   // to an action the user took — nobody pressed anything to get this
   // one, and the two are never on screen together.
   const [probeError, setProbeError] = useState('');
+
+  // Both confirmations are transient, for the same reason the recovery
+  // kit's is: one that never leaves stops being a confirmation.
+  useEffect(() => {
+    if (!codesDownloaded) return;
+    const t = setTimeout(() => setCodesDownloaded(false), 6000);
+    return () => clearTimeout(t);
+  }, [codesDownloaded]);
+
+  useEffect(() => {
+    if (!justDisabled) return;
+    const t = setTimeout(() => setJustDisabled(false), 8000);
+    return () => clearTimeout(t);
+  }, [justDisabled]);
 
   // Bumping this re-runs the probe. RECHECK goes through the effect so
   // a second failure takes the same path as the first.
@@ -528,6 +595,7 @@ function TwoFactor({ email }) {
       await totpApi.disable(code);
       setCode('');
       setPhase('off');
+      setJustDisabled(true);
     } catch (e) {
       fail(e, 'Could not turn off two-factor');
     } finally {
@@ -551,6 +619,8 @@ function TwoFactor({ email }) {
     a.download = 'citadel-zero-backup-codes.txt';
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 0);
+
+    setCodesDownloaded(true);
   }
 
   const codeInput = (label, onSubmit) => (
@@ -623,6 +693,16 @@ function TwoFactor({ email }) {
       {/* ---- OFF ---- */}
       {phase === 'off' && (
         <>
+          {/* Only after an actual disable — not every time this section
+              happens to render in the off state, which is the ordinary
+              case for an account that never had two-factor on. */}
+          {justDisabled && (
+            <SuccessNote label="TWO-FACTOR TURNED OFF">
+              Signing in now needs only your master password. Your backup codes
+              have been discarded and will not work again.
+            </SuccessNote>
+          )}
+
           <div style={{ fontSize: 13, color: 'var(--muted)', textWrap: 'pretty' }}>
             Adds a code from your phone to every login. This protects your account,
             not your vault — your entries are already sealed under your master
@@ -732,6 +812,13 @@ function TwoFactor({ email }) {
               <Icon name="printer" /> PRINT
             </Button>
           </div>
+
+          {codesDownloaded && (
+            <SuccessNote label="CODES DOWNLOADED" style={{ marginTop: -8 }}>
+              Look for <code style={{ color: 'var(--text)' }}>citadel-zero-backup-codes.txt</code> wherever
+              your browser saves downloads.
+            </SuccessNote>
+          )}
 
           <label className="vk-noprint" style={{ display: 'flex', gap: 14, alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}>
             <input type="checkbox" checked={saved} onChange={e => setSaved(e.target.checked)}

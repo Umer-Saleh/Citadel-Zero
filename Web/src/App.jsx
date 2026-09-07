@@ -114,6 +114,18 @@ export default function App() {
   // "WELCOME BACK.". A ref has no such coupling.
   const freshAccount = useRef(false);
 
+  // A message to show on the UNLOCK screen, set by something that
+  // happened just before the vault locked.
+  //
+  // Changing the master password succeeds and then immediately locks —
+  // the server revokes every session, so there is nothing valid left to
+  // stay signed in with. The screen that would have confirmed it is
+  // torn down in the same commit, which is why a successful change was
+  // indistinguishable from a crash: the user was ejected in silence.
+  //
+  // State, not a ref, because unlike freshAccount this one renders.
+  const [postLockNotice, setPostLockNotice] = useState('');
+
   // PIX reacts to saves, copies, and deletes. The context is provided
   // at the top level, but the reactions happen in the header, three
   // levels up and a sibling of all of them.
@@ -213,7 +225,13 @@ export default function App() {
           }} />
         )}
 
-        {view === 'settings' && <Settings />}
+        {view === 'settings' && (
+          <Settings
+            onPasswordChanged={() => setPostLockNotice(
+              'Your master password was changed. Every other session was signed out — unlock with the new password.'
+            )}
+          />
+        )}
       </AppShell>
     );
   }
@@ -283,7 +301,10 @@ export default function App() {
   // branch above takes over — so onUnlocked has nothing to do here.
   return (
     <Unlock
-      onUnlocked={() => { /* isUnlocked flips true; the unlocked branch renders the vault */ }}
+      notice={postLockNotice}
+      // Cleared once they are back in, so a later lock does not replay
+      // an explanation for something that happened two sessions ago.
+      onUnlocked={() => setPostLockNotice('')}
       onGoSignup={() => setAuthScreen('signup')}
       onGoRecovery={() => setAuthScreen('recover')}
       // Provisioning a demo vault creates an account and unlocks it

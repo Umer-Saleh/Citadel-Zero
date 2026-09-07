@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useVault } from '../context/VaultContext';
-import { Card, Input, Button, DeriveBar, ErrorNote } from '../components/ui';
+import { Card, Input, Button, DeriveBar, ErrorNote, SuccessNote } from '../components/ui';
 import { codeToMessage } from '../lib/errors';
 import { Paladin } from '../components/Paladin';
 import { usePix } from '../context/PixContext';
@@ -24,7 +24,7 @@ const RESUME_NOTICE = {
   totp: "You turned on two-factor authentication for this vault. Reopening it needs a code from your authenticator, and the demo has no way to ask for one — so this vault can't be reopened. Everything here is deleted at 03:00 UTC regardless. Start a fresh one below."
 };
 
-export function Unlock({ onUnlocked, onGoSignup, onGoRecovery, onFreshVault }) {
+export function Unlock({ onUnlocked, onGoSignup, onGoRecovery, onFreshVault, notice }) {
   const { login, signup, addItem } = useVault();
   const { pose: pixPose, says: pixSays } = usePix();
 
@@ -247,6 +247,18 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery, onFreshVault }) {
             animation: 'riseIn .5s cubic-bezier(.2,.9,.3,1) both',
             animationDelay: '.12s'
           }}>
+            {/* Something that happened just before the vault locked —
+                today only a master-password change, which succeeds and
+                then signs every session out. Green and role="status":
+                it is a confirmation, and it must not be mistaken for
+                the red failure slot below or for the amber demo notice,
+                which are three different kinds of thing. */}
+            {/* Gated on the notice itself, not on SuccessNote's own
+                empty check: the label here is a literal, so without
+                this the heading would render with nothing under it
+                after any later lock. */}
+            {notice && <SuccessNote label="PASSWORD CHANGED">{notice}</SuccessNote>}
+
             <Input
               label="Email" type="email" placeholder="you@example.com"
               value={email} onChange={e => setEmail(e.target.value)}

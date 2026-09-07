@@ -1,5 +1,6 @@
 import { describe, test, expect } from 'vitest';
-import { ErrorNote } from './ui';
+import { ErrorNote, SuccessNote } from './ui';
+import { texts, walk } from '../test/hookShim.js';
 
 /**
  * The one red line, and the announcement it used to lack.
@@ -47,5 +48,35 @@ describe('ErrorNote', () => {
     expect(el.props.style.marginTop).toBe(8);
     expect(el.props.style.color).toBe('var(--red)');
     expect(el.props.role).toBe('alert');
+  });
+});
+
+describe('SuccessNote', () => {
+  test('is polite, not assertive', () => {
+    // role="status", deliberately not "alert". A confirmation waits for
+    // a pause; announcing it assertively would make success interrupt
+    // like a problem. That difference is why this is a separate
+    // component rather than a tone prop on ErrorNote.
+    expect(SuccessNote({ label: 'KEY DOWNLOADED' }).props.role).toBe('status');
+  });
+
+  test('renders the label, and the detail when there is one', () => {
+    const withDetail = SuccessNote({ label: 'TWO-FACTOR TURNED OFF', children: 'Only your master password now.' });
+    expect(texts(withDetail)).toContain('TWO-FACTOR TURNED OFF');
+    expect(texts(withDetail)).toContain('Only your master password now.');
+
+    const bare = SuccessNote({ label: 'SAVED' });
+    expect(texts(bare)).toContain('SAVED');
+  });
+
+  test('renders nothing without a label', () => {
+    expect(SuccessNote({ label: '' })).toBe(null);
+    expect(SuccessNote({ label: null })).toBe(null);
+  });
+
+  test('is green, so it cannot be mistaken for the red failure slot', () => {
+    const el = SuccessNote({ label: 'DONE' });
+    const labelSpan = [...walk(el)].find(n => n?.props?.style?.color === 'var(--green)');
+    expect(labelSpan).toBeDefined();
   });
 });
