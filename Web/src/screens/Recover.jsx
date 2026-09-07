@@ -5,6 +5,7 @@ import { codeToMessage } from '../lib/errors';
 import { Paladin } from '../components/Paladin';
 import { Icon } from '../components/Icon';
 import { checkPolicy } from '../lib/policy';
+import { emailError, normaliseEmail } from '../lib/email';
 
 /**
  * Recovery: unwrap the vault with the recovery key, then set a new
@@ -30,6 +31,9 @@ export function Recover({ onRecovered, onBack }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
+  const [emailTouched, setEmailTouched] = useState(false);
+  const emailProblem = emailTouched ? emailError(email) : '';
+
   const policy = checkPolicy(pw, [email]);
   const mismatch = pw2.length > 0 && pw2 !== pw;
 
@@ -37,9 +41,21 @@ export function Recover({ onRecovered, onBack }) {
     setError('');
     if (!email) return setError('Enter the email for your vault.');
 
+    // Step 1 of 3 — and the address is carried into step 3's
+    // completeRecovery, so the trimmed value is written back to state
+    // rather than only used locally.
+    const cleanEmail = normaliseEmail(email);
+    const badEmail = emailError(cleanEmail);
+    if (badEmail) {
+      setEmail(cleanEmail);
+      setEmailTouched(true);
+      return setError(badEmail);
+    }
+    setEmail(cleanEmail);
+
     setBusy(true);
     try {
-      setMaterial(await auth.getRecoveryMaterial(email));
+      setMaterial(await auth.getRecoveryMaterial(cleanEmail));
       setPhase('key');
     } catch (e) {
       setError(codeToMessage(e, 'Could not start recovery', {
@@ -143,6 +159,8 @@ export function Recover({ onRecovered, onBack }) {
                 label="Email" type="email" placeholder="you@example.com"
                 value={email} onChange={e => setEmail(e.target.value)}
                 onKeyDown={onEnter(findAccount)}
+                onBlur={() => { setEmail(v => normaliseEmail(v)); setEmailTouched(true); }}
+                error={emailProblem}
               />
               <ErrorNote message={error} />
               <Button onClick={findAccount} disabled={busy} style={{ padding: '14px 24px', letterSpacing: '.12em' }}>

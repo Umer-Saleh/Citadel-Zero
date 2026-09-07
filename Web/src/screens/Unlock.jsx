@@ -5,6 +5,7 @@ import { codeToMessage } from '../lib/errors';
 import { Paladin } from '../components/Paladin';
 import { usePix } from '../context/PixContext';
 import { DEMO_MODE } from '../lib/demo';
+import { emailError, normaliseEmail } from '../lib/email';
 import {
   provisionDemoVault, resumeDemoVault, loadDemoCredentials
 } from '../lib/provisionDemo';
@@ -36,6 +37,9 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery, onFreshVault, not
   // Revealed only after the server tells us this account has 2FA on.
   // Showing it to everyone would be noise; asking up front would need
   // an extra round trip before the user has typed anything.
+  const [emailTouched, setEmailTouched] = useState(false);
+  const emailProblem = emailTouched ? emailError(email) : '';
+
   const [needsCode, setNeedsCode] = useState(false);
   const codeRef = useRef(null);
 
@@ -162,9 +166,19 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery, onFreshVault, not
     if (!email || !pw) return setError('Enter your email and master password.');
     if (needsCode && !code) return setError('Enter the code from your authenticator app.');
 
+    // Checked before setPhase('deriving'), so an unusable address never
+    // reaches the Argon2id run it used to pay for in full.
+    const cleanEmail = normaliseEmail(email);
+    const badEmail = emailError(cleanEmail);
+    if (badEmail) {
+      setEmail(cleanEmail);
+      setEmailTouched(true);
+      return setError(badEmail);
+    }
+
     setPhase('deriving');
     try {
-      const result = await login(email, pw, code || undefined);   // real Argon2id runs here
+      const result = await login(cleanEmail, pw, code || undefined);   // real Argon2id runs here
       setPhase('granted');
       // brief beat on the triumphant "gate" pose before entering
       setTimeout(() => onUnlocked(result), 700);
@@ -263,6 +277,8 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery, onFreshVault, not
               label="Email" type="email" placeholder="you@example.com"
               value={email} onChange={e => setEmail(e.target.value)}
               onKeyDown={onEnter}
+              onBlur={() => { setEmail(v => normaliseEmail(v)); setEmailTouched(true); }}
+              error={emailProblem}
             />
             <Input
               label="Master password" revealable mono

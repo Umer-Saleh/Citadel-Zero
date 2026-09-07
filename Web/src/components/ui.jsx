@@ -73,7 +73,17 @@ export function Button({ variant = 'primary', children, style, ...props }) {
 // INPUT — labelled, pixel-bordered, green focus glow. Optional
 // secret type with a reveal toggle.
 // ---------------------------------------------------------------
-export function Input({ label, error, revealable, revealed: revealedProp, onToggleReveal, value, onChange, mono, ...props }) {
+export function Input({
+  label, error, revealable, revealed: revealedProp, onToggleReveal,
+  value, onChange, mono,
+  // Pulled OUT of the spread deliberately. The focus ring below needs
+  // its own handlers, and they are written after {...props} — so a
+  // caller's onFocus/onBlur used to be silently overwritten rather
+  // than merged. A blur handler that never runs is the kind of thing
+  // that looks wired up and does nothing, so both are chained instead.
+  onFocus, onBlur,
+  ...props
+}) {
   const [focused, setFocused] = useState(false);
   const [ownRevealed, setOwnRevealed] = useState(false);
   const [eyeDown, setEyeDown] = useState(false);
@@ -113,8 +123,8 @@ export function Input({ label, error, revealable, revealed: revealedProp, onTogg
           type={revealable ? (revealed ? 'text' : 'password') : props.type}
           value={value}
           onChange={onChange}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
+          onFocus={e => { setFocused(true); onFocus?.(e); }}
+          onBlur={e => { setFocused(false); onBlur?.(e); }}
           style={inputStyle}
         />
         {revealable && (

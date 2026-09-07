@@ -5,6 +5,7 @@ import { codeToMessage } from '../lib/errors';
 import { Paladin } from '../components/Paladin';
 import { Icon } from '../components/Icon';
 import { checkPolicy } from '../lib/policy';
+import { emailError, normaliseEmail } from '../lib/email';
 
 export function Signup({ onComplete, onGoLogin }) {
   const { signup } = useVault();
@@ -25,17 +26,35 @@ export function Signup({ onComplete, onGoLogin }) {
 
   const [revealed, setRevealed] = useState(false);
 
+  // Shown only once the field has been left. Flagging an address the
+  // moment focus lands would be nagging someone mid-type.
+  const [emailTouched, setEmailTouched] = useState(false);
+  const emailProblem = emailTouched ? emailError(email) : '';
+
   async function handleSubmit() {
     if (busy) return;                       // Enter can fire while a signup is in flight
     setError('');
     if (!email || !pw) return setError('Email and master password are required.');
+
+    // Before the derivation, not after. An unusable address used to
+    // cost a full Argon2id run in this browser and come back as a
+    // server VALIDATION_FAILED.
+    const cleanEmail = normaliseEmail(email);
+    const badEmail = emailError(cleanEmail);
+    if (badEmail) {
+      setEmail(cleanEmail);
+      setEmailTouched(true);
+      return setError(badEmail);
+    }
     if (pw !== pw2) return setError("Passwords don't match yet.");
     if (!policy.passed) return setError('Your master password does not meet the requirements below.');
 
     setBusy(true);
     try {
-      const { recoveryKey } = await signup(email, pw);
-      onComplete(recoveryKey, email);
+      // The trimmed address is what is registered AND what is handed
+      // on, so the recovery kit and the first unlock agree with it.
+      const { recoveryKey } = await signup(cleanEmail, pw);
+      onComplete(recoveryKey, cleanEmail);
     } catch (e) {
       // This handler used to end in a bare "Something went wrong.
       // Please try again." — the only one in the app that threw the
@@ -70,6 +89,9 @@ export function Signup({ onComplete, onGoLogin }) {
             label="Email" type="email" placeholder="you@example.com"
             value={email} onChange={e => setEmail(e.target.value)}
             onKeyDown={onEnter}
+            // Trimmed on the way out, so what is shown is what is sent.
+            onBlur={() => { setEmail(v => normaliseEmail(v)); setEmailTouched(true); }}
+            error={emailProblem}
           />
 
           <Input
