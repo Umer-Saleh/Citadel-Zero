@@ -60,6 +60,21 @@ const SHARED = {
     'The server gave a response this app could not read. Try again in a moment.',
   NETWORK_ERROR: 'Cannot reach the server.',
 
+  // --- the request itself was refused --------------------------------
+  // Raised by express.json before any route runs. All three used to
+  // arrive as INTERNAL_ERROR, so the server appeared to break when it
+  // had in fact refused something specific.
+  //
+  // PAYLOAD_TOO_LARGE is the one an ordinary person can actually reach:
+  // the body limit is 64 KB, and a long enough notes field on a vault
+  // entry will exceed it.
+  PAYLOAD_TOO_LARGE:
+    'That was too large to send — the limit is 64 KB. If this was a vault entry, shortening the notes should fix it.',
+  MALFORMED_JSON:
+    'The app sent something the server could not read. This is a bug, not something you did.',
+  UNSUPPORTED_ENCODING:
+    'The server would not accept how that request was encoded. This is a bug, not something you did.',
+
   // --- a bug, said plainly -------------------------------------------
   // A visitor cannot act on this one, so the honest thing is to say it
   // is not their fault rather than imply they can fix it.

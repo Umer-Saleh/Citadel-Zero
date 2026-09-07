@@ -109,6 +109,13 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
         //   Web/src/lib/errors.js                 the shared VAULT_FULL
         : e?.code === 'VAULT_FULL'
           ? 'This vault is full — 1,000 entries. Your changes are still here; delete an entry to make room.'
+        // Saving an entry is the one place an ordinary person reaches
+        // this: the request body is capped at 64 KB, and a long enough
+        // notes field passes it. Named here rather than left to the
+        // shared map so it can keep the draft reassurance the rest of
+        // this handler gives.
+        : e?.code === 'PAYLOAD_TOO_LARGE'
+          ? 'This entry is too large to save — the limit is 64 KB. Your changes are still here; shortening the notes should fix it.'
         : `Could not save this entry${e?.code ? ` (${e.code})` : ''}. Your changes are still here — try again.`
       );
     }

@@ -283,9 +283,49 @@ app.use((req, res) => {
 // Operational errors carry a safe client-facing code; anything else
 // is a bug, logged in full and reported as a generic 500.
 // ---------------------------------------------------------------
+
+/**
+ * Failures raised by express.json before any route runs.
+ *
+ * These are NOT AppErrors, so they used to fall past the check below
+ * and be reported as INTERNAL_ERROR — the server telling a caller it
+ * had broken when the caller had sent something it could not accept.
+ * All four were verified against the running server; each returned
+ * 500 before this map existed:
+ *
+ *   entity.too.large      a body over the 64 KB limit        -> 413
+ *   entity.parse.failed   malformed JSON, or bytes that are
+ *                         not JSON in the declared charset    -> 400
+ *   encoding.unsupported  an unknown Content-Encoding         -> 415
+ *   charset.unsupported   an unknown charset                  -> 415
+ *
+ * Keyed on err.type rather than err.status, and closed rather than
+ * generic. A rule like "any exposed 4xx" would cover more, but the
+ * code it emitted would have to be derived from an unbounded set of
+ * strings — and a code the client has no copy for is the exact problem
+ * the shared error map exists to remove. Anything not listed here is
+ * genuinely unexpected, and 500 is the honest answer for it.
+ *
+ * Only the code is sent. These errors carry a `body` property holding
+ * the offending payload, which must never be echoed back.
+ */
+const BODY_ERRORS = {
+  'entity.too.large': { code: 'PAYLOAD_TOO_LARGE', status: 413 },
+  'entity.parse.failed': { code: 'MALFORMED_JSON', status: 400 },
+  'encoding.unsupported': { code: 'UNSUPPORTED_ENCODING', status: 415 },
+  'charset.unsupported': { code: 'UNSUPPORTED_ENCODING', status: 415 }
+};
+
 app.use((err, req, res, next) => {
   if (err instanceof AppError && err.isOperational) {
     return res.status(err.statusCode).json({ error: err.code });
+  }
+
+  const body = BODY_ERRORS[err?.type];
+  if (body) {
+    // Not logged as unhandled: this is a caller sending something
+    // invalid, which is ordinary, not a defect in this process.
+    return res.status(body.status).json({ error: body.code });
   }
 
   console.error('[server] unhandled:', err);
