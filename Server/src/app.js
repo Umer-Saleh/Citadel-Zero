@@ -64,6 +64,13 @@ app.use('/api/account/password', authLimiter);
 app.use('/api/account/recovery-material', authLimiter);
 app.use('/api/account/recover', authLimiter);
 app.use('/api/account/kdf-upgrade', authLimiter);
+// The enrolment trio shares one budget. confirm and disable are here
+// because they VERIFY a code and are therefore guessing surfaces;
+// begin is not, and was left off for that reason. It is still the odd
+// one out of three routes that otherwise move the same credential, and
+// it writes a fresh secret to the user's row on every call — so it
+// joins them rather than staying an exception someone has to remember.
+app.use('/api/account/totp/begin', authLimiter);
 app.use('/api/account/totp/confirm', authLimiter);
 app.use('/api/account/totp/disable', authLimiter);
 app.use('/api/account/recovery-kit', authLimiter);
