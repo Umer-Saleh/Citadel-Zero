@@ -60,15 +60,6 @@ async function consumeStep(userId, step, client) {
   return rows.length > 0;
 }
 
-async function findTotpByEmail(email, client) {
-  const { rows } = await q(client).query(
-    `SELECT id, totp_secret, totp_enabled, totp_last_step
-     FROM users WHERE email = $1`,
-    [email]
-  );
-  return rows[0] || null;
-}
-
 async function findTotpById(id, client) {
   const { rows } = await q(client).query(
     `SELECT id, email, totp_secret, totp_enabled, totp_last_step
@@ -117,6 +108,6 @@ async function countUnusedBackupCodes(userId, client) {
 
 module.exports = {
   setSecret, enable, disable, consumeStep,
-  findTotpByEmail, findTotpById,
+  findTotpById,
   replaceBackupCodes, consumeBackupCode, countUnusedBackupCodes
 };

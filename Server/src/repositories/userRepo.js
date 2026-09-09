@@ -14,12 +14,26 @@ function q(client) {
   return client || db;
 }
 
+/**
+ * CASE-INSENSITIVE, and deliberately so.
+ *
+ * `email = $1` made Reviewer@Example.com a different account from
+ * reviewer@example.com, so a person who capitalised inconsistently
+ * between visits was shown an empty vault. Folding here is matched by
+ * the unique index on lower(email) — see the migration — which is what
+ * stops a second colliding account from ever existing. This function
+ * could regress to an exact match and still not produce duplicates;
+ * it would only fail to find an account that is there.
+ *
+ * The stored value keeps its original casing. Only the comparison
+ * folds.
+ */
 async function findByEmail(email, client) {
   const { rows } = await q(client).query(
     `SELECT id, email, kdf_salt, kdf_params, auth_hash,
             wrapped_dek, wrapped_dek_nonce, wrapped_dek_tag,
             totp_secret, totp_enabled, totp_last_step
-     FROM users WHERE email = $1`,
+     FROM users WHERE lower(email) = lower($1)`,
     [email]
   );
   return rows[0] || null;
@@ -109,13 +123,18 @@ async function updateRecoveryWrapper(
  * client. getRecoveryMaterial picks the two public fields out of this
  * row by hand for exactly that reason — handing over the verifier
  * would give an attacker the thing they are supposed to prove.
+ *
+ * Case-insensitive for the same reason as findByEmail. Recovery is the
+ * path someone reaches precisely BECAUSE they are already locked out,
+ * so an exact-match lookup here would tell them no vault exists at the
+ * one moment they are least able to guess why.
  */
 async function findRecoveryByEmail(email, client) {
   const { rows } = await q(client).query(
     `SELECT id, email, recovery_salt, recovery_wrapped_dek,
             recovery_wrapped_dek_nonce, recovery_wrapped_dek_tag,
             recovery_auth_hash
-     FROM users WHERE email = $1`,
+     FROM users WHERE lower(email) = lower($1)`,
     [email]
   );
   return rows[0] || null;
