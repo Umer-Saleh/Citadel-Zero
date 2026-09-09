@@ -1,4 +1,5 @@
 import { DEMO_MODE } from '../lib/demo';
+import { Icon } from './Icon';
 
 /**
  * What this is, for someone who has just arrived.
@@ -57,6 +58,34 @@ import { DEMO_MODE } from '../lib/demo';
  * does not need to be told what they installed. VITE_DEMO_MODE is a
  * build-time literal, so this whole component is dropped from an
  * ordinary bundle rather than shipped and skipped.
+ *
+ * ---------------------------------------------------------------
+ * WHY IT DOES NOT LOOK LIKE A VAULT ENTRY
+ * ---------------------------------------------------------------
+ * It used to, measurably: border, background and radius here were
+ * byte-identical to an entry row, so the one block on the page whose
+ * job is to be read first rendered as an entry that happened to
+ * contain paragraphs — and with LESS presence than a real one, since
+ * the row carries a shadow and this did not. The heading was set in
+ * the same 12px Geist Mono used for every section label in the app,
+ * which made it a label rather than a title.
+ *
+ * It was also the only prominent block in the app containing nothing
+ * from the pixel family: the banner, the wordmark, the health HUD and
+ * the recovery warning all carry one, and this did not, which is why
+ * it read as foreign to the rest of the design.
+ *
+ * So: Press Start 2P for the heading, a pixel Icon beside it, the
+ * arcade depth shadow the primary buttons use instead of the flat
+ * entry-row border, and a segmented rule underneath drawn the way the
+ * strength meter is. All of it inline, out of primitives that already
+ * exist. No new CSS rule at any breakpoint, no <style> element, and
+ * no font that is not already loaded on this screen.
+ *
+ * The BODY is untouched — same 13px, same --muted. Its contrast was
+ * measured and fixed on its own branch, and the weight this panel was
+ * missing is a framing problem, not a body-copy one. Darkening the
+ * prose to make the panel louder would spend that work on decoration.
  */
 export function AboutPanel() {
   if (!DEMO_MODE) return null;
@@ -65,20 +94,50 @@ export function AboutPanel() {
     <section
       style={{
         marginTop: 32,
-        border: '1px solid var(--edge)',
+        // Tinted like the recovery warning's border rather than the
+        // --edge every card uses, so the box is no longer the entry
+        // row's box. The depth shadow is the buttons' 0 3px 0, which
+        // is the only place in this design language a block is
+        // allowed to sit above the page rather than in it.
+        border: '1px solid color-mix(in srgb, var(--green) 55%, var(--edge))',
         borderRadius: 'var(--radius)',
         background: 'var(--surface)',
+        boxShadow: '0 3px 0 var(--green-deep)',
         padding: '20px 22px'
       }}
     >
-      <h2 style={{
-        margin: '0 0 12px',
-        font: "600 12px 'Geist Mono', monospace",
-        letterSpacing: '.14em',
-        color: 'var(--green)'
-      }}>
-        WHAT THIS IS
-      </h2>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <span style={{ color: 'var(--green)', display: 'flex' }}>
+          <Icon name="lock" size={16} />
+        </span>
+        {/* Press Start 2P is very wide per character, so this is the
+            10px step the banner and the health HUD use, not the 12px
+            of the wordmark. Measured at 320: the heading row is 158px
+            inside 244px of content, so it does not wrap. Tracking is
+            0 — the face is already generously spaced and .14em would
+            push it past the measure. */}
+        <h2 style={{
+          margin: 0,
+          fontFamily: "'Press Start 2P', monospace",
+          fontSize: 10,
+          lineHeight: 1.4,
+          color: 'var(--green)'
+        }}>
+          WHAT THIS IS
+        </h2>
+      </div>
+
+      {/* Segmented rule, drawn on the Meter's grid — 14x10 blocks at
+          gap 3 there, the same width and gap at 3px tall here. Height
+          is what keeps it a rule: at 10px it would read as a gauge
+          with a value, and this panel has nothing to measure. Every
+          segment is lit for the same reason. Eight of them come to
+          133px, which is the width of the heading beside it. */}
+      <div aria-hidden="true" style={{ display: 'flex', gap: 3, marginBottom: 16 }}>
+        {Array.from({ length: 8 }, (_, i) => (
+          <div key={i} style={{ width: 14, height: 3, borderRadius: 1, background: 'var(--green)' }} />
+        ))}
+      </div>
 
       {/* maxWidth in ch, not px: it is the measure that keeps a line
           readable, and it holds at every width without a breakpoint. */}
