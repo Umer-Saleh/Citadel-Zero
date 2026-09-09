@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Card, Button } from '../components/ui';
+import { Card, Button, SuccessNote } from '../components/ui';
 import { Paladin } from '../components/Paladin';
 import { Icon } from '../components/Icon';
 import { copySecret } from '../lib/clipboard';
@@ -7,6 +7,7 @@ import { copySecret } from '../lib/clipboard';
 export function RecoveryKit({ recoveryKey, email, onContinue }) {
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [downloaded, setDownloaded] = useState(false);
   const labelTimer = useRef(null);
   const detachClip = useRef(null);
 
@@ -48,7 +49,29 @@ export function RecoveryKit({ recoveryKey, email, onContinue }) {
     // Revoking synchronously after click() can race the download in
     // some browsers — the URL dies before the fetch for it starts.
     setTimeout(() => URL.revokeObjectURL(url), 0);
+
+    // Say something. Pressing this used to change nothing on screen at
+    // all — no note, no label change, not a character of difference —
+    // on the one screen every new account passes through, and the only
+    // one where losing the file loses the vault. Both sibling download
+    // buttons in Settings already confirmed; this was the one that did
+    // not, which is the wrong way round.
+    //
+    // Names the file rather than claiming the save succeeded, the same
+    // wording as those siblings and for the same reason: a page cannot
+    // observe what the browser did with a download — it may go to a
+    // folder, a prompt, or nowhere — so "check for this filename" is
+    // the strongest thing that is actually true.
+    setDownloaded(true);
   }
+
+  // Transient, like its siblings: a confirmation that never leaves
+  // stops being one and becomes furniture.
+  useEffect(() => {
+    if (!downloaded) return;
+    const t = setTimeout(() => setDownloaded(false), 6000);
+    return () => clearTimeout(t);
+  }, [downloaded]);
 
   return (
     <section className="vk-r-pad" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: '48px 24px', position: 'relative', zIndex: 1 }}>
@@ -103,6 +126,18 @@ export function RecoveryKit({ recoveryKey, email, onContinue }) {
               <Icon name="printer" /> PRINT
             </Button>
           </div>
+
+          {/* noprint: this is about the browser's download folder, and
+              a sheet of paper does not have one. The rest of this card
+              prints deliberately; this line would be noise on it. */}
+          {downloaded && (
+            <div className="vk-noprint">
+              <SuccessNote label="KEY DOWNLOADED">
+                Look for <code style={{ color: 'var(--text)' }}>citadel-zero-recovery-key.txt</code> wherever
+                your browser saves downloads.
+              </SuccessNote>
+            </div>
+          )}
 
           {/* The unmissable warning — printed too: it's the part that
               explains what the sheet is and why it matters. */}
