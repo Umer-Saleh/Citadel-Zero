@@ -80,8 +80,16 @@ const kdfParamsQuerySchema = z.object({
 // That is still a real backstop rather than a decorative one, for a
 // reason worth writing down: the largest payload a CORRECT client can
 // produce is the 65536 padding bucket, 87,384 characters, which is
-// 12.6% below this cap — so legitimate traffic does not come near it,
-// and only a hostile or broken client is anywhere in the last 2%.
+// 12.6% below this cap — so legitimate traffic does not come near it.
+//
+// Nothing reaches the last 2%. express.json refuses a body over 98,304
+// bytes before zod runs, so no request of any kind arrives here with
+// more than 98,223 characters. The band a hostile client can
+// actually occupy is 87,385 to 98,223 — up to 12.4% larger than
+// anything a correct client sends, and still about 1.8% short of this
+// cap. The schema fires for nobody today, and that is the state it is
+// supposed to be in.
+//
 // What would make this decorative is raising 100,000 in step with the
 // body limit every time that moves, because then it never binds by
 // construction. The next increase past roughly 100 KB makes THIS the
