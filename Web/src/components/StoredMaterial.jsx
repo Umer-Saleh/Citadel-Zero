@@ -27,19 +27,47 @@ export function StoredMaterial() {
   const [error, setError] = useState('');
   const [open, setOpen] = useState(false);
 
+  // Read the server again whenever there is a reason to.
+  //
+  // The guard used to include `raw`, which meant the fetch happened
+  // ONCE per mount and never again. Add an entry, reopen the panel,
+  // and it still showed the old set of rows — while the paragraph
+  // above them claimed to be showing "the row exactly as Postgres
+  // holds it". The row was in Postgres. The panel was not looking.
+  // That is the one thing this component may never do, because
+  // comparing stale ciphertext against freshly decrypted plaintext is
+  // not the comparison it says it is making.
+  //
+  // `items` is the dependency that matters. VaultContext gives it a
+  // new identity on every add, update and delete and on the initial
+  // load, and on nothing else — so this re-reads exactly when the
+  // vault has actually changed underneath it, including while the
+  // panel is open.
   useEffect(() => {
-    if (!DEMO_MODE || !open || raw) return;
+    if (!DEMO_MODE || !open) return;
 
     let cancelled = false;
+
     api.get('/api/demo/stored-material')
-      .then(d => { if (!cancelled) setRaw(d); })
+      // Clearing the previous failure is part of succeeding.
+      //
+      // It never happened, so the panel could render a full, correct
+      // set of rows with "Cannot reach the server." still sitting in
+      // red above them — telling the reader two contradictory things
+      // at once, on the screen whose entire purpose is being believed.
+      //
+      // Cleared HERE rather than when the request starts, which also
+      // works but blanks the message for the length of every retry and
+      // puts a setState in the effect body for no benefit. A failure
+      // that is still failing should keep saying so.
+      .then(d => { if (!cancelled) { setRaw(d); setError(''); } })
       // e.code used to be the WHOLE message, so a visitor read the
       // bare string "INTERNAL_ERROR" in red with no sentence around
       // it — the rawest surfacing anywhere in the client.
       .catch(e => { if (!cancelled) setError(codeToMessage(e, 'Could not load the stored material')); });
 
     return () => { cancelled = true; };
-  }, [open, raw]);
+  }, [open, items]);
 
   if (!DEMO_MODE) return null;
 
@@ -81,10 +109,23 @@ export function StoredMaterial() {
   const panelEmail = (raw?.account?.email || '').trim().toLowerCase();
   const accountMismatch = Boolean(sessionEmail && panelEmail && sessionEmail !== panelEmail);
 
+  // Closing forgets what was read.
+  //
+  // The effect above already re-reads on the next open, so this is not
+  // what makes the panel fresh — it removes the window where the OLD
+  // rows are painted for the fraction of a second before the new ones
+  // land. On any other panel that flicker would be a nicety. Here the
+  // stale frame is the exact false claim this component exists to
+  // avoid making, so it is worth the LOADING… beat instead.
+  const toggle = () => {
+    if (open) { setRaw(null); setError(''); }
+    setOpen(!open);
+  };
+
   return (
     <section style={{ marginTop: 32 }}>
       <button
-        onClick={() => setOpen(o => !o)}
+        onClick={toggle}
         aria-expanded={open}
         className="vk-r-touch-y"
         style={{

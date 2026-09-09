@@ -200,3 +200,109 @@ describe('the guard does not fire when it should not', () => {
     expect(rowProps(tree).at(-1).plain).toBe('(not loaded in this session)');
   });
 });
+
+/**
+ * The panel says it is showing "the row exactly as Postgres holds it".
+ * It has to have looked recently enough for that to be true.
+ *
+ * The fetch used to be guarded on `raw`, so it happened once per mount
+ * and never again. Add an entry, reopen the panel, and it showed the
+ * previous set of rows under that same sentence — comparing stale
+ * ciphertext against freshly decrypted plaintext, which is not the
+ * comparison it claims to be making.
+ */
+describe('keeping up with the vault', () => {
+  const ITEM_TWO = '11111111-2222-4333-8444-555555555555';
+
+  /** Re-render, run whatever effects that render queued, settle. */
+  async function settle() {
+    beginRender();
+    StoredMaterial();
+    pendingEffects().forEach(fn => fn());
+    await flush();
+    beginRender();
+    return StoredMaterial();
+  }
+
+  test('re-reads when an entry is added while the panel is open', async () => {
+    vault = { items: [decrypted()], email: 'demo@x.invalid' };
+    apiGet.mockResolvedValue(payload('demo@x.invalid'));
+
+    await openPanel();
+    expect(apiGet).toHaveBeenCalledTimes(1);
+
+    // What VaultContext does on addItem: a NEW items array.
+    vault = {
+      items: [decrypted(), decrypted(ITEM_TWO)],
+      email: 'demo@x.invalid'
+    };
+    apiGet.mockResolvedValue({
+      ...payload('demo@x.invalid'),
+      items: [
+        payload('demo@x.invalid').items[0],
+        { id: ITEM_TWO, encryptedData: 'c2Vjb25k', nonce: 'bm9uY2U=', authTag: 'dGFn' }
+      ]
+    });
+
+    const tree = await settle();
+
+    expect(apiGet).toHaveBeenCalledTimes(2);
+    // The new row is there, and it is paired with its plaintext rather
+    // than falling to "(not loaded in this session)".
+    const stored = rowProps(tree).map(p => p.stored);
+    expect(stored).toContain('c2Vjb25k');
+  });
+
+  test('re-reads on reopen, and forgets the old rows on close', async () => {
+    vault = { items: [decrypted()], email: 'demo@x.invalid' };
+    apiGet.mockResolvedValue(payload('demo@x.invalid'));
+
+    let tree = await openPanel();
+    expect(apiGet).toHaveBeenCalledTimes(1);
+
+    // Close. The rows must not survive the round trip, or a reopen
+    // paints the old ones for a frame before the new ones land.
+    find(tree, n => n.props?.['aria-expanded'] === true).props.onClick();
+    beginRender();
+    tree = StoredMaterial();
+    expect(componentNames(tree)).not.toContain('Row');
+
+    // Reopen.
+    find(tree, n => n.props?.['aria-expanded'] === false).props.onClick();
+    await settle();
+
+    expect(apiGet).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('a failure that is over', () => {
+  test('the error clears when a later read succeeds', async () => {
+    // It never did. The panel could render a full, correct set of rows
+    // with "Cannot reach the server." still in red above them —
+    // telling the reader two contradictory things at once, on the one
+    // screen whose whole job is to be believed.
+    vault = { items: [decrypted()], email: 'demo@x.invalid' };
+    apiGet.mockRejectedValue(Object.assign(new Error('x'), { code: 'NETWORK_ERROR' }));
+
+    let tree = await openPanel();
+
+    const failed = find(tree, n => n.type?.name === 'ErrorNote');
+    expect(failed.props.message).toBeTruthy();
+    expect(componentNames(tree)).not.toContain('Row');
+
+    // The vault changes, which is what triggers the next read.
+    apiGet.mockResolvedValue(payload('demo@x.invalid'));
+    vault = { items: [decrypted()], email: 'demo@x.invalid' };
+
+    beginRender();
+    StoredMaterial();
+    pendingEffects().forEach(fn => fn());
+    await flush();
+    beginRender();
+    tree = StoredMaterial();
+
+    const recovered = find(tree, n => n.type?.name === 'ErrorNote');
+    expect(recovered.props.message).toBe('');
+    expect(componentNames(tree)).toContain('Row');
+  });
+});
