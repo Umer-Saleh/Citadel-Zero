@@ -2,6 +2,7 @@ import { Vault } from './Vault';
 import { ItemDetail } from './ItemDetail';
 import { Icon } from '../components/Icon';
 import { StoredMaterial } from '../components/StoredMaterial';
+import { AboutPanel } from '../components/AboutPanel';
 
 /**
  * The two-column vault: list on the left, detail/edit panel on the
@@ -88,7 +89,12 @@ export function VaultLayout({selected, onSelect, forgedPassword, onForgedConsume
       </div>
     </div>
 
-    {/* Demo instances only — renders null everywhere else. */}
+    {/* Demo instances only — both render null everywhere else.
+        AboutPanel states the claim; StoredMaterial is the evidence for
+        it, so the order matters and they are adjacent on purpose. Both
+        sit BELOW the vault: a returning visitor came here for their
+        entries, and neither of these may come between them and that. */}
+    <AboutPanel />
     <StoredMaterial />
     </>
   );
