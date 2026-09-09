@@ -49,7 +49,35 @@ app.use(cors({
 }));
 
 app.use(helmet());
-app.use(express.json({ limit: '64kb' }));
+
+// ---------------------------------------------------------------
+// 96 KB, AND THE 96 IS DERIVED — DO NOT ROUND IT BACK TO 64.
+//
+// A vault item is padded into a fixed-size bucket before it is
+// encrypted (crypto/padding.js, BUCKETS) and base64 costs four bytes
+// for every three. So the largest bucket, 65536, travels as 87,384
+// characters inside an 81-character JSON envelope: 87,465 bytes.
+// Under the old 64 KB limit (65,536) the client could PRODUCE that
+// body and never send it — an entry whose padded size crossed 32768
+// was refused with a 413 however far under 64 KB the entry itself
+// looked, because the buckets step 16384 -> 32768 -> 65536 with
+// nothing in between. Measured on this stack: 32,764 bytes of
+// serialised item saved, 32,765 did not.
+//
+// 96 KB (98,304) is the smallest round value that carries 87,465.
+// Raising it costs bytes on disk and in memory, and every figure that
+// depends on it moved with it — see services/vaultService.js, whose
+// per-account and per-day arithmetic is built on this number, and
+// routes/schemas.js, whose 100,000-character backstop now sits much
+// closer to this ceiling than it did.
+//
+// This does NOT make every bucket carryable. bucketFor rounds sizes
+// past 65536 up to multiples of it, and the next one, 131072, would
+// travel as 174,845 bytes — beyond any body limit worth setting. The
+// padder is unbounded and the transport cannot be; bounding the entry
+// before it is padded is a separate piece.
+// ---------------------------------------------------------------
+app.use(express.json({ limit: '96kb' }));
 
 app.use('/api/', apiLimiter);
 app.use('/api/auth/refresh', authLimiter);
@@ -308,7 +336,7 @@ app.use((req, res) => {
  * All four were verified against the running server; each returned
  * 500 before this map existed:
  *
- *   entity.too.large      a body over the 64 KB limit        -> 413
+ *   entity.too.large      a body over the 96 KB limit        -> 413
  *   entity.parse.failed   malformed JSON, or bytes that are
  *                         not JSON in the declared charset    -> 400
  *   encoding.unsupported  an unknown Content-Encoding         -> 415

@@ -67,11 +67,26 @@ const kdfParamsQuerySchema = z.object({
 // Ciphertext length is capped to bound how much a single item can
 // occupy. This is far beyond any realistic vault entry.
 //
-// It is also, today, unreachable: express.json's 64 KB body limit puts
-// the real ceiling at 65,455 characters, so a request never gets here
+// It is also, today, unreachable: express.json's 96 KB body limit puts
+// the real ceiling at 98,223 characters, so a request never gets here
 // with more. The number stays as a backstop that would bind again if
 // that limit were ever raised — but do not read it as the effective
 // maximum, because it is not.
+//
+// THE MARGIN IS NOW THIN, AND IS DELIBERATELY NOT WIDENED. Against the
+// old 64 KB limit the gap was 34,545 characters, about 35%. Against
+// 96 KB it is 1,777 characters, under 2%.
+//
+// That is still a real backstop rather than a decorative one, for a
+// reason worth writing down: the largest payload a CORRECT client can
+// produce is the 65536 padding bucket, 87,384 characters, which is
+// 12.6% below this cap — so legitimate traffic does not come near it,
+// and only a hostile or broken client is anywhere in the last 2%.
+// What would make this decorative is raising 100,000 in step with the
+// body limit every time that moves, because then it never binds by
+// construction. The next increase past roughly 100 KB makes THIS the
+// limit that bites instead of the parser, which is the whole point of
+// it being here.
 const vaultItemSchema = z.object({
   ciphertext: z.string().min(1).max(100_000),
   nonce: base64(12),

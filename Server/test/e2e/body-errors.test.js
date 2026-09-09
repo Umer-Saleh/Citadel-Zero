@@ -23,9 +23,16 @@ test.after(closeDatabase);
  * as the auth check, which is what the last test uses it for.
  */
 
-// The body limit is 64 KB. The JSON envelope around the ciphertext is
-// 81 characters, so 65,455 is the largest ciphertext that fits and
-// 65,456 is the first that does not.
+// The body limit is 96 KB. The JSON envelope around the ciphertext is
+// 81 characters, so 98,223 is the largest ciphertext that fits and
+// 98,224 is the first that does not.
+//
+// These two constants track express.json's limit in app.js and moved
+// with it, from 65,455/65,456 when that limit was 64 KB. The pair is
+// the point: one test on each side of the boundary, so a parser that
+// accepted everything and a parser that refused everything both fail.
+// If the limit moves again, move both — never drop the accepting side
+// to make the refusing side pass.
 const bodyOf = (ciphertextChars) => JSON.stringify({
   ciphertext: 'A'.repeat(ciphertextChars),
   nonce: 'A'.repeat(16),
@@ -36,7 +43,7 @@ test('a body over the limit is 413, not 500', async () => {
   const res = await request(app)
     .post('/api/vault')
     .set('Content-Type', 'application/json')
-    .send(bodyOf(65_456));
+    .send(bodyOf(98_224));
 
   assert.strictEqual(res.status, 413);
   assert.strictEqual(res.body.error, 'PAYLOAD_TOO_LARGE');
@@ -48,7 +55,7 @@ test('a body exactly at the limit is accepted by the parser', async () => {
   const res = await request(app)
     .post('/api/vault')
     .set('Content-Type', 'application/json')
-    .send(bodyOf(65_455));
+    .send(bodyOf(98_223));
 
   // Past the parser, refused by requireAuth — which is the proof that
   // the body itself was read successfully.

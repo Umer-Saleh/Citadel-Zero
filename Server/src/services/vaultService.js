@@ -7,13 +7,24 @@ const { AppError } = require('../errors/AppError');
  * WHY A CAP EXISTS AT ALL
  * -----------------------
  * There was none, and an item is capped only in SIZE — express.json's
- * 64 KB body limit puts the real ceiling at 65,455 base64 characters,
- * about 49 KB of ciphertext. Measured, that stores 1:1 on disk: TOAST
+ * 96 KB body limit puts the real ceiling at 98,223 base64 characters,
+ * about 72 KB of ciphertext. Measured, that stores 1:1 on disk: TOAST
  * cannot compress high-entropy base64 and gives up, so 2,000 max-size
- * items occupy 130 MB. With apiLimiter at 300 requests per 15 minutes,
- * one address can write 28,800 items — 1.8 GB — in a day, and roughly
- * twenty addresses working in parallel fill a 40 GB disk before the
+ * items occupy 196 MB. With apiLimiter at 300 requests per 15 minutes,
+ * one address can write 28,800 items — 2.8 GB — in a day, and roughly
+ * fourteen addresses working in parallel fill a 40 GB disk before the
  * nightly wipe comes round.
+ *
+ * EVERY FIGURE ABOVE MOVED when the body limit went from 64 KB to
+ * 96 KB, because every one of them is that limit multiplied by
+ * something. They are 1.33x what they were: the ceiling was 65,455
+ * characters, 2,000 items were 130 MB, a day was 1.8 GB, and it took
+ * about twenty addresses to fill the disk instead of fourteen. The
+ * limit moved so that a padded item in the largest bucket could
+ * actually be sent — see the comment on express.json in app.js. This
+ * arithmetic is the price that was paid for it, and it is worth
+ * recomputing rather than deleting, because the disk is what runs out
+ * first and fourteen addresses is a materially easier bar than twenty.
  *
  * WHY 1,000
  * ---------
@@ -24,10 +35,17 @@ const { AppError } = require('../errors/AppError');
  * itself be a bug report, which is the test a limit like this has to
  * pass.
  *
- * It caps one account at 1,000 x 65.5 KB = 64 MB. That is the point:
- * it turns "unlimited per account" into "one account per 64 MB", and
+ * It caps one account at 1,000 x 98.2 KB = 98 MB. That is the point:
+ * it turns "unlimited per account" into "one account per 98 MB", and
  * account creation IS already limited, at 20 per 15 minutes per
  * address.
+ *
+ * The COUNT did not move with the body limit and did not need to. What
+ * a larger body changes is how many bytes each of the 1,000 items may
+ * hold, not how many items a real person keeps — the 60-120 credentials
+ * and the 300-500 heavy user are the same people they were. So 1,000
+ * still sits at roughly 8x the plausible heavy user; only the byte
+ * figure it multiplies out to went from 64 MB to 98 MB.
  *
  * Below about 200 this would be a defect — real people would hit it.
  * Above about 5,000 it stops bounding anything useful, since the
