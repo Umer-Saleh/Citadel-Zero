@@ -168,7 +168,7 @@ export function AppShell({ children, view = 'vault', onNavigate }) {
         <span>BUILT BY UMER SALEH</span>
         <div style={{ flex: 1 }} />
         <a
-          href="https://github.com/Umer-Saleh/Zero-Knowledge-Password-Manager"
+          href="https://github.com/Umer-Saleh/Citadel-Zero"
           target="_blank" rel="noreferrer"
           style={{ color: 'var(--muted)', textDecoration: 'none' }}
         >
