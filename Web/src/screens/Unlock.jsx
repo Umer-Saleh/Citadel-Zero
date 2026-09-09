@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useVault } from '../context/VaultContext';
-import { Card, Input, Button, DeriveBar, ErrorNote, SuccessNote } from '../components/ui';
+import { Card, Input, Button, DeriveBar, ErrorNote, SuccessNote, NoticeNote } from '../components/ui';
 import { codeToMessage } from '../lib/errors';
 import { Paladin } from '../components/Paladin';
 import { usePix } from '../context/PixContext';
@@ -261,17 +261,23 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery, onFreshVault, not
             animation: 'riseIn .5s cubic-bezier(.2,.9,.3,1) both',
             animationDelay: '.12s'
           }}>
-            {/* Something that happened just before the vault locked —
-                today only a master-password change, which succeeds and
-                then signs every session out. Green and role="status":
-                it is a confirmation, and it must not be mistaken for
-                the red failure slot below or for the amber demo notice,
-                which are three different kinds of thing. */}
-            {/* Gated on the notice itself, not on SuccessNote's own
-                empty check: the label here is a literal, so without
-                this the heading would render with nothing under it
-                after any later lock. */}
-            {notice && <SuccessNote label="PASSWORD CHANGED">{notice}</SuccessNote>}
+            {/* Something that happened just before the vault locked.
+                Two cases now, and they are not the same kind of thing:
+                a master-password change SUCCEEDED and signed every
+                session out, while a session simply ENDED. Green for
+                the first, amber for the second — and neither may be
+                mistaken for the red failure slot below. The notice
+                carries its own tone rather than the slot assuming one,
+                because the slot used to hardcode "PASSWORD CHANGED"
+                and there was no way to say anything else here. */}
+            {/* Still gated on the notice itself rather than on the
+                note's own empty check: without this the heading would
+                render with nothing under it after any later lock. */}
+            {notice && (
+              notice.tone === 'success'
+                ? <SuccessNote label={notice.label}>{notice.text}</SuccessNote>
+                : <NoticeNote label={notice.label}>{notice.text}</NoticeNote>
+            )}
 
             <Input
               label="Email" type="email" placeholder="you@example.com"

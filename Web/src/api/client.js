@@ -87,7 +87,16 @@ function refreshOnce() {
 
   // Clear the slot however it settles, so the NEXT expiry starts a
   // fresh refresh rather than replaying this promise forever.
-  refreshInFlight.finally(() => { refreshInFlight = null; });
+  //
+  // BOTH arms, not .finally(). `.finally()` returns a NEW promise that
+  // adopts the rejection, and nothing awaits that one — so every failed
+  // refresh logged an "Uncaught (in promise) SESSION_EXPIRED" beside
+  // the handled one. The rejection was never actually unhandled: the
+  // promise RETURNED below is awaited and caught by request(). It was
+  // the derived promise nobody could see that complained. Passing the
+  // same callback to both arms settles it either way.
+  const clear = () => { refreshInFlight = null; };
+  refreshInFlight.then(clear, clear);
 
   return refreshInFlight;
 }

@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import * as auth from '../api/auth';
 import { api, setSessionLostHandler } from '../api/client';
+import { codeToMessage } from '../lib/errors';
 import { encryptItem, decryptItem } from '../crypto';
 
 
@@ -46,7 +47,17 @@ export function VaultProvider({ children }) {
   const [locked, setLocked] = useState(false);
   const [email, setEmail] = useState(null);
   const [kdfUpgradeAvailable, setKdfUpgradeAvailable] = useState(false);
-  
+
+  // Why the vault locked, when the user did not ask it to.
+  //
+  // lock() is reached four ways — the LOCK button, the idle timer, a
+  // password change, and a dead session. Three of those the user
+  // caused or can infer. The fourth cannot be inferred from anything
+  // on screen: the vault simply vanishes mid-action, taking unsaved
+  // work with it, and the unlock screen gives no reason. Set only on
+  // that path, so the other three stay silent.
+  const [sessionNotice, setSessionNotice] = useState(null);
+
   const isUnlocked = dek !== null;
 
   const idleTimer = useRef(null);
@@ -123,6 +134,11 @@ export function VaultProvider({ children }) {
     setEmail(storedEmail ?? loginEmail);
     setKdfUpgradeAvailable(!!upgrade);       // for the settings "level up" prompt
     setLocked(false);
+
+    // They are back in, so the explanation has done its job. Left set,
+    // it would reappear after the NEXT ordinary lock and explain
+    // something that happened two sessions ago.
+    setSessionNotice(null);
     return { kdfUpgradeAvailable: upgrade, targetKdfParams };
   }, []);
 
@@ -202,8 +218,29 @@ export function VaultProvider({ children }) {
   // A failed refresh means the session is gone — expired, revoked, or
   // killed server-side by reuse detection. The UI must not keep
   // showing a vault it can no longer reach, so we drop to unlock.
+  //
+  // Locking was already right. Doing it in SILENCE was not: the vault
+  // disappeared mid-save, the unsaved edit went with it, and the
+  // unlock screen said nothing at all — so the only reading available
+  // to the user was that the app had crashed and eaten their work.
+  //
+  // The handler is called for exactly one reason, so it needs no
+  // argument to tell it which. Set the notice BEFORE locking: lock()
+  // is what swaps the screen, and the message has to be there when it
+  // arrives.
   useEffect(() => {
-    setSessionLostHandler(lock);
+    setSessionLostHandler(() => {
+      setSessionNotice({
+        label: 'SESSION ENDED',
+        // From the shared map, so this reads the same here as
+        // everywhere else the code surfaces. The second sentence is
+        // this screen's own: it is the only place that knows an
+        // in-progress edit was just discarded.
+        text: `${codeToMessage({ code: 'SESSION_EXPIRED' }, 'Your session has ended.')} `
+            + 'Anything you had not saved was not kept.'
+      });
+      lock();
+    });
   }, [lock]);
 
   // Idle auto-lock: any activity resets the timer; silence locks the vault.
@@ -233,7 +270,7 @@ export function VaultProvider({ children }) {
 
   const value = {
     isUnlocked, locked, items,
-    email, kdfUpgradeAvailable,
+    email, kdfUpgradeAvailable, sessionNotice,
     signup, login, lock, loadItems,
     addItem, updateItem, deleteItem,
     changePassword, upgradeKdf, regenerateKit

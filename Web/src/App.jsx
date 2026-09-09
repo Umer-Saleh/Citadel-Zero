@@ -44,7 +44,7 @@ const IS_APP_PATH = isAppPath(window.location.pathname);
  *   Refresh      -> DEK was only ever in memory, so it's gone -> auth flow
  */
 export default function App() {
-  const { isUnlocked } = useVault();
+  const { isUnlocked, sessionNotice } = useVault();
 
   // Pre-auth flow only: which of signup / recovery-kit / unlock to show.
   // This state is irrelevant once isUnlocked is true.
@@ -124,7 +124,7 @@ export default function App() {
   // indistinguishable from a crash: the user was ejected in silence.
   //
   // State, not a ref, because unlike freshAccount this one renders.
-  const [postLockNotice, setPostLockNotice] = useState('');
+  const [postLockNotice, setPostLockNotice] = useState(null);
 
   // PIX reacts to saves, copies, and deletes. The context is provided
   // at the top level, but the reactions happen in the header, three
@@ -227,9 +227,11 @@ export default function App() {
 
         {view === 'settings' && (
           <Settings
-            onPasswordChanged={() => setPostLockNotice(
-              'Your master password was changed. Every other session was signed out — unlock with the new password.'
-            )}
+            onPasswordChanged={() => setPostLockNotice({
+              label: 'PASSWORD CHANGED',
+              tone: 'success',
+              text: 'Your master password was changed. Every other session was signed out — unlock with the new password.'
+            })}
           />
         )}
       </AppShell>
@@ -301,10 +303,18 @@ export default function App() {
   // branch above takes over — so onUnlocked has nothing to do here.
   return (
     <Unlock
-      notice={postLockNotice}
+      // Two sources, one slot. This one is set by something the user
+      // DID (changing their password); sessionNotice is set by
+      // something that happened TO them (the session dying). They
+      // cannot both be live — a password change ends the session it
+      // was made from — and this one is checked first because it is
+      // the more specific explanation of the same lock.
+      notice={postLockNotice ?? sessionNotice}
       // Cleared once they are back in, so a later lock does not replay
       // an explanation for something that happened two sessions ago.
-      onUnlocked={() => setPostLockNotice('')}
+      // sessionNotice clears itself in VaultContext.login for the same
+      // reason.
+      onUnlocked={() => setPostLockNotice(null)}
       onGoSignup={() => setAuthScreen('signup')}
       onGoRecovery={() => setAuthScreen('recover')}
       // Provisioning a demo vault creates an account and unlocks it

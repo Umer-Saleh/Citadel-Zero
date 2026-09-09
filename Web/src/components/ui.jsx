@@ -225,6 +225,47 @@ export function SuccessNote({ label, children, style }) {
 }
 
 // ---------------------------------------------------------------
+// NOTICE NOTE — neither a failure nor a celebration.
+//
+// The third of the three kinds this app already distinguishes by
+// colour: red for "that did not work", green for "that worked", amber
+// for "this happened, and it is working as designed". Only the first
+// two existed as components; amber was an inline span repeated where
+// it was needed, so the one kind with no component was the one that
+// got forgotten when a new case appeared.
+//
+// A session expiring is exactly that third thing. Nothing failed and
+// nothing succeeded — a timer ran out, which is the design. Announcing
+// it in red would blame the server for working correctly; announcing
+// it in green would congratulate someone for being signed out.
+//
+// role="status", like SuccessNote and unlike ErrorNote: it is not
+// urgent enough to interrupt what a screen reader is already saying.
+// ---------------------------------------------------------------
+export function NoticeNote({ label, children, style }) {
+  if (!label) return null;
+
+  return (
+    <div
+      role="status"
+      style={{ display: 'flex', flexDirection: 'column', gap: 4, ...style }}
+    >
+      <span style={{
+        font: "600 11px 'Geist Mono', monospace",
+        letterSpacing: '.16em', color: 'var(--amber)'
+      }}>
+        {label}
+      </span>
+      {children && (
+        <span style={{ fontSize: 13, color: 'var(--muted)', textWrap: 'pretty' }}>
+          {children}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------
 // CARD — soft shadow + crisp pixel border, the signature hybrid.
 // ---------------------------------------------------------------
 export function Card({ children, style, className }) {

@@ -229,8 +229,19 @@ describe('the post-lock notice on the unlock screen', () => {
     // the test.
     const { Unlock } = await import('./Unlock');
 
+    // The notice carries its own label and tone now — the slot used to
+    // hardcode "PASSWORD CHANGED", which left no way to say anything
+    // else there. The property under test is unchanged: something to
+    // say renders one note, nothing to say renders none.
     resetHooks();
-    const withNotice = Unlock({ notice: 'Your master password was changed.', onUnlocked: vi.fn() });
+    const withNotice = Unlock({
+      notice: {
+        label: 'PASSWORD CHANGED',
+        tone: 'success',
+        text: 'Your master password was changed.'
+      },
+      onUnlocked: vi.fn()
+    });
     expect(confirmations(withNotice)).toHaveLength(1);
 
     resetHooks();
@@ -238,5 +249,33 @@ describe('the post-lock notice on the unlock screen', () => {
 
     resetHooks();
     expect(confirmations(Unlock({ onUnlocked: vi.fn() }))).toHaveLength(0);
+
+    resetHooks();
+    expect(confirmations(Unlock({ notice: null, onUnlocked: vi.fn() }))).toHaveLength(0);
+  });
+
+  test('a dead session is amber, not green', async () => {
+    // Nothing failed and nothing succeeded — a timer ran out. Green
+    // would congratulate someone for being signed out; the red slot
+    // below would blame the server for working correctly. The whole
+    // reason the notice carries a tone is so this case can be neither.
+    const { Unlock } = await import('./Unlock');
+
+    resetHooks();
+    const tree = Unlock({
+      notice: {
+        label: 'SESSION ENDED',
+        tone: 'notice',
+        text: 'Your session has ended. Unlock again to continue.'
+      },
+      onUnlocked: vi.fn()
+    });
+
+    expect(confirmations(tree)).toHaveLength(0);
+
+    const amber = childrenOfType(tree, 'NoticeNote');
+    expect(amber).toHaveLength(1);
+    expect(amber[0].props.label).toBe('SESSION ENDED');
+    expect(texts(amber[0].props.children)).toContain('Unlock again to continue.');
   });
 });
