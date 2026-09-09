@@ -116,6 +116,17 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
         // this handler gives.
         : e?.code === 'PAYLOAD_TOO_LARGE'
           ? 'This entry is too large to save — the limit is 64 KB. Your changes are still here; shortening the notes should fix it.'
+        // The shared map has had a sentence for this all along; this
+        // handler just never reached it, so a rate-limited save read
+        // "Could not save this entry (TOO_MANY_REQUESTS)" — a code in
+        // brackets standing in for an explanation that already
+        // existed. Says the same thing the shared line says, plus the
+        // draft reassurance the shared line cannot carry.
+        //
+        // KEEP IN STEP with:
+        //   Web/src/lib/errors.js   the shared TOO_MANY_REQUESTS
+        : e?.code === 'TOO_MANY_REQUESTS'
+          ? 'Too many requests from this network recently. Your changes are still here — wait a moment and try again.'
         : `Could not save this entry${e?.code ? ` (${e.code})` : ''}. Your changes are still here — try again.`
       );
     }

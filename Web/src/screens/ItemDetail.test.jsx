@@ -87,7 +87,12 @@ beforeEach(() => {
 
 describe('a save that fails', () => {
   test('says so inline and leaves the panel open', async () => {
-    updateItem.mockRejectedValue(apiError('TOO_MANY_REQUESTS'));
+    // INTERNAL_ERROR, because this test is about the GENERIC branch:
+    // a code this handler has no sentence for still produces a
+    // sentence, with the code named in brackets. It used to use
+    // TOO_MANY_REQUESTS, which now has copy of its own and would no
+    // longer exercise this path. Every assertion below is unchanged.
+    updateItem.mockRejectedValue(apiError('INTERNAL_ERROR'));
 
     resetHooks();
     saveButton(render()).props.onClick();
@@ -98,7 +103,7 @@ describe('a save that fails', () => {
 
     const message = alertText(tree);
     expect(message).toContain('Could not save this entry');
-    expect(message).toContain('TOO_MANY_REQUESTS');
+    expect(message).toContain('INTERNAL_ERROR');
 
     // The two ways a failure used to be invisible.
     expect(onDone).not.toHaveBeenCalled();
@@ -125,6 +130,27 @@ describe('a save that fails', () => {
     expect(onDone).toHaveBeenCalledTimes(1);
     expect(pixReact).toHaveBeenCalledWith('save');
     expect(alertText(tree)).toBe('');
+  });
+
+  test('a rate-limited save explains itself, and keeps the draft', async () => {
+    // The shared map has had a sentence for this all along; this
+    // handler just never reached it, so the message was the code in
+    // brackets standing in for an explanation that already existed.
+    updateItem.mockRejectedValue(apiError('TOO_MANY_REQUESTS'));
+
+    resetHooks();
+    saveButton(render()).props.onClick();
+    await flush();
+
+    beginRender();
+    const message = alertText(render());
+
+    expect(message).toContain('Too many requests from this network recently.');
+    // The reassurance is why this is not routed through the shared
+    // map: the shared sentence cannot say the draft survived.
+    expect(message).toContain('Your changes are still here');
+    // And the bare code is gone from the visible text.
+    expect(message).not.toContain('(TOO_MANY_REQUESTS)');
   });
 
   test('a network failure is named rather than shown as a code', async () => {
