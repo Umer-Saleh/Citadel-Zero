@@ -204,7 +204,19 @@ async function beginTotpEnrolment(userId) {
   }
 
   const secret = generateSecret();
-  await totpRepo.setSecret(userId, secret);
+
+  // Every write in this trio is checked. Each returns whether it
+  // matched a row, and all three used to discard that — so a write
+  // that changed nothing was indistinguishable from one that worked,
+  // on the three statements that decide whether an account has a
+  // second factor at all. A plain Error rather than an AppError on
+  // purpose: an operational AppError is answered without being logged,
+  // and this is a broken invariant the operator needs to see. It
+  // reaches the client as INTERNAL_ERROR, which is honest — nothing
+  // the user did caused it.
+  if (!await totpRepo.setSecret(userId, secret)) {
+    throw new Error(`totp: setSecret matched no row for user ${userId}`);
+  }
 
   return {
     secret,                              // shown as text, for manual entry
@@ -239,7 +251,19 @@ async function confirmTotpEnrolment(userId, code) {
   // without codes leaves no way back from a lost phone; codes without
   // enabling are meaningless.
   await withTransaction(async (client) => {
-    await totpRepo.enable(userId, step, client);
+    // The one that matters most. enable() is
+    // `WHERE id = $2 AND totp_secret IS NOT NULL`, so a cleared secret
+    // makes it match nothing — and unchecked, this function would then
+    // hand back backup codes and a success screen for an account whose
+    // totp_enabled is still false. That is a security control
+    // reporting itself on while providing nothing, which is exactly
+    // the shape of the bug this branch started from.
+    //
+    // Throwing inside the transaction rolls the backup codes back with
+    // it, so the two cannot land apart.
+    if (!await totpRepo.enable(userId, step, client)) {
+      throw new Error(`totp: enable matched no row for user ${userId}`);
+    }
     await totpRepo.replaceBackupCodes(userId, codes.map(hashBackupCode), client);
   });
 
@@ -264,7 +288,13 @@ async function disableTotp(userId, code) {
   if (!ok) throw new AppError('INVALID_TOTP_CODE', 401, 'invalid code');
 
   await withTransaction(async (client) => {
-    await totpRepo.disable(userId, client);
+    // Checked for the mirror-image reason: reporting "two-factor
+    // turned off" when the row still says it is on would leave someone
+    // locked out at the next login by a factor they were told was
+    // gone.
+    if (!await totpRepo.disable(userId, client)) {
+      throw new Error(`totp: disable matched no row for user ${userId}`);
+    }
     await totpRepo.replaceBackupCodes(userId, [], client);
   });
 
