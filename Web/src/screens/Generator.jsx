@@ -114,7 +114,14 @@ export function Generator({ onUse }) {
           padding: '24px 20px', textAlign: 'center', minHeight: 64,
           display: 'grid', placeItems: 'center',
           font: "600 18px 'Geist Mono', monospace", letterSpacing: '.12em',
-          color: noSet ? 'var(--muted)' : 'var(--text)', wordBreak: 'break-all'
+          color: noSet ? 'var(--muted)' : 'var(--text)',
+          // Only the password. This slot holds one of two very
+          // different strings, and `break-all` was applied to both —
+          // so with every character set switched off the sentence in
+          // the `noSet` branch was split mid-word too. A generated
+          // password has no spaces and must break anywhere; a sentence
+          // has spaces and must use them.
+          wordBreak: noSet ? 'normal' : 'break-all'
         }}>
           {noSet ? 'Select at least one character set' : pw}
         </div>

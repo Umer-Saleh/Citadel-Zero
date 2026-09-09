@@ -264,7 +264,10 @@ export function StoredMaterial() {
  * component does not render on any other build.
  */
 function AccountMismatch({ sessionEmail, panelEmail }) {
-  const mono = { font: "500 11px 'Geist Mono', monospace", wordBreak: 'break-all' };
+  // Typography only, same reasoning as Row: the addresses below carry
+  // .vk-r-break themselves, and a blanket break-all here would also
+  // have applied to the labels beside them.
+  const mono = { font: "500 11px 'Geist Mono', monospace" };
 
   return (
     <div
@@ -312,9 +315,21 @@ function AccountMismatch({ sessionEmail, panelEmail }) {
 }
 
 function Row({ label, stored, nonce, tag, plain, plainIsNote }) {
+  // Typography only. `word-break: break-all` used to live here and was
+  // spread onto every div below, including the right-hand explanation
+  // — which is PROSE, and which it duly split as "the master passwo /
+  // rd" and "cannot deri / ve". break-all breaks mid-word whether or
+  // not it needs to; that is right for a 180-character base64 blob and
+  // wrong for a sentence.
+  //
+  // Breaking is opt-in now, via .vk-r-break, which is overflow-wrap:
+  // anywhere — it breaks a word only when the word genuinely cannot
+  // fit. Note the inline rule was also DEFEATING that class on the
+  // ciphertext div: inline styles beat class selectors, so the
+  // considered rule lost to the blanket one.
   const mono = {
     font: "500 11px 'Geist Mono', monospace",
-    wordBreak: 'break-all', lineHeight: 1.5
+    lineHeight: 1.5
   };
 
   return (
@@ -340,7 +355,7 @@ function Row({ label, stored, nonce, tag, plain, plainIsNote }) {
             {stored.length > 180 ? stored.slice(0, 180) + '…' : stored}
           </div>
           {nonce && (
-            <div style={{ ...mono, color: 'var(--muted)', marginTop: 8 }}>
+            <div className="vk-r-break" style={{ ...mono, color: 'var(--muted)', marginTop: 8 }}>
               nonce {nonce}<br />tag {tag}
             </div>
           )}
@@ -354,11 +369,20 @@ function Row({ label, stored, nonce, tag, plain, plainIsNote }) {
           <div style={{ ...mono, color: 'var(--muted)', marginBottom: 6 }}>
             {plainIsNote ? 'WHAT IT IS' : 'IN THIS BROWSER'}
           </div>
-          <div style={{
-            ...mono,
-            color: plainIsNote ? 'var(--muted)' : 'var(--text)',
-            whiteSpace: 'pre-wrap'
-          }}>
+          {/* The two halves of this panel hold different KINDS of
+              string. On a note row this is a sentence explaining what
+              the row is, and it must break at spaces like any other
+              prose. On an item row it is the decrypted entry — a
+              password among other things — which has no spaces to
+              break at and must be allowed to break anywhere. */}
+          <div
+            className={plainIsNote ? undefined : 'vk-r-break'}
+            style={{
+              ...mono,
+              color: plainIsNote ? 'var(--muted)' : 'var(--text)',
+              whiteSpace: 'pre-wrap'
+            }}
+          >
             {plain}
           </div>
         </div>
