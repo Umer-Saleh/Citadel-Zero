@@ -57,11 +57,23 @@ describe('the request-level codes express.json raises', () => {
 
   test('PAYLOAD_TOO_LARGE says what the limit is and what to do', () => {
     // The only one of the three an ordinary person can reach: a long
-    // enough notes field on a vault entry exceeds the 64 KB body limit.
+    // enough notes field on a vault entry cannot be sent.
+    //
+    // 32, not 64. The body cap is 64 KB, but an entry is padded into a
+    // fixed bucket first and the buckets step 16384 -> 32768 -> 65536;
+    // base64 makes the 32768 bucket 43,692 characters, which fits, and
+    // the next one 87,384, which does not. So 32 KB is the boundary
+    // that actually bites, and the message used to quote a number the
+    // reader was comfortably under while being refused. Measured:
+    // 32,000 characters of notes saves, 33,000 does not.
     const message = codeToMessage(err('PAYLOAD_TOO_LARGE'), 'Could not save this entry');
 
-    expect(message).toContain('64 KB');
+    expect(message).toContain('32 KB');
     expect(message).toContain('notes');
+
+    // The old number was not merely imprecise, it was unreachable
+    // advice — so quoting it again is the regression to catch.
+    expect(message).not.toContain('64 KB');
   });
 
   test('the two that only a client bug can cause say so', () => {

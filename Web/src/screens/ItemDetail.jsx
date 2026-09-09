@@ -110,12 +110,22 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
         : e?.code === 'VAULT_FULL'
           ? 'This vault is full — 1,000 entries. Your changes are still here; delete an entry to make room.'
         // Saving an entry is the one place an ordinary person reaches
-        // this: the request body is capped at 64 KB, and a long enough
-        // notes field passes it. Named here rather than left to the
-        // shared map so it can keep the draft reassurance the rest of
-        // this handler gives.
+        // this: a long enough notes field exceeds the body limit.
+        // Named here rather than left to the shared map so it can keep
+        // the draft reassurance the rest of this handler gives.
+        //
+        // 32, not 64 — and that is not a typo. The body cap is 64 KB,
+        // but an entry is padded into a fixed bucket before encryption
+        // and the buckets step 16384 -> 32768 -> 65536. Base64 turns
+        // the 32768 bucket into 43,692 characters, which fits, and the
+        // next one into 87,384, which cannot. So the real ceiling is
+        // the 32 KB bucket, and saying 64 told someone whose 40 KB note
+        // had just been refused a number they were comfortably under.
+        //
+        // See Web/src/lib/errors.js for the full arithmetic. The
+        // mismatch is a genuine defect and is NOT fixed here.
         : e?.code === 'PAYLOAD_TOO_LARGE'
-          ? 'This entry is too large to save — the limit is 64 KB. Your changes are still here; shortening the notes should fix it.'
+          ? 'This entry is too large to save — an entry has to stay under about 32 KB, all its fields together. Your changes are still here; shortening the notes should fix it.'
         // The shared map has had a sentence for this all along; this
         // handler just never reached it, so a rate-limited save read
         // "Could not save this entry (TOO_MANY_REQUESTS)" — a code in

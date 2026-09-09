@@ -66,10 +66,29 @@ const SHARED = {
   // had in fact refused something specific.
   //
   // PAYLOAD_TOO_LARGE is the one an ordinary person can actually reach:
-  // the body limit is 64 KB, and a long enough notes field on a vault
-  // entry will exceed it.
+  // a long enough notes field on a vault entry will exceed the body
+  // limit.
+  //
+  // THE TWO NUMBERS ARE BOTH REAL. DO NOT "CORRECT" 32 BACK TO 64.
+  //
+  // The request body is capped at 64 KB, and that is what the server
+  // enforces. But an entry is padded into a fixed-size bucket before
+  // it is encrypted — crypto/padding.js, BUCKETS — and the buckets go
+  // 16384, 32768, 65536. Base64 costs four bytes for every three, so
+  // the 32768 bucket travels as 43,692 characters and fits, while the
+  // very next one travels as 87,384 and cannot: the envelope leaves
+  // room for 65,455. There is no bucket in between. So an entry whose
+  // padded size lands above 32 KB is unsendable no matter how far
+  // under 64 KB it looks, and the message said 64 to someone whose
+  // 40 KB note had just been refused.
+  //
+  // This copy states the boundary that actually bites. The mismatch
+  // itself — that padding can produce a body the transport cannot
+  // carry — is a real defect and is NOT fixed here; it is its own
+  // piece. Measured: 32,000 characters of notes saves, 33,000 does
+  // not.
   PAYLOAD_TOO_LARGE:
-    'That was too large to send — the limit is 64 KB. If this was a vault entry, shortening the notes should fix it.',
+    'That was too large to send — a vault entry has to stay under about 32 KB, all its fields together, once it is padded for storage. If this was an entry, shortening the notes should fix it.',
   MALFORMED_JSON:
     'The app sent something the server could not read. This is a bug, not something you did.',
   UNSUPPORTED_ENCODING:

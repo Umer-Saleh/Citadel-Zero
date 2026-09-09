@@ -209,3 +209,33 @@ describe('a delete that fails', () => {
     expect(alertText(tree)).toBe('');
   });
 });
+
+describe('the size limit an entry actually has', () => {
+  test('a refused entry is told the boundary that bit it, not the body cap', async () => {
+    // The message quoted 64 KB, which is the request cap and is true
+    // — but an entry is padded into a fixed bucket before encryption,
+    // and the buckets step 16384 -> 32768 -> 65536. Base64 turns the
+    // 32768 bucket into 43,692 characters, which fits the envelope's
+    // 65,455, and the next into 87,384, which cannot. There is nothing
+    // in between, so 32 KB is the real ceiling and someone whose 40 KB
+    // note had just been refused was being told they were under it.
+    //
+    // The mismatch itself is a separate defect and is deliberately
+    // still present. This pins only what the person is TOLD.
+    updateItem.mockRejectedValue(apiError('PAYLOAD_TOO_LARGE'));
+
+    resetHooks();
+    saveButton(render()).props.onClick();
+    await flush();
+
+    beginRender();
+    const message = alertText(render());
+
+    expect(message).toContain('32 KB');
+    expect(message).not.toContain('64 KB');
+    // All fields share one encrypted blob, so trimming the notes is
+    // the actionable part but not the whole truth.
+    expect(message).toContain('all its fields together');
+    expect(message).toContain('Your changes are still here');
+  });
+});
