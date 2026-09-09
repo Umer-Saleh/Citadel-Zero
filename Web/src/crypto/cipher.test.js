@@ -115,10 +115,13 @@ describe('an item too large to store', () => {
   });
 
   test('a multi-byte character spends more than one byte of it', async () => {
-    // The cap is bytes, and the copy says characters — so this pins the
-    // direction of the gap. An emoji is four; a person pasting emoji
-    // hits the cap sooner than a character count would suggest, never
-    // later.
+    // The cap is bytes and a person types characters. This pins the
+    // gap between the two — an emoji is four bytes — and that gap is
+    // the whole reason the error copy no longer names a character
+    // figure: 65,000 was true in ASCII, half true in Arabic, a
+    // quarter true in emoji. The assertion is unchanged; only the
+    // reason it matters has moved from "the copy says characters" to
+    // "the copy stopped saying characters, and this is why".
     expect(itemByteLength({ notes: '😀' })).toBe(itemByteLength({ notes: 'xxxx' }));
   });
 });

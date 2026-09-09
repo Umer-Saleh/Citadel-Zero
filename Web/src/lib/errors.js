@@ -66,11 +66,13 @@ const SHARED = {
   // had in fact refused something specific.
   //
   // PAYLOAD_TOO_LARGE used to be the one an ordinary person could
-  // actually reach. It is now a backstop, and the number in it has
-  // moved twice — so the history is worth keeping, because both of the
-  // old figures are wrong in a way that looks right.
+  // actually reach. It is now a backstop, and it has quoted three
+  // different figures — so the history is worth keeping, because each
+  // of the dead ones was wrong in a way that looked right.
   //
-  // THIS FILE HAS SAID 64, THEN 32, AND NEITHER IS THE ANSWER NOW.
+  // THIS FILE HAS SAID 64 KB, THEN 32 KB, THEN 65,000 CHARACTERS.
+  // IT NOW NAMES NO NUMBER AT ALL, AND THAT IS THE FIX, NOT AN
+  // OMISSION. DO NOT PUT A FIGURE BACK.
   //
   // An entry is padded into a fixed-size bucket before it is encrypted
   // (crypto/padding.js, BUCKETS) and base64 costs four bytes for every
@@ -78,40 +80,58 @@ const SHARED = {
   // 21,848, 43,692 and 87,384 characters inside an 81-character
   // envelope.
   //
-  //   64 was the ORIGINAL COPY and was the body limit, not the entry
-  //   limit. It told someone whose 40 KB note had just been refused a
-  //   number they were comfortably under.
+  //   64 KB was the ORIGINAL COPY and was the body limit, not the
+  //   entry limit. It told someone whose 40 KB note had just been
+  //   refused a number they were comfortably under.
   //
-  //   32 was CORRECT WHILE THE BODY LIMIT WAS 64 KB: 43,773 bytes fit
-  //   in 65,536 and 87,465 did not, with no bucket in between, so the
-  //   32768 bucket was the last one that could travel.
+  //   32 KB was CORRECT WHILE THE BODY LIMIT WAS 64 KB: 43,773 bytes
+  //   fit in 65,536 and 87,465 did not, with no bucket in between, so
+  //   the 32768 bucket was the last one that could travel.
   //
-  // The body limit is now 96 KB (98,304), which carries 87,465 — so
-  // the 65536 bucket travels and the ceiling is that bucket less its
-  // 4-byte length prefix: 65,532 bytes of the serialised entry.
+  //   65,000 CHARACTERS was correct only in ASCII. The limit is
+  //   65,532 BYTES of the serialised entry, measured through
+  //   TextEncoder, and JSON.stringify escapes before that. Measured:
+  //   a newline or a double quote costs two bytes, so does an Arabic
+  //   letter; a CJK character costs three; an emoji costs four. The
+  //   sentence promised an Arabic speaker twice the room they have,
+  //   an emoji user four times — and overstated even an English note
+  //   with paragraph breaks in it.
   //
-  // The copy says CHARACTERS and says "all its fields together",
-  // because both are what a person can act on: the whole entry shares
-  // one encrypted blob, so the title and the notes spend from the same
-  // budget, and it is bytes rather than characters underneath — an
-  // emoji costs four. ItemDetail shows the real byte budget live while
-  // the entry is being typed, which is the authoritative number; this
-  // sentence is the fallback for anything that gets past it.
+  // There is no honest single figure, because the unit the limit is
+  // in is not the unit a person is typing in. 65,000 cheats every
+  // non-Latin script; 32,000 would cheat English. So the copy names
+  // none and the SIZE METER under the notes field carries the number
+  // instead — it counts the real bytes, live, and is the only place
+  // that can be right for everyone.
   //
-  // Reaching this now means a client bug: crypto/cipher.js refuses an
-  // oversized item with ITEM_TOO_LARGE before the request is built.
+  // This particular sentence does NOT point at that meter, and that is
+  // deliberate: see below.
+  //
+  // WHEN THIS CAN FIRE. Not through the app. crypto/cipher.js refuses
+  // an oversized entry with ITEM_TOO_LARGE before a request is built,
+  // so a 413 means the client's idea of the limit and the server's
+  // have come apart. Padding is bucketed, so in that state ANY entry
+  // over 32,764 bytes pads to 65536 and produces the same 87,465-byte
+  // body — including a 33,000-byte entry, which is half the cap and
+  // leaves the meter silent, since it renders nothing below three
+  // quarters. Pointing at a meter that is not on screen for most of
+  // the range where this message can appear would be worse than
+  // saying nothing, so it says what a person can do and then says
+  // plainly that the fault is the app's.
   PAYLOAD_TOO_LARGE:
-    'That was too large to send — a vault entry has to stay under about 65,000 characters, all its fields together. If this was an entry, shortening the notes should fix it.',
+    'That was too large to send. If it was a vault entry, shortening the notes should fix it — every field shares one budget. The app normally stops an oversized entry before it is sent, so seeing this message means something is wrong with the app rather than with what you typed.',
 
   // Raised by crypto/cipher.js, not by the server: the entry is bigger
   // than the largest padding bucket the transport can carry, so it is
   // refused before a request is built rather than after a 413.
   //
-  // Same number as PAYLOAD_TOO_LARGE above, and derived from the same
-  // place — cipher.js computes MAX_ITEM_BYTES from BUCKETS and the body
-  // limit, so the two sentences quote one boundary, not two.
+  // Same boundary as PAYLOAD_TOO_LARGE above and neither states it,
+  // for the reason written out there. This one CAN point at the size
+  // meter: it is raised only from the entry form, where the meter is
+  // on screen by definition — an entry cannot be over the cap without
+  // being over the three-quarter mark that makes the meter render.
   ITEM_TOO_LARGE:
-    'This entry is too large to store — an entry has to stay under about 65,000 characters, all its fields together. Shortening the notes should fix it.',
+    'This entry is too large to store — all its fields together, not the notes alone. The size meter under the notes field shows how much room is left; shortening the notes is usually the quickest fix.',
   MALFORMED_JSON:
     'The app sent something the server could not read. This is a bug, not something you did.',
   UNSUPPORTED_ENCODING:

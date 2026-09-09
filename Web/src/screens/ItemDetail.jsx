@@ -138,20 +138,23 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
         // can keep the draft reassurance the rest of this handler
         // gives.
         //
-        // NEITHER 32 NOR 64 — both were right once and both are wrong
-        // now. The buckets step 16384 -> 32768 -> 65536; base64 turns
-        // them into 21,848, 43,692 and 87,384 characters. While the
-        // body limit was 64 KB only the 32768 bucket could travel, so
-        // the ceiling was 32 KB. The limit is 96 KB now, 87,465 bytes
-        // fit, and the ceiling is the 65536 bucket less its 4-byte
-        // prefix: 65,532 bytes. The budget meter below counts those
-        // bytes; this sentence rounds them for a person to act on.
+        // NO FIGURE HERE, ON PURPOSE. This sentence has quoted 64 KB,
+        // then 32 KB, then 65,000 characters, and each was wrong in
+        // its turn. The limit is 65,532 BYTES of the serialised entry
+        // — the 65536 bucket less its 4-byte prefix — and bytes are
+        // not what a person types in: an Arabic letter or a newline
+        // costs two, a CJK character three, an emoji four. Any
+        // character count is a lie to somebody.
+        //
+        // So the number lives in the budget meter below, which counts
+        // the real bytes as they are typed, and this sentence points
+        // at it. Web/src/lib/errors.js carries the full reasoning.
         //
         // KEEP IN STEP with:
         //   Web/src/crypto/cipher.js   MAX_ITEM_BYTES (what is enforced)
         //   Web/src/lib/errors.js      the shared sentences
         : e?.code === 'ITEM_TOO_LARGE' || e?.code === 'PAYLOAD_TOO_LARGE'
-          ? 'This entry is too large to save — an entry has to stay under about 65,000 characters, all its fields together. Your changes are still here; shortening the notes should fix it.'
+          ? 'This entry is too large to save — all its fields together, not the notes alone. Your changes are still here; the size meter under the notes field shows how much room is left.'
         // The shared map has had a sentence for this all along; this
         // handler just never reached it, so a rate-limited save read
         // "Could not save this entry (TOO_MANY_REQUESTS)" — a code in
@@ -636,9 +639,18 @@ function PanelTextarea(props) {
  * someone while they type is the whole difference.
  *
  * It counts BYTES of the serialised entry, not characters of the
- * notes, and says so — "all fields" — because a person who trims the
- * notes to fit and still cannot save needs to know the title and URL
- * are spending from the same budget.
+ * notes. That distinction is now load-bearing rather than pedantic:
+ * the error copy used to name a character figure and no longer does,
+ * because bytes and characters part company the moment anything is
+ * not ASCII — two bytes for an Arabic letter or a newline, three for
+ * CJK, four for an emoji. This meter is where the number lives, and
+ * the sentences in errors.js point at it.
+ *
+ * IT DOES NOT ITSELF SAY "all fields". It renders a count and a word
+ * — "5,460 LEFT", "540 OVER". The sentence that explains the count
+ * covers the whole entry is the note beside it, rendered by the
+ * caller when the cap is exceeded; this comment used to claim the
+ * meter said it, which it never did.
  */
 function SizeMeter({ used, limit }) {
   const fraction = used / limit;

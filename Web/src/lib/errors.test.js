@@ -55,49 +55,76 @@ describe('the request-level codes express.json raises', () => {
     expect(message).not.toContain('Could not save this entry');
   });
 
-  test('PAYLOAD_TOO_LARGE says what the limit is and what to do', () => {
-    // The only one of the three an ordinary person can reach: a long
-    // enough notes field on a vault entry cannot be sent.
+  test('PAYLOAD_TOO_LARGE says what to do without naming a figure', () => {
+    // THREE dead figures now, and all three guards are below.
     //
-    // Neither 32 nor 64: both were right once and both are wrong now.
-    // The body limit was raised to 96 KB so the 65536 padding bucket
-    // could travel (87,465 bytes, against 98,304), which moved the
-    // entry ceiling from the 32768 bucket to the 65536 one — 65,532
-    // bytes once its 4-byte length prefix is taken off.
+    //   64 KB was the body limit quoted as an entry limit.
+    //   32 KB was the entry limit before the transport was raised.
+    //   65,000 characters was the entry limit in ASCII and in nothing
+    //   else — the cap is 65,532 BYTES through TextEncoder, and a
+    //   newline or an Arabic letter costs two of them, a CJK
+    //   character three, an emoji four. It promised an Arabic speaker
+    //   double the room and an emoji user quadruple.
     //
-    // Two dead figures now, and BOTH guards stay below. 64 was the
-    // body limit quoted as an entry limit; 32 was the entry limit
-    // before the transport was raised. Either one reappearing means
-    // this sentence has gone stale again, which is a thing that has
-    // now happened twice.
+    // The '65,000' guard was a toContain until this change. It is
+    // inverted rather than deleted: the figure is gone from the copy
+    // because no single number is honest across scripts, so the thing
+    // worth pinning is that it does not come back. Same shape as the
+    // two guards it joins.
     const message = codeToMessage(err('PAYLOAD_TOO_LARGE'), 'Could not save this entry');
 
-    expect(message).toContain('65,000');
-    expect(message).toContain('notes');
-
-    // The old number was not merely imprecise, it was unreachable
-    // advice — so quoting it again is the regression to catch.
+    // GUARDS FIRST, and that ordering is deliberate. These are the
+    // regression the test exists for; a positive assertion failing
+    // above them would short-circuit the case and hide whether the
+    // guard still bites.
     expect(message).not.toContain('64 KB');
     expect(message).not.toContain('32 KB');
+    expect(message).not.toContain('65,000');
+
+    // Still actionable, and still says the budget is shared.
+    expect(message).toContain('notes');
+    expect(message).toContain('every field shares one budget');
   });
 
-  test('ITEM_TOO_LARGE quotes the same boundary as PAYLOAD_TOO_LARGE', () => {
-    // Two codes, one boundary. ITEM_TOO_LARGE is raised by
-    // crypto/cipher.js before a request is built; PAYLOAD_TOO_LARGE is
-    // the server's 413 and is now only reachable through a client bug.
-    // A reader who hits one and then the other must not be told two
-    // different numbers, which is why they are asserted together.
+  test('PAYLOAD_TOO_LARGE does not send the reader to a meter that is not there', () => {
+    // Deliberately different from ITEM_TOO_LARGE. Padding is bucketed,
+    // so if the client and server limits ever drift apart, ANY entry
+    // over 32,764 bytes pads to 65536 and produces the same
+    // 87,465-byte body — a 33,000-byte entry included. That is half
+    // the cap, and the meter renders nothing below three quarters. So
+    // for most of the range where this message can fire the meter is
+    // not on screen, and pointing at it would be worse than silence.
+    const message = codeToMessage(err('PAYLOAD_TOO_LARGE'), 'Could not save this entry');
+
+    expect(message).not.toContain('size meter');
+
+    // It says whose fault it is instead, because reaching it at all
+    // means the app and the server disagree.
+    expect(message).toContain('something is wrong with the app');
+  });
+
+  test('ITEM_TOO_LARGE points at the meter and names no figure either', () => {
+    // Two codes, one boundary, and neither states it. A reader who
+    // hits one and then the other must not be told two different
+    // numbers — which is now guaranteed by neither telling them one.
     const client = codeToMessage(err('ITEM_TOO_LARGE'), 'Could not save this entry');
     const server = codeToMessage(err('PAYLOAD_TOO_LARGE'), 'Could not save this entry');
 
-    expect(client).toContain('65,000');
-    expect(client).toContain('notes');
-
-    // Same figure in both, and neither dead figure in either.
+    // Guards first, for the reason given in the case above. No figure
+    // in either, including the one this test used to REQUIRE — see
+    // there for why '65,000' turned from an assertion into a guard.
     for (const message of [client, server]) {
       expect(message).not.toContain('64 KB');
       expect(message).not.toContain('32 KB');
+      expect(message).not.toContain('65,000');
     }
+
+    expect(client).toContain('notes');
+
+    // This one CAN point at the meter: it is raised only from the
+    // entry form, and an entry cannot be over the cap without being
+    // past the three-quarter mark that makes the meter render.
+    expect(client).toContain('size meter');
 
     // It is a real sentence, not the generic fallback with a code
     // bracketed onto it.

@@ -213,14 +213,17 @@ describe('a delete that fails', () => {
 
 describe('the size limit an entry actually has', () => {
   test('a refused entry is told the boundary that bit it, not the body cap', async () => {
-    // This message has quoted two dead numbers. 64 was the request cap
-    // reported as an entry cap. 32 was correct while the body limit was
-    // 64 KB, because only the 32768 bucket could travel. The limit is
-    // 96 KB now, 87,465 bytes fit, and the ceiling is the 65536 bucket
-    // less its 4-byte prefix: 65,532 bytes.
+    // This message has quoted THREE dead numbers. 64 KB was the
+    // request cap reported as an entry cap. 32 KB was correct while
+    // the body limit was 64 KB, because only the 32768 bucket could
+    // travel. 65,000 characters was correct in ASCII and nowhere else
+    // — the cap is 65,532 BYTES, and a newline or an Arabic letter
+    // costs two of them, a CJK character three, an emoji four.
     //
-    // BOTH guards stay. Either figure coming back means this sentence
-    // has gone stale again, which has now happened twice.
+    // ALL THREE guards stay. The '65,000' one was a toContain until
+    // this change and is inverted rather than removed: the figure left
+    // the copy because no single number is honest across scripts, so
+    // what is worth pinning is that it does not come back.
     updateItem.mockRejectedValue(apiError('PAYLOAD_TOO_LARGE'));
 
     resetHooks();
@@ -230,20 +233,26 @@ describe('the size limit an entry actually has', () => {
     beginRender();
     const message = alertText(render());
 
-    expect(message).toContain('65,000');
     expect(message).not.toContain('64 KB');
     expect(message).not.toContain('32 KB');
+    expect(message).not.toContain('65,000');
     // All fields share one encrypted blob, so trimming the notes is
     // the actionable part but not the whole truth.
     expect(message).toContain('all its fields together');
     expect(message).toContain('Your changes are still here');
+    // The number lives in the meter now, and the sentence says where.
+    expect(message).toContain('size meter under the notes field');
   });
 
   test('the client refusal says the same thing the server 413 does', async () => {
     // ITEM_TOO_LARGE is what actually fires now — crypto/cipher.js
     // refuses before a request is built. It shares a branch with
     // PAYLOAD_TOO_LARGE precisely so the two cannot drift into quoting
-    // different boundaries at the same person.
+    // different boundaries at the same person. Both now quote none.
+    //
+    // Note this is ItemDetail's OWN sentence, not the shared map's —
+    // the two shared sentences differ from each other and from this
+    // one on purpose, and errors.test.js pins those separately.
     updateItem.mockRejectedValue(apiError('ITEM_TOO_LARGE'));
 
     resetHooks();
@@ -253,11 +262,12 @@ describe('the size limit an entry actually has', () => {
     beginRender();
     const message = alertText(render());
 
-    expect(message).toContain('65,000');
     expect(message).not.toContain('64 KB');
     expect(message).not.toContain('32 KB');
+    expect(message).not.toContain('65,000');
     expect(message).toContain('all its fields together');
     expect(message).toContain('Your changes are still here');
+    expect(message).toContain('size meter under the notes field');
   });
 
   test('an oversized entry is stopped before it is sent, not after', async () => {
