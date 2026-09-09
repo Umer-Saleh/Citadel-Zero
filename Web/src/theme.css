@@ -466,6 +466,30 @@ img, svg, video, canvas {
     min-height: 44px !important;
   }
 
+  /* A row whose controls appear on interaction gives them a line of
+     their own instead of squeezing what is already there.
+
+     The vault row is avatar + name + strength meter, and the quick-copy
+     chips are inserted into that same flex line when the row is
+     touched. On a phone there is not room for all four, so the name
+     column — the only flexible one — was compressed to ZERO width and
+     the chips sat where it had been. It reads as the buttons printing
+     over the entry name, which is how it was reported.
+
+     Wrapping rather than hiding the chips, because on a touch device
+     this state is not transient: there is no hover, so the synthesised
+     mouseenter sticks until something else is touched. Whatever is
+     wrong here stays wrong until the reader taps their way out of it,
+     which is also why it was noticed at all. */
+  .vk-r-row-wrap {
+    flex-wrap: wrap !important;
+  }
+
+  .vk-r-row-actions {
+    flex-basis: 100% !important;
+    justify-content: flex-end !important;
+  }
+
   /* A sticky side panel becomes an ordinary block once the layout is
      a single column — pinning it would park it over the list it is
      supposed to sit beneath. */

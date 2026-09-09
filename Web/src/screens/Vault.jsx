@@ -183,6 +183,10 @@ function ItemRow({ item, index, onClick, selected }) {
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      // vk-r-row-wrap: below 640px the quick-copy chips take a line of
+      // their own rather than being crushed into this one. See the
+      // rule in theme.css for why hiding them was the wrong answer.
+      className="vk-r-row-wrap"
       style={{
         display: 'flex', alignItems: 'center', gap: 16, padding: '14px 18px',
         background: 'var(--surface)',
@@ -206,7 +210,14 @@ function ItemRow({ item, index, onClick, selected }) {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, flex: 1 }}>
-        <span style={{ font: '600 15px Geist, sans-serif', color: 'var(--text)' }}>{site}</span>
+        <span style={{
+          font: '600 15px Geist, sans-serif', color: 'var(--text)',
+          // The flexible column is the one that should absorb a narrow
+          // viewport, which means it has to be able to give way
+          // gracefully. The username below already ellipsised; this
+          // did not, so it pushed instead of shrinking.
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+        }}>{site}</span>
         <span style={{ font: "400 12px 'Geist Mono', monospace", color: 'var(--muted)', letterSpacing: '.04em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {item.data.username || '—'}
         </span>
@@ -214,7 +225,7 @@ function ItemRow({ item, index, onClick, selected }) {
 
       {/* per-item strength meter — calcStrength returns score 1..10,
           halved here to fill 5 segments */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, marginRight: 6 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, marginRight: 6, flexShrink: 0 }}>
         <div style={{ display: 'flex', gap: 2 }}>
           {Array.from({ length: 5 }, (_, i) => (
             <div key={i} style={{
@@ -230,7 +241,7 @@ function ItemRow({ item, index, onClick, selected }) {
 
       {/* quick-copy — appear on hover */}
       {hover && (
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div className="vk-r-row-actions" style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
           <button onClick={e => copy('user', item.data.username, e)} className="vk-r-touch" style={copyChip}>
             {copied === 'user' ? <Icon name="check" size={12} /> : 'USER'}
           </button>
