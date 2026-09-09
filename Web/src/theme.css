@@ -6,7 +6,36 @@
   --green-deep: #588E42;
   --on-green: #12200C;
   --amber: #D9A84F;
-  --red: #D25A57;
+
+  /* Red as TEXT, on a dark ground.
+     ---------------------------------------------------------------
+     Lightened from #D25A57, which was 4.75:1 against --bg and only
+     4.3:1 against --surface — under the floor on every card in the
+     app, which is where error notes and the outline DELETE label
+     actually live. 5.66:1 and 5.12:1 now.
+
+     Lightening this is only safe because the fill moved to the token
+     below. While one value did both jobs it was trapped: darkening it
+     for the fills would have pushed this text further down, and
+     lightening it for the text would have pushed the fills further
+     down. Splitting the two is what let either move. */
+  --red: #DE6A66;
+
+  /* Red as a FILL, with light text on top of it.
+     ---------------------------------------------------------------
+     --red above is tuned to be read AS TEXT on a dark background.
+     Reversing it — light text on a --red field — is a different
+     measurement entirely, and it failed: the demo banner came out at
+     3.68:1 and every danger button at 3.93:1, both under 4.5:1.
+
+     The banner being the least readable element on the page is the
+     wrong way round. It is the one thing on a public demo that has to
+     be read before anything is typed, and the only claim the site
+     makes that a visitor is relied upon to act on.
+
+     Same hue, deeper: 5.96:1 under the banner's #FFF6EE and 6.36:1
+     under a button's #FFF. */
+  --red-deep: #B02F34;
   --text: #F0E9D6;
   --muted: #9D9C82;
   --edge: #353A2A;
@@ -27,8 +56,21 @@ body.light {
   --green: #357E29;
   --green-deep: #28621F;
   --on-green: #F8F3E2;
-  --amber: #C67C16;
+  /* Darkened from #C67C16, which measured 2.85:1 against this theme's
+     --bg — failing for every piece of amber text in the light theme,
+     of which the DEMO ACCOUNT badge is simply the smallest and
+     most-noticed. 4.81:1 now. The dark theme's amber is untouched: it
+     sits at 8.59:1 and never had the problem. */
+  --amber: #96590A;
+
+  /* Already passes as text here — 4.71:1 on --bg, 5.11:1 on
+     --surface — so it is unchanged. */
   --red: #C0353A;
+
+  /* The light theme's fill already passed at 5.16:1. This exists so
+     the token means the same thing in both themes rather than
+     resolving to a fill in one and nothing in the other. */
+  --red-deep: #A82B30;
   --text: #26261B;
   --muted: #726B52;
   --edge: #D6C69C;

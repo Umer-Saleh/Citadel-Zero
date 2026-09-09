@@ -41,7 +41,10 @@ export function Button({ variant = 'primary', children, style, ...props }) {
       transform: active ? 'translateY(2px)' : 'none'
     },
     danger: {
-      background: 'var(--red)', color: '#fff', borderColor: 'var(--red)',
+      // Same fill token as the banner, and for the same measurement:
+      // #fff on --red was 3.93:1. These are the destructive buttons,
+      // which is not where a label should be hard to read.
+      background: 'var(--red-deep)', color: '#fff', borderColor: 'var(--red-deep)',
       boxShadow: active ? '0 0 0 var(--red)' : '0 3px 0 rgba(0,0,0,.25)',
       transform: active ? 'translateY(3px)' : 'none'
     },

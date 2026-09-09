@@ -103,7 +103,11 @@ export function DemoBanner() {
         minHeight: 64, boxSizing: 'border-box',
         display: 'flex', alignItems: 'center', gap: 16,
         padding: '0 24px',
-        background: 'var(--red)',
+        // --red-deep, not --red: this is red used as a FILL under
+        // light text, which measured 3.68:1 and had to clear 4.5:1.
+        // The safety notice being the hardest thing on the page to
+        // read was the wrong way round.
+        background: 'var(--red-deep)',
         color: '#FFF6EE',
         borderBottom: '2px solid rgba(0,0,0,.35)',
         boxShadow: '0 2px 0 var(--shadow)'

@@ -882,7 +882,7 @@ function TwoFactor({ email }) {
             <Button onClick={turnOff} disabled={busy || !code}
               style={{
                 padding: '12px 28px', letterSpacing: '.12em',
-                background: 'var(--red)', borderColor: 'var(--red)', color: '#fff',
+                background: 'var(--red-deep)', borderColor: 'var(--red-deep)', color: '#fff',
                 boxShadow: '0 3px 0 rgba(0,0,0,.25)'
               }}>
               {busy ? 'TURNING OFF…' : 'TURN OFF'}

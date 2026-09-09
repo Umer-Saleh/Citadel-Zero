@@ -669,7 +669,7 @@ function DeleteModal({ site, onCancel, onConfirm, busy }) {
           <PressButton onClick={onConfirm} disabled={busy} depth={3} style={{
             flex: 1, justifyContent: 'center',
             font: '600 13px Geist, sans-serif', letterSpacing: '.1em', padding: '12px 20px',
-            border: '1px solid var(--red)', background: 'var(--red)',
+            border: '1px solid var(--red-deep)', background: 'var(--red-deep)',
             color: '#fff', boxShadow: '0 3px 0 rgba(0,0,0,.25)'
           }}>
             {busy ? 'DELETING…' : 'DELETE'}
