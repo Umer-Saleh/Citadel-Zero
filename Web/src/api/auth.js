@@ -135,6 +135,12 @@ export async function login(email, password, totpCode, knownKdf) {
 
   return {
     dek,
+    // The address as the SERVER stores it, which is not necessarily
+    // the one just typed: lookups fold case, so signing in as
+    // reviewer@example.com opens an account created as
+    // Reviewer@Example.com. Callers should prefer this over the string
+    // they sent.
+    email: res.email,
     kdfUpgradeAvailable: res.kdfUpgradeAvailable,
     targetKdfParams: res.targetKdfParams
   };

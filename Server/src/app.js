@@ -108,18 +108,26 @@ app.get('/api/user/kdf-params',
   }));
 
 app.post('/api/auth/login', validate(loginSchema), wrap(async (req, res) => {
-  const { userId, token, refreshToken, refreshExpiresAt,
+  const { userId, email, token, refreshToken, refreshExpiresAt,
           wrappedDek, kdfUpgradeAvailable, targetKdfParams } =
     await authService.login(req.body);
 
   console.log(`[server] login success for user ${userId}`);
 
   // Named explicitly rather than spread: the service result also
-  // carries userId and email, and a route should decide what goes
-  // over the wire rather than forwarding whatever a service happens
-  // to return today.
+  // carries userId, and a route should decide what goes over the wire
+  // rather than forwarding whatever a service happens to return today.
+  //
+  // `email` is the address AS STORED, which is not necessarily the one
+  // the client just sent — lookups fold case, so signing in as
+  // reviewer@example.com finds an account created as
+  // Reviewer@Example.com. Returning it lets the client stop echoing
+  // the typed string back to itself and show what the server actually
+  // holds. It discloses nothing: the caller has just proved they hold
+  // this account's password.
   res.status(200).json({
     ok: true,
+    email,
     token, refreshToken, refreshExpiresAt,
     wrappedDek, kdfUpgradeAvailable, targetKdfParams
   });

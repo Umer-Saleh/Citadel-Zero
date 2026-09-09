@@ -120,11 +120,23 @@ test('the stored address keeps the casing it was created with', async () => {
   assert.strictEqual(res.status, 200);
 
   // Signed in via the lowercase spelling, but what the server HOLDS is
-  // what was typed at signup. Asserted against the column rather than
-  // the response, because the login route does not currently return
-  // the address at all — only comparison folds, storage is untouched.
+  // what was typed at signup. Only comparison folds; storage is
+  // untouched.
   const { rows } = await query('SELECT email FROM users');
   assert.strictEqual(rows[0].email, UPPER, 'the stored value was rewritten');
+});
+
+test('login reports the stored address, not the one that was sent', async () => {
+  const payload = await signUpUpper();
+
+  const res = await request(app)
+    .post('/api/auth/login')
+    .send({ email: LOWER, authHash: payload.authHash });
+
+  // The client uses this to stop echoing the typed string back to
+  // itself. Sent one spelling, told the other — the account's own.
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.body.email, UPPER);
 });
 
 test('kdf-params finds the account under a different casing', async () => {

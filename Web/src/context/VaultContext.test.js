@@ -144,3 +144,52 @@ describe('lock clears the key everywhere it is held', () => {
     expect(api.post).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * Re-render WITHOUT resetting the hook slots.
+ *
+ * render() clears them, which is what the tests above want — each
+ * starts from a locked provider. Reading state that a callback just
+ * set needs the opposite: the same slots, read again. Only the indexes
+ * go back to zero, exactly as they would on a real re-render.
+ */
+function rerender() {
+  stateIndex = 0;
+  refIndex = 0;
+  return VaultProvider({ children: null }).props.value;
+}
+
+describe('which address the unlocked vault reports', () => {
+  test('the one the server stores, not the one that was typed', async () => {
+    // Lookups fold case, so this password opens an account created
+    // under a different spelling. Everything downstream — the settings
+    // lookups, the recovery-kit heading, the stored-material
+    // comparison — should name the account, not the route taken to it.
+    const ctx = render();
+    auth.login.mockResolvedValue({
+      dek: new Uint8Array(32).fill(7),
+      email: 'Reviewer@Example.com',
+      kdfUpgradeAvailable: false
+    });
+
+    await ctx.login('reviewer@example.com', 'pw');
+
+    expect(rerender().email).toBe('Reviewer@Example.com');
+  });
+
+  test('falls back to what was typed when the server sends none', async () => {
+    // Web and Server are separate images, so a deploy that rebuilds
+    // one and not the other puts a new client against an old server
+    // for a while. Without this the gap would send `email=undefined`
+    // to every kdf-params lookup.
+    const ctx = render();
+    auth.login.mockResolvedValue({
+      dek: new Uint8Array(32).fill(7),
+      kdfUpgradeAvailable: false
+    });
+
+    await ctx.login('typed@example.com', 'pw');
+
+    expect(rerender().email).toBe('typed@example.com');
+  });
+});

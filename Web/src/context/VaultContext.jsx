@@ -97,14 +97,30 @@ export function VaultProvider({ children }) {
   // path passes one; every other caller omits it and takes the
   // ordinary kdf-params fetch.
   const login = useCallback(async (loginEmail, password, totpCode, knownKdf) => {
-    const { dek: newDek, kdfUpgradeAvailable: upgrade, targetKdfParams } =
+    const { dek: newDek, email: storedEmail,
+            kdfUpgradeAvailable: upgrade, targetKdfParams } =
       await auth.login(loginEmail, password, totpCode, knownKdf);
     // Both, together. The ref first so a callback captured before this
     // login can use the key the moment login() resolves, without
     // waiting for a render.
     dekRef.current = newDek;
     setDek(newDek);
-    setEmail(loginEmail);                    // remember who's unlocked
+
+    // The address the SERVER holds, not the one that was typed. Since
+    // lookups fold case, signing in as reviewer@example.com opens an
+    // account created as Reviewer@Example.com — and everything
+    // downstream of this value (the settings lookups, the recovery-kit
+    // heading, the stored-material comparison) should say what the
+    // account actually is rather than echo the spelling used to reach
+    // it.
+    //
+    // Falls back to the typed string only if the server did not send
+    // one. That is not hypothetical: web and server are separate
+    // images, so a deploy that rebuilds one and not the other puts a
+    // new client against an old server for a while. Without the
+    // fallback that window would send `email=undefined` to
+    // kdf-params.
+    setEmail(storedEmail ?? loginEmail);
     setKdfUpgradeAvailable(!!upgrade);       // for the settings "level up" prompt
     setLocked(false);
     return { kdfUpgradeAvailable: upgrade, targetKdfParams };
