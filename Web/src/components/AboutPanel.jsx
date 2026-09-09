@@ -141,7 +141,7 @@ export function AboutPanel() {
 
       {/* maxWidth in ch, not px: it is the measure that keeps a line
           readable, and it holds at every width without a breakpoint. */}
-      <div style={{
+      <div className="vk-justify" style={{
         display: 'flex', flexDirection: 'column', gap: 12,
         maxWidth: '72ch',
         font: '400 13px Geist, sans-serif',

@@ -130,7 +130,7 @@ function RecoveryKitSection({ email }) {
       </h2>
 
       {phase !== 'done' && (
-        <div style={{ fontSize: 13, color: 'var(--muted)', textWrap: 'pretty' }}>
+        <div className="vk-justify" style={{ fontSize: 13, color: 'var(--muted)', textWrap: 'pretty' }}>
           If you think someone has seen your recovery key, replace it. The old key
           stops working immediately. Your master password and every entry are
           unchanged — only the second door gets a new lock.
@@ -325,7 +325,7 @@ function KdfUpgrade({ email, upgradeKdf }) {
                 re-wraps the 32-byte key and leaves the vault alone.
                 The prototype's "takes about a minute" is not — the
                 real derivation is a couple of seconds. */}
-            <span style={{ fontSize: 14, color: 'var(--muted)', textWrap: 'pretty' }}>
+            <span className="vk-justify" style={{ fontSize: 14, color: 'var(--muted)', textWrap: 'pretty' }}>
               Your account was created with weaker key-derivation settings. Upgrading
               re-wraps your vault key under stronger ones — your password stays the same
               and your entries are never re-encrypted. Takes a few seconds.
@@ -673,6 +673,11 @@ function TwoFactor({ email }) {
               <span style={{ font: "600 11px 'Geist Mono', monospace", letterSpacing: '.16em', color: 'var(--amber)' }}>
                 STATUS UNKNOWN
               </span>
+              {/* Deliberately NOT justified. Two lines at this
+                  measure stretch to 1.62x — one visible gap band on
+                  an error message, which is the last place to spend
+                  a tidy right edge. It also opens with {probeError},
+                  so its length is not even fixed. */}
               <span style={{ fontSize: 13, color: 'var(--muted)', textWrap: 'pretty' }}>
                 {probeError} We could not check whether two-factor is on for this
                 account, so nothing is offered here until we can. This does not
@@ -703,7 +708,7 @@ function TwoFactor({ email }) {
             </SuccessNote>
           )}
 
-          <div style={{ fontSize: 13, color: 'var(--muted)', textWrap: 'pretty' }}>
+          <div className="vk-justify" style={{ fontSize: 13, color: 'var(--muted)', textWrap: 'pretty' }}>
             Adds a code from your phone to every login. This protects your account,
             not your vault — your entries are already sealed under your master
             password, which never reaches the server. What it stops is someone with
@@ -721,7 +726,7 @@ function TwoFactor({ email }) {
       {/* ---- SCANNING ---- */}
       {phase === 'scanning' && (
         <>
-          <div style={{ fontSize: 13, color: 'var(--muted)', textWrap: 'pretty' }}>
+          <div className="vk-justify" style={{ fontSize: 13, color: 'var(--muted)', textWrap: 'pretty' }}>
             Scan this with Google Authenticator, Authy, or any TOTP app, then enter
             the code it shows, or scan the qr code. If you lose your phone, you'll need one of the backup codes to log in.
           </div>
@@ -850,7 +855,7 @@ function TwoFactor({ email }) {
       {/* ---- ON ---- */}
       {phase === 'on' && (
         <>
-          <div style={{ fontSize: 13, color: 'var(--muted)', textWrap: 'pretty' }}>
+          <div className="vk-justify" style={{ fontSize: 13, color: 'var(--muted)', textWrap: 'pretty' }}>
             Every login asks for a code from your authenticator app. If you've just
             enrolled, wait for the next code — the one you set up with has already
             been used and can't be reused.

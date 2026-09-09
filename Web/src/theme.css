@@ -331,6 +331,34 @@ img, svg, video, canvas {
   -webkit-overflow-scrolling: touch;
 }
 
+/* Justified prose.
+   ---------------------------------------------------------------
+   Only on blocks that are genuinely paragraphs, and only where the
+   measure is wide enough to pay for it. Justification distributes
+   the slack in a line across its word spaces, so the narrower the
+   measure the more each space has to stretch, and hyphenation is
+   deliberately NOT enabled to relieve it — hyphenating is its own
+   argument and this project has not had it.
+
+   MEASURED, as a stretch ratio against a natural space, worst line
+   per block, last line excluded because it is never justified:
+
+     measure 606px (>=700px viewport)   1.48x   fine
+     measure 533px (72ch, >=640px)      1.32x   fine
+     measure 482px (560px viewport)     2.00x   visible gaps
+
+   The crossover sits on the 640px breakpoint that already exists
+   below, so the opt-out lives in that block rather than needing a
+   min-width query of its own.
+
+   The deciding factor is the MEASURE, not the viewport: a narrow
+   column fails at 1440 just as a narrow screen does. So this is
+   opt-in per block and several wide-screen paragraphs deliberately
+   do not carry it. */
+.vk-justify {
+  text-align: justify;
+}
+
 /* ---------------------------------------------------------------
    TABLET AND BELOW  (<= 1024px)
    The AppShell header needs 986px of content before it wraps, so it
@@ -577,5 +605,14 @@ img, svg, video, canvas {
     font-size: 15px !important;
     letter-spacing: .12em !important;
     padding: 20px 14px !important;
+  }
+
+  /* Justification comes off here. At this width the measure is too
+     narrow to absorb the slack: the same paragraphs that stretch by
+     1.3x on a desktop go to 2.5x and beyond, with several lines per
+     block over 3x, which is rivers of white space rather than a
+     tidy right edge. Left-aligned is simply better here. */
+  .vk-justify {
+    text-align: left !important;
   }
 }

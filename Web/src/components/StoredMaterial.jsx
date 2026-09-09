@@ -179,7 +179,7 @@ export function StoredMaterial() {
           background: 'var(--surface)',
           animation: 'riseIn .3s cubic-bezier(.2,.9,.3,1) both'
         }}>
-          <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 20px', textWrap: 'pretty', maxWidth: '72ch' }}>
+          <p className="vk-justify" style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 20px', textWrap: 'pretty', maxWidth: '72ch' }}>
             <strong style={{ color: 'var(--text)' }}>On disk</strong> is the row exactly
             as Postgres holds it. <strong style={{ color: 'var(--text)' }}>In this browser</strong> is
             what was decrypted from that row, using a key derived from the master
@@ -235,7 +235,7 @@ export function StoredMaterial() {
                 );
               })}
 
-              <p style={{
+              <p className="vk-justify" style={{
                 fontSize: 12, color: 'var(--muted)', margin: '20px 0 0',
                 textWrap: 'pretty', maxWidth: '72ch'
               }}>
