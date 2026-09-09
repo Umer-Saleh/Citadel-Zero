@@ -6,6 +6,7 @@ import { Paladin } from '../components/Paladin';
 import { Icon } from '../components/Icon';
 import { checkPolicy } from '../lib/policy';
 import { emailError, normaliseEmail } from '../lib/email';
+import { ThemeToggle } from '../components/ThemeToggle';
 
 export function Signup({ onComplete, onGoLogin }) {
   const { signup } = useVault();
@@ -71,6 +72,10 @@ export function Signup({ onComplete, onGoLogin }) {
 
   return (
     <section className="vk-r-pad" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: '48px 24px', position: 'relative', zIndex: 1 }}>
+      {/* The five pre-auth screens have no header to hold this, so
+          it floats. Same component AppShell uses. */}
+      <ThemeToggle floating />
+
       <div className="vk-r-fluid" style={{ width: 420, maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 32 }}>
 
         {/* masthead — gap 16 per the prototype (was 12) */}

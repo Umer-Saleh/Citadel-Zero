@@ -1,5 +1,6 @@
 import { Card, Button } from '../components/ui';
 import { Paladin } from '../components/Paladin';
+import { ThemeToggle } from '../components/ThemeToggle';
 
 /**
  * Nothing is served at this address.
@@ -27,6 +28,10 @@ export function NotFound() {
         padding: '48px 24px', position: 'relative', zIndex: 1
       }}
     >
+      {/* The five pre-auth screens have no header to hold this, so
+          it floats. Same component AppShell uses. */}
+      <ThemeToggle floating />
+
       <div
         className="vk-r-fluid"
         style={{ width: 400, maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 32 }}

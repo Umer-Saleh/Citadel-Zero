@@ -9,6 +9,7 @@ import { emailError, normaliseEmail } from '../lib/email';
 import {
   provisionDemoVault, resumeDemoVault, loadDemoCredentials
 } from '../lib/provisionDemo';
+import { ThemeToggle } from '../components/ThemeToggle';
 
 // One string, two callers. Provisioning and resuming both spend the
 // auth rate limit and can be refused for the same reason, so both say
@@ -212,6 +213,10 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery, onFreshVault, not
 
   return (
     <section className="vk-r-pad" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: '48px 24px', position: 'relative', zIndex: 1 }}>
+      {/* The five pre-auth screens have no header to hold this, so
+          it floats. Same component AppShell uses. */}
+      <ThemeToggle floating />
+
       {/* vk-r-fluid drops the fixed 400px on mobile. maxWidth:'100%'
           alone never applied: this is a grid item, and a grid item's
           default min-width:auto sizes the track from the fixed width. */}

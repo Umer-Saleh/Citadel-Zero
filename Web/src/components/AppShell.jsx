@@ -1,7 +1,6 @@
 import { useVault } from '../context/VaultContext';
-import { useTheme } from '../context/ThemeContext';
 import { Paladin } from './Paladin';
-import { Switch } from './ui';
+import { ThemeToggle } from './ThemeToggle';
 import { Icon } from './Icon';
 import { vaultHealth } from '../lib/health';
 import { usePix } from '../context/PixContext';
@@ -20,7 +19,6 @@ const TABS = [
  */
 export function AppShell({ children, view = 'vault', onNavigate }) {
   const { lock, items } = useVault();
-  const { theme, toggle } = useTheme();
   const { pose, says } = usePix();
 
   // Derived from the vault itself, never passed in — a hardcoded
@@ -136,7 +134,7 @@ export function AppShell({ children, view = 'vault', onNavigate }) {
           </div>
           )}
 
-          <Switch on={theme === 'dark'} onToggle={toggle} label="Dark theme" />
+          <ThemeToggle />
 
           <button
             onClick={lock}

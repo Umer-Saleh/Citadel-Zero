@@ -3,6 +3,7 @@ import { Card, Button, SuccessNote } from '../components/ui';
 import { Paladin } from '../components/Paladin';
 import { Icon } from '../components/Icon';
 import { copySecret } from '../lib/clipboard';
+import { ThemeToggle } from '../components/ThemeToggle';
 
 export function RecoveryKit({ recoveryKey, email, onContinue }) {
   const [saved, setSaved] = useState(false);
@@ -75,6 +76,10 @@ export function RecoveryKit({ recoveryKey, email, onContinue }) {
 
   return (
     <section className="vk-r-pad" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: '48px 24px', position: 'relative', zIndex: 1 }}>
+      {/* The five pre-auth screens have no header to hold this, so
+          it floats. Same component AppShell uses. */}
+      <ThemeToggle floating />
+
       <div className="vk-r-fluid" style={{ width: 560, maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 24 }}>
 
         {/* PIX kneels in his solemn oath — this is the weighty moment */}

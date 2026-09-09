@@ -6,6 +6,7 @@ import { Paladin } from '../components/Paladin';
 import { Icon } from '../components/Icon';
 import { checkPolicy } from '../lib/policy';
 import { emailError, normaliseEmail } from '../lib/email';
+import { ThemeToggle } from '../components/ThemeToggle';
 
 /**
  * Recovery: unwrap the vault with the recovery key, then set a new
@@ -129,6 +130,10 @@ export function Recover({ onRecovered, onBack }) {
 
   return (
     <section className="vk-r-pad" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: '48px 24px', position: 'relative', zIndex: 1 }}>
+      {/* The five pre-auth screens have no header to hold this, so
+          it floats. Same component AppShell uses. */}
+      <ThemeToggle floating />
+
       <div className="vk-r-fluid" style={{ width: 460, maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 28 }}>
 
         <div style={{
