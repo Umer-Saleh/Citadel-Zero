@@ -59,21 +59,50 @@ describe('the request-level codes express.json raises', () => {
     // The only one of the three an ordinary person can reach: a long
     // enough notes field on a vault entry cannot be sent.
     //
-    // 32, not 64. The body cap is 64 KB, but an entry is padded into a
-    // fixed bucket first and the buckets step 16384 -> 32768 -> 65536;
-    // base64 makes the 32768 bucket 43,692 characters, which fits, and
-    // the next one 87,384, which does not. So 32 KB is the boundary
-    // that actually bites, and the message used to quote a number the
-    // reader was comfortably under while being refused. Measured:
-    // 32,000 characters of notes saves, 33,000 does not.
+    // Neither 32 nor 64: both were right once and both are wrong now.
+    // The body limit was raised to 96 KB so the 65536 padding bucket
+    // could travel (87,465 bytes, against 98,304), which moved the
+    // entry ceiling from the 32768 bucket to the 65536 one — 65,532
+    // bytes once its 4-byte length prefix is taken off.
+    //
+    // Two dead figures now, and BOTH guards stay below. 64 was the
+    // body limit quoted as an entry limit; 32 was the entry limit
+    // before the transport was raised. Either one reappearing means
+    // this sentence has gone stale again, which is a thing that has
+    // now happened twice.
     const message = codeToMessage(err('PAYLOAD_TOO_LARGE'), 'Could not save this entry');
 
-    expect(message).toContain('32 KB');
+    expect(message).toContain('65,000');
     expect(message).toContain('notes');
 
     // The old number was not merely imprecise, it was unreachable
     // advice — so quoting it again is the regression to catch.
     expect(message).not.toContain('64 KB');
+    expect(message).not.toContain('32 KB');
+  });
+
+  test('ITEM_TOO_LARGE quotes the same boundary as PAYLOAD_TOO_LARGE', () => {
+    // Two codes, one boundary. ITEM_TOO_LARGE is raised by
+    // crypto/cipher.js before a request is built; PAYLOAD_TOO_LARGE is
+    // the server's 413 and is now only reachable through a client bug.
+    // A reader who hits one and then the other must not be told two
+    // different numbers, which is why they are asserted together.
+    const client = codeToMessage(err('ITEM_TOO_LARGE'), 'Could not save this entry');
+    const server = codeToMessage(err('PAYLOAD_TOO_LARGE'), 'Could not save this entry');
+
+    expect(client).toContain('65,000');
+    expect(client).toContain('notes');
+
+    // Same figure in both, and neither dead figure in either.
+    for (const message of [client, server]) {
+      expect(message).not.toContain('64 KB');
+      expect(message).not.toContain('32 KB');
+    }
+
+    // It is a real sentence, not the generic fallback with a code
+    // bracketed onto it.
+    expect(client).not.toContain('ITEM_TOO_LARGE');
+    expect(client).not.toContain('Could not save this entry');
   });
 
   test('the two that only a client bug can cause say so', () => {

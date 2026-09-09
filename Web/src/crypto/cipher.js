@@ -1,8 +1,65 @@
 import { toBase64, fromBase64, utf8, fromUtf8 } from './bytes';
-import { pad, unpad } from './padding';
+import { pad, unpad, BUCKETS, PREFIX_BYTES } from './padding';
 
 const NONCE_LENGTH = 12;   // 96 bits, standard for AES-GCM
 const TAG_LENGTH = 16;     // 128 bits
+
+// ---------------------------------------------------------------
+// HOW BIG AN ITEM MAY BE, AND WHY THE NUMBER IS DERIVED
+//
+// padding.js is deliberately unbounded: past the largest bucket
+// bucketFor rounds up to a multiple of it, so that "a 200KB note is
+// unusual but shouldn't fail". Over HTTP it always did fail. The
+// transport cannot follow the padder anywhere it goes — base64 costs
+// four bytes for every three, so a bucket of B bytes needs 4B/3 of
+// body budget, and each bucket is twice the last. There is no body
+// limit that keeps up.
+//
+// So the entry is bounded HERE, before it is padded, at the largest
+// bucket the transport can actually carry. Everything below is
+// computed from the two facts that decide it rather than typed in, so
+// that raising the body limit or changing BUCKETS moves the cap on its
+// own instead of leaving a stale constant behind — which is the exact
+// failure this whole area already had once.
+// ---------------------------------------------------------------
+
+/** express.json({ limit: '96kb' }) in Server/src/app.js. */
+const BODY_LIMIT_BYTES = 96 * 1024;
+
+/** `{"ciphertext":"…","nonce":<16 chars>,"authTag":<24 chars>}` */
+const ENVELOPE_BYTES = 81;
+
+const base64Length = (bytes) => Math.ceil(bytes / 3) * 4;
+
+const carryable = BUCKETS.filter(
+  b => base64Length(b) + ENVELOPE_BYTES <= BODY_LIMIT_BYTES
+);
+
+/**
+ * The largest serialised item that can reach the server: 65,532 bytes
+ * today — the 65536 bucket less its 4-byte length prefix. That bucket
+ * travels as 87,384 base64 characters plus 81 of envelope, 87,465
+ * bytes against a 98,304 limit. The next bucket up, 131072, would need
+ * 174,845 and is not carryable at any sane limit.
+ *
+ * This is a count of BYTES of JSON.stringify(item), not of characters
+ * in one field. The whole entry shares a single encrypted blob, so
+ * every field spends from the same budget, and a character outside
+ * ASCII spends more than one byte.
+ */
+export const MAX_ITEM_BYTES = carryable[carryable.length - 1] - PREFIX_BYTES;
+
+/**
+ * What an item will cost, for a UI that wants to show the budget
+ * before the save rather than explain a refusal after it.
+ *
+ * Measures exactly what encryptItem measures — same serialisation,
+ * same encoder — so the number a person watches while typing is the
+ * number that decides whether the save is allowed.
+ */
+export function itemByteLength(obj) {
+  return utf8(JSON.stringify(obj)).length;
+}
 
 async function importAesKey(key) {
   return crypto.subtle.importKey('raw', key, 'AES-GCM', false, ['encrypt', 'decrypt']);
@@ -64,7 +121,21 @@ export async function decryptBytes({ ciphertext, nonce, authTag }, key) {
  * to hide and padding them would break every existing account.
  */
 export async function encryptItem(obj, key) {
-  return encryptBytes(pad(utf8(JSON.stringify(obj))), key);
+  const plaintext = utf8(JSON.stringify(obj));
+
+  // Refused here rather than by the server, because the server's
+  // refusal is a 413 on a request that never had a chance — the padder
+  // would have rounded this up to a bucket no body limit can carry.
+  // Callers get a code they can render; ItemDetail shows the budget
+  // while the entry is being typed so this is the backstop, not the
+  // first thing a person hears about it.
+  if (plaintext.length > MAX_ITEM_BYTES) {
+    const err = new Error('item is too large to store: over the largest carryable padding bucket');
+    err.code = 'ITEM_TOO_LARGE';
+    throw err;
+  }
+
+  return encryptBytes(pad(plaintext), key);
 }
 
 export async function decryptItem(blob, key) {

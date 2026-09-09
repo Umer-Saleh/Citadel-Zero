@@ -35,6 +35,7 @@ vi.mock('../context/PixContext', () => ({ usePix: () => ({ react: pixReact }) })
 vi.mock('../lib/clipboard', () => ({ copySecret: () => () => {} }));
 
 const { ItemDetail } = await import('./ItemDetail');
+const { MAX_ITEM_BYTES } = await import('../crypto/cipher');
 const {
   resetHooks, beginRender, flush, find, texts, apiError
 } = await import('../test/hookShim.js');
@@ -212,16 +213,14 @@ describe('a delete that fails', () => {
 
 describe('the size limit an entry actually has', () => {
   test('a refused entry is told the boundary that bit it, not the body cap', async () => {
-    // The message quoted 64 KB, which is the request cap and is true
-    // — but an entry is padded into a fixed bucket before encryption,
-    // and the buckets step 16384 -> 32768 -> 65536. Base64 turns the
-    // 32768 bucket into 43,692 characters, which fits the envelope's
-    // 65,455, and the next into 87,384, which cannot. There is nothing
-    // in between, so 32 KB is the real ceiling and someone whose 40 KB
-    // note had just been refused was being told they were under it.
+    // This message has quoted two dead numbers. 64 was the request cap
+    // reported as an entry cap. 32 was correct while the body limit was
+    // 64 KB, because only the 32768 bucket could travel. The limit is
+    // 96 KB now, 87,465 bytes fit, and the ceiling is the 65536 bucket
+    // less its 4-byte prefix: 65,532 bytes.
     //
-    // The mismatch itself is a separate defect and is deliberately
-    // still present. This pins only what the person is TOLD.
+    // BOTH guards stay. Either figure coming back means this sentence
+    // has gone stale again, which has now happened twice.
     updateItem.mockRejectedValue(apiError('PAYLOAD_TOO_LARGE'));
 
     resetHooks();
@@ -231,11 +230,88 @@ describe('the size limit an entry actually has', () => {
     beginRender();
     const message = alertText(render());
 
-    expect(message).toContain('32 KB');
+    expect(message).toContain('65,000');
     expect(message).not.toContain('64 KB');
+    expect(message).not.toContain('32 KB');
     // All fields share one encrypted blob, so trimming the notes is
     // the actionable part but not the whole truth.
     expect(message).toContain('all its fields together');
     expect(message).toContain('Your changes are still here');
+  });
+
+  test('the client refusal says the same thing the server 413 does', async () => {
+    // ITEM_TOO_LARGE is what actually fires now — crypto/cipher.js
+    // refuses before a request is built. It shares a branch with
+    // PAYLOAD_TOO_LARGE precisely so the two cannot drift into quoting
+    // different boundaries at the same person.
+    updateItem.mockRejectedValue(apiError('ITEM_TOO_LARGE'));
+
+    resetHooks();
+    saveButton(render()).props.onClick();
+    await flush();
+
+    beginRender();
+    const message = alertText(render());
+
+    expect(message).toContain('65,000');
+    expect(message).not.toContain('64 KB');
+    expect(message).not.toContain('32 KB');
+    expect(message).toContain('all its fields together');
+    expect(message).toContain('Your changes are still here');
+  });
+
+  test('an oversized entry is stopped before it is sent, not after', async () => {
+    // The bug this closes: a long note could be typed in full, saved,
+    // and refused by the server with no size at which it would ever
+    // succeed. The fix is not a better error — it is not reaching the
+    // network at all.
+    items = [{
+      id: 'i1',
+      data: { ...ENTRY.data, notes: 'x'.repeat(MAX_ITEM_BYTES) }
+    }];
+
+    resetHooks();
+    const tree = render();
+
+    // SAVE refuses, and says why rather than sitting there greyed out.
+    expect(saveButton(tree).props.disabled).toBe(true);
+    expect(texts(tree)).toContain('This entry is too large to store.');
+
+    // And pressing it anyway does nothing — the handler checks too,
+    // rather than trusting the disabled attribute.
+    saveButton(tree).props.onClick();
+    await flush();
+    expect(updateItem).not.toHaveBeenCalled();
+  });
+
+  test('the budget meter is silent on an ordinary entry', () => {
+    // It is shown only in the last quarter of the budget. A credential
+    // spends a fraction of a percent, and a meter on every entry in the
+    // vault would be noise warning about a case almost nobody meets.
+    resetHooks();
+    const meter = find(render(), n => n.type?.name === 'SizeMeter');
+
+    expect(meter).toBeDefined();
+    expect(meter.type(meter.props)).toBeNull();
+  });
+
+  test('the budget meter appears, and counts every field not just notes', () => {
+    // Bytes of the whole serialised entry. Someone who trims the notes
+    // to fit and still cannot save has to know the title and URL are
+    // spending from the same budget.
+    const notes = 'x'.repeat(Math.floor(MAX_ITEM_BYTES * 0.95));
+    items = [{ id: 'i1', data: { ...ENTRY.data, notes } }];
+
+    resetHooks();
+    const meter = find(render(), n => n.type?.name === 'SizeMeter');
+    const rendered = meter.type(meter.props);
+
+    expect(rendered).not.toBeNull();
+
+    // The remaining budget is smaller than the notes alone would
+    // suggest, because the other fields have already spent from it.
+    expect(meter.props.used).toBeGreaterThan(notes.length);
+    expect(meter.props.limit).toBe(MAX_ITEM_BYTES);
+    expect(texts(rendered)).toContain('LEFT');
   });
 });

@@ -37,6 +37,29 @@ function decryptBytes({ ciphertext, nonce, authTag }, key) {
  * DEK wrappers also go through encryptBytes, and they are always
  * exactly 32 bytes — there is nothing to hide, and padding them would
  * change the format of every existing account's wrapped_dek.
+ *
+ * UNCAPPED HERE, ON PURPOSE, AND THAT IS AN ASYMMETRY WORTH KNOWING.
+ *
+ * The browser's copy of this function refuses an item over the largest
+ * padding bucket the transport can carry — 65,532 bytes, see
+ * Web/src/crypto/cipher.js — because anything larger is a request the
+ * server would answer with a 413 at a size where no retry helps.
+ *
+ * This copy has no such cap and does not need one: its only callers
+ * are the seed and demo scripts, which write to the database directly
+ * and never cross express.json. So a script COULD write a row larger
+ * than any client is able to upload. The row would decrypt perfectly
+ * well — unpad reads the length from the prefix and does not care
+ * which bucket it came from — and would then be unsavable the moment
+ * someone opened it and pressed SAVE.
+ *
+ * Left as it is rather than fixed. Nothing in the current fixtures
+ * comes near it (the longest demo note is a few hundred bytes), a cap
+ * here would be enforcing a client's transport limit inside code that
+ * has no transport, and the seed scripts are trusted input. It is
+ * written down because it is the one remaining way this system can
+ * hold an item it cannot re-save, and someone hunting that symptom
+ * should find this comment rather than rediscover it.
  */
 function encryptItem(obj, key) {
   return encryptBytes(Buffer.from(pad(Buffer.from(JSON.stringify(obj), 'utf8'))), key);

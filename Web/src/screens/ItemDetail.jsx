@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useVault } from '../context/VaultContext';
 import { usePix } from '../context/PixContext';
 import { copySecret } from '../lib/clipboard';
+import { MAX_ITEM_BYTES, itemByteLength } from '../crypto/cipher';
 import { Icon } from '../components/Icon';
 import { ErrorNote } from '../components/ui';
 
@@ -76,8 +77,23 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
     it.id !== itemId && it.data.password === form.password
   );
 
+  // How much of the entry's storage budget this draft spends.
+  //
+  // Measured on the WHOLE form, not on the notes field, because that
+  // is what is actually encrypted — every field shares one blob, so
+  // the title spends from the same budget the notes do. Counted in
+  // bytes by the same function encryptItem uses, so what is shown here
+  // and what is enforced there cannot drift: an emoji is four of these
+  // and a plain letter is one.
+  //
+  // Recomputed on every keystroke. It is a JSON.stringify and a
+  // TextEncoder over at most 64 KB, which is not worth memoising, and
+  // a stale budget would be worse than no budget.
+  const itemBytes = itemByteLength(form);
+  const tooLarge = itemBytes > MAX_ITEM_BYTES;
+
   async function save() {
-    if (nameTaken) return;   // the button is disabled, but don't rely on that alone
+    if (nameTaken || tooLarge) return;   // the button is disabled, but don't rely on that alone
     setActionError('');
     setSaving(true);
     try {
@@ -109,23 +125,33 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
         //   Web/src/lib/errors.js                 the shared VAULT_FULL
         : e?.code === 'VAULT_FULL'
           ? 'This vault is full — 1,000 entries. Your changes are still here; delete an entry to make room.'
-        // Saving an entry is the one place an ordinary person reaches
-        // this: a long enough notes field exceeds the body limit.
-        // Named here rather than left to the shared map so it can keep
-        // the draft reassurance the rest of this handler gives.
+        // An entry too big to store. Two codes, one boundary.
         //
-        // 32, not 64 — and that is not a typo. The body cap is 64 KB,
-        // but an entry is padded into a fixed bucket before encryption
-        // and the buckets step 16384 -> 32768 -> 65536. Base64 turns
-        // the 32768 bucket into 43,692 characters, which fits, and the
-        // next one into 87,384, which cannot. So the real ceiling is
-        // the 32 KB bucket, and saying 64 told someone whose 40 KB note
-        // had just been refused a number they were comfortably under.
+        // ITEM_TOO_LARGE comes from crypto/cipher.js and is the one
+        // that fires: the entry is refused before a request is built,
+        // because padding would round it up to a bucket the transport
+        // cannot carry. PAYLOAD_TOO_LARGE is the server's 413 and is
+        // now only reachable through a client bug — kept because
+        // "unreachable" has been wrong about this area before.
         //
-        // See Web/src/lib/errors.js for the full arithmetic. The
-        // mismatch is a genuine defect and is NOT fixed here.
-        : e?.code === 'PAYLOAD_TOO_LARGE'
-          ? 'This entry is too large to save — an entry has to stay under about 32 KB, all its fields together. Your changes are still here; shortening the notes should fix it.'
+        // Both named here rather than left to the shared map so they
+        // can keep the draft reassurance the rest of this handler
+        // gives.
+        //
+        // NEITHER 32 NOR 64 — both were right once and both are wrong
+        // now. The buckets step 16384 -> 32768 -> 65536; base64 turns
+        // them into 21,848, 43,692 and 87,384 characters. While the
+        // body limit was 64 KB only the 32768 bucket could travel, so
+        // the ceiling was 32 KB. The limit is 96 KB now, 87,465 bytes
+        // fit, and the ceiling is the 65536 bucket less its 4-byte
+        // prefix: 65,532 bytes. The budget meter below counts those
+        // bytes; this sentence rounds them for a person to act on.
+        //
+        // KEEP IN STEP with:
+        //   Web/src/crypto/cipher.js   MAX_ITEM_BYTES (what is enforced)
+        //   Web/src/lib/errors.js      the shared sentences
+        : e?.code === 'ITEM_TOO_LARGE' || e?.code === 'PAYLOAD_TOO_LARGE'
+          ? 'This entry is too large to save — an entry has to stay under about 65,000 characters, all its fields together. Your changes are still here; shortening the notes should fix it.'
         // The shared map has had a sentence for this all along; this
         // handler just never reached it, so a rate-limited save read
         // "Could not save this entry (TOO_MANY_REQUESTS)" — a code in
@@ -426,6 +452,16 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
         {/* ---- NOTES — sans, not mono: it's prose, not a secret ---- */}
         <Field label="Notes">
           <PanelTextarea value={form.notes} onChange={set('notes')} name="vk-entry-notes" />
+          <SizeMeter used={itemBytes} limit={MAX_ITEM_BYTES} />
+          {/* SAVE is disabled while this is true, and a control that
+              refuses without saying why is the thing this codebase
+              already decided not to ship — see the Escape refusal. */}
+          {tooLarge && (
+            <span style={{ display: 'block', marginTop: 6, fontSize: 12, color: 'var(--red)' }}>
+              This entry is too large to store. Shorten it — all its fields
+              share one budget — and SAVE will come back.
+            </span>
+          )}
         </Field>
 
         {/* A save or delete that failed. Its own row immediately above
@@ -453,7 +489,7 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
           )}
           <div style={{ flex: 1 }} />
           <PressButton
-            onClick={save} disabled={busy || !form.site.trim() || nameTaken}
+            onClick={save} disabled={busy || !form.site.trim() || nameTaken || tooLarge}
             depth={3}
             style={{
               font: '600 13px Geist, sans-serif', letterSpacing: '.12em',
@@ -581,6 +617,56 @@ function PanelTextarea(props) {
         transition: 'border-color .15s, box-shadow .15s'
       }}
     />
+  );
+}
+
+/**
+ * How much of the entry's storage budget is spent.
+ *
+ * SILENT UNTIL IT MATTERS. An entry is padded into a fixed bucket and
+ * capped at the largest bucket the transport can carry — 65,532 bytes
+ * — which no ordinary credential comes close to. Showing "0.3% used"
+ * on a four-field login would be noise on every entry in the vault to
+ * warn about a case almost nobody meets, so nothing renders below
+ * three quarters.
+ *
+ * The point of it existing at all is that the alternative is worse:
+ * before this, a long note was typed in full, saved, and refused by
+ * the server afterwards with no way to save it at any size. Stopping
+ * someone while they type is the whole difference.
+ *
+ * It counts BYTES of the serialised entry, not characters of the
+ * notes, and says so — "all fields" — because a person who trims the
+ * notes to fit and still cannot save needs to know the title and URL
+ * are spending from the same budget.
+ */
+function SizeMeter({ used, limit }) {
+  const fraction = used / limit;
+  if (fraction < 0.75) return null;
+
+  const over = used > limit;
+  const colour = over ? 'var(--red)' : fraction >= 0.9 ? 'var(--amber)' : 'var(--muted)';
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
+      <div style={{
+        flex: 1, height: 6, borderRadius: 3,
+        background: 'var(--edge)', overflow: 'hidden'
+      }}>
+        <div style={{
+          width: `${Math.min(fraction, 1) * 100}%`, height: '100%',
+          background: colour, transition: 'width .15s, background .15s'
+        }} />
+      </div>
+      <span style={{
+        font: "500 11px 'Geist Mono', monospace",
+        letterSpacing: '.12em', color: colour, whiteSpace: 'nowrap'
+      }}>
+        {over
+          ? `${(used - limit).toLocaleString()} OVER`
+          : `${(limit - used).toLocaleString()} LEFT`}
+      </span>
+    </div>
   );
 }
 

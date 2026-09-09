@@ -65,30 +65,53 @@ const SHARED = {
   // arrive as INTERNAL_ERROR, so the server appeared to break when it
   // had in fact refused something specific.
   //
-  // PAYLOAD_TOO_LARGE is the one an ordinary person can actually reach:
-  // a long enough notes field on a vault entry will exceed the body
-  // limit.
+  // PAYLOAD_TOO_LARGE used to be the one an ordinary person could
+  // actually reach. It is now a backstop, and the number in it has
+  // moved twice — so the history is worth keeping, because both of the
+  // old figures are wrong in a way that looks right.
   //
-  // THE TWO NUMBERS ARE BOTH REAL. DO NOT "CORRECT" 32 BACK TO 64.
+  // THIS FILE HAS SAID 64, THEN 32, AND NEITHER IS THE ANSWER NOW.
   //
-  // The request body is capped at 64 KB, and that is what the server
-  // enforces. But an entry is padded into a fixed-size bucket before
-  // it is encrypted — crypto/padding.js, BUCKETS — and the buckets go
-  // 16384, 32768, 65536. Base64 costs four bytes for every three, so
-  // the 32768 bucket travels as 43,692 characters and fits, while the
-  // very next one travels as 87,384 and cannot: the envelope leaves
-  // room for 65,455. There is no bucket in between. So an entry whose
-  // padded size lands above 32 KB is unsendable no matter how far
-  // under 64 KB it looks, and the message said 64 to someone whose
-  // 40 KB note had just been refused.
+  // An entry is padded into a fixed-size bucket before it is encrypted
+  // (crypto/padding.js, BUCKETS) and base64 costs four bytes for every
+  // three. The buckets step 16384 -> 32768 -> 65536, so they travel as
+  // 21,848, 43,692 and 87,384 characters inside an 81-character
+  // envelope.
   //
-  // This copy states the boundary that actually bites. The mismatch
-  // itself — that padding can produce a body the transport cannot
-  // carry — is a real defect and is NOT fixed here; it is its own
-  // piece. Measured: 32,000 characters of notes saves, 33,000 does
-  // not.
+  //   64 was the ORIGINAL COPY and was the body limit, not the entry
+  //   limit. It told someone whose 40 KB note had just been refused a
+  //   number they were comfortably under.
+  //
+  //   32 was CORRECT WHILE THE BODY LIMIT WAS 64 KB: 43,773 bytes fit
+  //   in 65,536 and 87,465 did not, with no bucket in between, so the
+  //   32768 bucket was the last one that could travel.
+  //
+  // The body limit is now 96 KB (98,304), which carries 87,465 — so
+  // the 65536 bucket travels and the ceiling is that bucket less its
+  // 4-byte length prefix: 65,532 bytes of the serialised entry.
+  //
+  // The copy says CHARACTERS and says "all its fields together",
+  // because both are what a person can act on: the whole entry shares
+  // one encrypted blob, so the title and the notes spend from the same
+  // budget, and it is bytes rather than characters underneath — an
+  // emoji costs four. ItemDetail shows the real byte budget live while
+  // the entry is being typed, which is the authoritative number; this
+  // sentence is the fallback for anything that gets past it.
+  //
+  // Reaching this now means a client bug: crypto/cipher.js refuses an
+  // oversized item with ITEM_TOO_LARGE before the request is built.
   PAYLOAD_TOO_LARGE:
-    'That was too large to send — a vault entry has to stay under about 32 KB, all its fields together, once it is padded for storage. If this was an entry, shortening the notes should fix it.',
+    'That was too large to send — a vault entry has to stay under about 65,000 characters, all its fields together. If this was an entry, shortening the notes should fix it.',
+
+  // Raised by crypto/cipher.js, not by the server: the entry is bigger
+  // than the largest padding bucket the transport can carry, so it is
+  // refused before a request is built rather than after a 413.
+  //
+  // Same number as PAYLOAD_TOO_LARGE above, and derived from the same
+  // place — cipher.js computes MAX_ITEM_BYTES from BUCKETS and the body
+  // limit, so the two sentences quote one boundary, not two.
+  ITEM_TOO_LARGE:
+    'This entry is too large to store — an entry has to stay under about 65,000 characters, all its fields together. Shortening the notes should fix it.',
   MALFORMED_JSON:
     'The app sent something the server could not read. This is a bug, not something you did.',
   UNSUPPORTED_ENCODING:
