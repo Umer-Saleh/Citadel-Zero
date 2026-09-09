@@ -373,6 +373,69 @@ whether they are running the same build **before** debugging the disagreement.
 Run the `grep -c` above first; it takes a second and it removes the whole class
 from consideration.
 
+### The worst version: new code against an old schema
+
+Everything above at least leaves two halves that visibly disagree. This one
+leaves nothing to notice.
+
+**`build server` does not rebuild `migrate`.** The `migrate` service has its own
+`build: ./Server` entry, so Compose tracks it as a **separate image** that
+happens to be built from the same context. Building one does not touch the
+other. The pairing is what makes it dangerous: `migrate` is the service that
+decides what shape the database is in, and it is the one most likely to be left
+behind by a `build server` that felt like it covered the server-side change.
+
+The sequence, which is entirely quiet:
+
+1. A push adds a migration. You run `build server`, then `up -d`.
+2. `server` gets the new image. `migrate` keeps the old one, whose
+   `migrations/` directory does not contain the new file.
+3. `migrate` finds nothing to apply, prints **`No migrations to run!`**, and
+   **exits 0**.
+4. `server` is gated on `migrate` completing *successfully* — which it did —
+   so it starts.
+5. New code is now running against the old schema. Every container is green,
+   the API answers, the logs are clean, and nothing anywhere reports a problem.
+
+There is no symptom until some request happens to touch the column or index
+that was never created. That may be immediately, or days later, or only for one
+user.
+
+**The signal is `No migrations to run!` after a deploy that should have had
+one.** Read it as a failure. Its exit code tells you nothing here: 0 is what a
+correctly-skipped run and a stale image both produce, and Compose reports
+`Exited` for both. If you know a migration was in the push, that line means the
+image predates it.
+
+Two checks, after any deploy carrying a migration:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod logs migrate
+```
+
+The migration you expected must be named. A `pgmigrations` INSERT quoting its
+filename is the confirmation; `No migrations to run!` is the refutation.
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod ps -a
+```
+
+`-a`, for the same reason as before: `migrate` has already exited. Look at the
+image ages. **After a full build every service should be seconds old, not
+days.** One row conspicuously older than its siblings is the stale image, and it
+is usually the one nobody named on the `build` line.
+
+This is the concrete reason the unnamed form is the only safe one:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod build --no-cache
+```
+
+No service name means no service left behind. The minutes it costs buy the
+guarantee that `server` and `migrate` are the same source — which is not a
+detail, because when they are not, the failure is a database that is silently
+the wrong shape underneath code that assumes otherwise.
+
 ---
 
 ## 5. Logs
