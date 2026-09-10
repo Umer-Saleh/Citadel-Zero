@@ -83,7 +83,7 @@ services:
         # bundle. The browser talks to the server on the host's
         # published port, not the compose-internal hostname — this
         # runs in the user's browser, not in the container.
-        VITE_API_URL: http://localhost:3000
+        VITE_API_URL: http://localhost:${SERVER_PORT:-3000}
     ports:
       - "${WEB_PORT:-8080}:80"
     depends_on:
