@@ -187,8 +187,37 @@ export function VaultProvider({ children }) {
 
   const addItem = useCallback(async (data) => {
     const blob = await encryptItem(data, dekRef.current);
-    const { id } = await api.post('/api/vault', blob);
-    setItems(prev => [...prev, { id, data, updatedAt: new Date().toISOString() }]);
+    const created = await api.post('/api/vault', blob);
+
+    // The id is the whole point of this response, so a 2xx without one
+    // is refused rather than stored.
+    //
+    // The client used to destructure it and write the result straight
+    // into state. A body of {} therefore produced a row with
+    // `id: undefined`: the panel closed as if the save had worked, the
+    // entry appeared in the list, nothing reached the console, and it
+    // was gone on the next load. Silent, and shaped exactly like
+    // success.
+    //
+    // Worse than stale, it is unaddressable. Every later write keys off
+    // this id — updateItem PUTs to /api/vault/<id> and both it and
+    // deleteItem match on `it.id === id` — so an undefined id sends
+    // malformed requests and matches the wrong row as soon as a second
+    // one exists. Refusing here keeps that out of state entirely.
+    //
+    // A plain coded Error, not ApiError: nothing was wrong with the
+    // request or the transport, and this failure was raised here rather
+    // than read off a response. Same shape as cipher.js's
+    // ITEM_TOO_LARGE. The code is deliberately not in the shared map —
+    // every caller already has a better sentence of its own, and the
+    // fallbacks name the code in brackets.
+    if (!created || !created.id) {
+      const err = new Error('INCOMPLETE_RESPONSE');
+      err.code = 'INCOMPLETE_RESPONSE';
+      throw err;
+    }
+
+    setItems(prev => [...prev, { id: created.id, data, updatedAt: new Date().toISOString() }]);
   }, []);
 
   const updateItem = useCallback(async (id, data) => {

@@ -193,3 +193,58 @@ describe('which address the unlocked vault reports', () => {
     expect(rerender().email).toBe('typed@example.com');
   });
 });
+
+/**
+ * What a save does with a response that parsed but says nothing useful.
+ *
+ * The client cannot read a 2xx it could not parse — that is refused in
+ * the api client. This is the other half: valid JSON carrying no id.
+ * A body of {} wrote a row with `id: undefined` into the list, closed
+ * the panel as though the save had worked, logged nothing, and lost the
+ * entry on the next load.
+ *
+ * So the assertion is on the LIST, not on the throw. A guard that threw
+ * after writing the row would satisfy `rejects` and still ship the bug
+ * that was actually reported.
+ */
+describe('a save whose response carries no usable id', () => {
+  async function unlockedContext() {
+    const ctx = render();
+    auth.login.mockResolvedValue({
+      dek: new Uint8Array(32).fill(7),
+      kdfUpgradeAvailable: false
+    });
+    await ctx.login('demo@demo.invalid', 'pw');
+    return ctx;
+  }
+
+  test.each([
+    ['an empty object', {}],
+    ['an id that is null', { id: null }],
+    ['an id that is empty', { id: '' }],
+    ['a body that is literally null', null]
+  ])('%s is refused, and no row is written', async (_label, body) => {
+    const ctx = await unlockedContext();
+    api.post.mockResolvedValue(body);
+
+    await expect(ctx.addItem({ site: 'GitHub' })).rejects.toMatchObject({
+      code: 'INCOMPLETE_RESPONSE'
+    });
+
+    // The reported defect was an entry appearing in the vault, so the
+    // vault is what this pins.
+    expect(rerender().items).toEqual([]);
+  });
+
+  test('a response carrying an id still writes exactly one usable row', async () => {
+    const ctx = await unlockedContext();
+    api.post.mockResolvedValue({ id: 'item-9' });
+
+    await ctx.addItem({ site: 'GitHub' });
+
+    const items = rerender().items;
+    expect(items).toHaveLength(1);
+    expect(items[0].id).toBe('item-9');
+    expect(items[0].data).toEqual({ site: 'GitHub' });
+  });
+});
