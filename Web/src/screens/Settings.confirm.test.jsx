@@ -218,6 +218,79 @@ describe('changing the master password', () => {
     const note = find(tree, n => n.type?.name === 'ErrorNote');
     expect(note.props.message).toBe('Current password is wrong.');
   });
+
+  /**
+   * Enter has to submit from every field in this form.
+   *
+   * All three carried no onKeyDown at all, so the one form that signs
+   * you out on success was also the one form a keyboard could not
+   * submit. Nothing said so: no error, no console line, nothing on
+   * screen — the key simply did nothing. That is invisible in review
+   * and was only found by counting inputs against handlers file by
+   * file, so it is pinned here rather than left for the next reader.
+   *
+   * Every field is asserted separately. A handler added to two of the
+   * three and forgotten on the last would otherwise pass.
+   */
+  const filledInputs = () => {
+    resetHooks();
+    const node = find(Settings({ onPasswordChanged: vi.fn() }), n => n.type?.name === 'ChangePassword');
+    const ChangePassword = node.type;
+
+    resetHooks();
+    let tree = ChangePassword(node.props);
+    const inputs = childrenOfType(tree, 'Input');
+    inputs[0].props.onChange({ target: { value: 'old-password-here' } });
+    inputs[1].props.onChange({ target: { value: 'new-password-here-and-long' } });
+    inputs[2].props.onChange({ target: { value: 'new-password-here-and-long' } });
+
+    // Re-render so the handlers close over the values just set.
+    beginRender();
+    return childrenOfType(ChangePassword(node.props), 'Input');
+  };
+
+  test.each([['Current', 0], ['New', 1], ['Confirm', 2]])(
+    'Enter from the %s field submits',
+    async (_label, index) => {
+      changePassword.mockResolvedValue(undefined);
+
+      const input = filledInputs()[index];
+
+      // Asserted before it is called, so a field that lost its handler
+      // reports the missing prop rather than a TypeError from calling
+      // undefined. The regression this guards is exactly an absent
+      // handler, so its failure should name that.
+      expect(typeof input.props.onKeyDown).toBe('function');
+
+      input.props.onKeyDown({ key: 'Enter' });
+      await flush();
+
+      expect(changePassword).toHaveBeenCalledTimes(1);
+      expect(changePassword).toHaveBeenCalledWith(
+        'a@b.test', 'old-password-here', 'new-password-here-and-long'
+      );
+    }
+  );
+
+  /**
+   * The paired negative, and the reason the positive above is worth
+   * having. A handler wired to fire on any key — the easy mistake when
+   * adding one — passes every assertion above and fails these.
+   */
+  test.each([['Current', 0], ['New', 1], ['Confirm', 2]])(
+    'a key that is not Enter does not submit from the %s field',
+    async (_label, index) => {
+      changePassword.mockResolvedValue(undefined);
+
+      const input = filledInputs()[index];
+      expect(typeof input.props.onKeyDown).toBe('function');
+
+      input.props.onKeyDown({ key: 'a' });
+      await flush();
+
+      expect(changePassword).not.toHaveBeenCalled();
+    }
+  );
 });
 
 describe('the post-lock notice on the unlock screen', () => {
