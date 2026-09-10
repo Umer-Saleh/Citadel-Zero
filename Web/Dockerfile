@@ -17,19 +17,20 @@ COPY . .
 ARG VITE_API_URL=http://localhost:3000
 ENV VITE_API_URL=$VITE_API_URL
 
-# Demo-instance flags, same build-time story. All three default to
-# empty, so an ordinary build produces a bundle with no demo code in
-# it at all — the guards fold to `false` and the bundler drops the
-# branches rather than shipping them switched off.
+# Demo-instance flag, same build-time story. It defaults to empty, so
+# an ordinary build produces a bundle with no demo code in it at all —
+# the guard folds to `false` and the bundler drops the branches rather
+# than shipping them switched off.
 #
-# VITE_DEMO_PASSWORD is a real password that is deliberately public:
-# it belongs to the throwaway seeded account and is printed on the
-# unlock screen. Never put anything here that isn't meant to be read
-# by everyone who loads the page.
+# There were two more, VITE_DEMO_EMAIL and VITE_DEMO_PASSWORD, carrying
+# the credentials of a shared demo account printed on the unlock
+# screen. That account is gone: each visitor now provisions their own
+# vault in the browser, under a key the server never sees, so there are
+# no credentials to bake in. Nothing read them and no compose file
+# passed them, and an ARG that looks live but reaches nothing is an
+# invitation to wire something to it.
 ARG VITE_DEMO_MODE=
-ARG VITE_DEMO_EMAIL=
-ARG VITE_DEMO_PASSWORD=
-ENV VITE_DEMO_MODE=$VITE_DEMO_MODE     VITE_DEMO_EMAIL=$VITE_DEMO_EMAIL     VITE_DEMO_PASSWORD=$VITE_DEMO_PASSWORD
+ENV VITE_DEMO_MODE=$VITE_DEMO_MODE
 
 RUN npm run build
 
