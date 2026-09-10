@@ -146,6 +146,13 @@ services:
       # every auth request costs a 64 MiB Argon2 verification.
       AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-6}
       API_RATE_LIMIT_MAX: ${API_RATE_LIMIT_MAX:-200}
+      # Its own bucket, and measured in ACCOUNTS per window rather than
+      # requests: signup spends exactly one from this counter, so the
+      # number is how many vaults one address may create. 20 matches the
+      # code default at Server/src/config/index.js, so this line changes
+      # nothing until .env.prod overrides it — it exists so the value
+      # can be tuned at all, which without an entry here it could not.
+      SIGNUP_RATE_LIMIT_MAX: ${SIGNUP_RATE_LIMIT_MAX:-20}
       DEMO_MODE: "true"
       DEMO_EMAIL: ${DEMO_EMAIL:?set DEMO_EMAIL in .env.prod}
     depends_on:
