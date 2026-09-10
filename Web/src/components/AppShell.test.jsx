@@ -18,10 +18,14 @@ import { describe, test, expect, vi, beforeEach } from 'vitest';
 vi.mock('react', async () => (await import('../test/hookShim.js')).reactMock);
 
 let says = null;
+// Defaults to null so every test that predates the HUD renders exactly
+// as it did: null is the "nothing to measure" case and the HUD is not
+// rendered at all. The HUD tests set it.
+let health = null;
 vi.mock('../context/PixContext', () => ({ usePix: () => ({ pose: 'idle', says }) }));
 vi.mock('../context/VaultContext', () => ({ useVault: () => ({ lock: vi.fn(), items: [] }) }));
 vi.mock('../context/ThemeContext', () => ({ useTheme: () => ({ theme: 'dark', toggle: vi.fn() }) }));
-vi.mock('../lib/health', () => ({ vaultHealth: () => null }));
+vi.mock('../lib/health', () => ({ vaultHealth: () => health }));
 
 const { AppShell } = await import('./AppShell');
 const { resetHooks, find, texts } = await import('../test/hookShim.js');
@@ -36,6 +40,7 @@ const pixLine = (tree) => find(tree, n => n.props?.className === 'vk-r-pix-line'
 beforeEach(() => {
   vi.clearAllMocks();
   says = null;
+  health = null;
 });
 
 describe("PIX's line in the header", () => {
@@ -70,4 +75,53 @@ describe("PIX's line in the header", () => {
       expect(texts(pixLine(render()))).toContain(moment);
     }
   );
+});
+
+/**
+ * The vault health HUD has to be reachable below 1025px.
+ *
+ * Exactly the same defect as PIX's line above, one breakpoint out. It
+ * carried vk-r-hide-md — `display: none` at <=1024px — and this header
+ * is the ONLY surface in the app that renders the vault average:
+ * vaultHealth has one call site, and the per-item meters on the Vault
+ * screen are a different quantity. So on every tablet and every phone
+ * the readout was simply absent.
+ *
+ * Asserted here for the reason the file already gives for PIX: the
+ * whole defect is one class name, and a class name is the thing that
+ * can silently come back. The match is on the `vk-r-hide` prefix rather
+ * than on `vk-r-hide-md`, so re-hiding it at any breakpoint fails.
+ *
+ * How the header reflows is CSS and was verified in a browser at 320,
+ * 375, 768, 1024 and 1440; what is asserted here is that the element is
+ * not hidden.
+ */
+describe('the vault health HUD', () => {
+  const hud = (tree) => find(
+    tree,
+    n => n.props?.title === 'Average password strength across your vault'
+  );
+
+  test('is NOT hidden at tablet or mobile widths', () => {
+    health = 7;
+    const el = hud(render());
+
+    expect(el).toBeDefined();
+    // The regression this block exists for.
+    expect(String(el.props.className ?? '')).not.toContain('vk-r-hide');
+  });
+
+  test('renders the average as a percentage', () => {
+    health = 7;
+    // `{health * 10}%` is two children, so texts() separates them.
+    // Whitespace is collapsed rather than matched on.
+    expect(texts(hud(render())).replace(/\s+/g, '')).toContain('70%');
+  });
+
+  test('renders nothing at all for a vault with nothing to measure', () => {
+    // vaultHealth returns null for an empty vault — not 0, which would
+    // read as "everything in here is weak".
+    health = null;
+    expect(hud(render())).toBeUndefined();
+  });
 });

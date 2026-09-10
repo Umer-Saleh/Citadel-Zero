@@ -75,7 +75,9 @@ export function AppShell({ children, view = 'vault', onNavigate }) {
             >
               CITADEL<span style={{ color: 'var(--green)' }}>ZERO</span>
             </button>
-            {/* PIX's line was vk-r-hide-sm — display:none at <=640 —
+            {/* PIX's line carries NO hide utility, and must not.
+
+                It used to carry vk-r-hide-sm — display:none at <=640 —
                 which meant SEALED!, REMOVED. and GOT IT. rendered
                 nowhere on a phone. Saving an entry, deleting one and
                 copying a password each produced no visible feedback at
@@ -113,9 +115,25 @@ export function AppShell({ children, view = 'vault', onNavigate }) {
           <div style={{ flex: 1 }} />
 
           {/* vault health HUD — 7x8 segments, smaller than the Meter
-              used elsewhere, so it sits inside a 64px bar */}
+              used elsewhere, so it sits inside a 64px bar.
+
+              NO hide utility here either, for the same reason as PIX's
+              line above. It carried vk-r-hide-md — display:none at
+              <=1024 — on the grounds that it is "a readout and the same
+              number is on the vault screen itself." That was not true:
+              vaultHealth has exactly one call site, this one, and the
+              Vault screen shows per-item meters, which are a different
+              quantity. So the average was unreachable on every tablet
+              and every phone, which is the whole of the interface below
+              1025px.
+
+              Showing it costs nothing between 768 and 1024 — the header
+              already stands at 112px and stays there — and one wrapped
+              row lower down: measured 121px -> 205px at 375, and
+              121px -> 165px at 320. It fits at 320 with no horizontal
+              overflow at any width. */}
           {health !== null && (
-          <div className="vk-r-hide-md" style={{ display: 'flex', alignItems: 'center', gap: 10 }} title="Average password strength across your vault">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }} title="Average password strength across your vault">
             <span style={{ font: "600 10px 'Geist Mono', monospace", letterSpacing: '.14em', color: 'var(--muted)' }}>
               VAULT
             </span>
