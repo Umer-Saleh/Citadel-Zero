@@ -73,7 +73,7 @@ export function AppShell({ children, view = 'vault', onNavigate }) {
                 letterSpacing: 1, color: 'var(--text)'
               }}
             >
-              CITADEL<span style={{ color: 'var(--green)' }}>ZERO</span>
+              CITADEL <span style={{ color: 'var(--green)' }}>ZERO</span>
             </button>
             {/* PIX's line carries NO hide utility, and must not.
 
