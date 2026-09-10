@@ -169,19 +169,53 @@ Two independent doors, one vault. The server stores both wrappers and can open
 neither. The recovery key is generated in the browser, shown exactly once, and
 never transmitted — the server cannot re-display it because it never had it.
 
-### The server cannot verify a recovery key
+### The server verifies a recovery key without ever seeing it
 
-This is the part that surprises people. `/api/account/recover` accepts a new
-password and a new wrapper, and has no way to check the caller actually held the
-recovery key.
+The client derives **two** values from the recovery key, separated by their HKDF
+info label:
 
-Possession is proved **implicitly**: only someone who unwrapped the real DEK can
-produce a valid new wrapper containing it. A client that guessed would seal a
-garbage key and lock itself out of a vault it could never read.
+```
+recovery key ──┬── HKDF(salt, "recovery-kek")  ──► unwraps the DEK, never leaves the device
+               └── HKDF(salt, "recovery-auth") ──► sent to the server as proof
+```
 
-So the attack is denial of service, not disclosure — which is why the endpoint is
-heavily rate limited rather than authenticated. It cannot be authenticated; by
-definition the user has lost their credentials.
+Only `recovery-auth` is transmitted, and the server stores it the way it stores
+`auth_hash`: hardened again with Argon2id, then compared. Distinct labels put the
+two outputs in different PRF domains, so the value the server holds says nothing
+about the one that opens the vault, and cannot unwrap anything. The recovery key
+itself and the recovery KEK are never transmitted and never stored — the server
+sees neither at any point.
+
+`/api/account/recover` checks that proof **before it writes anything**. A wrong
+proof is rejected with `INVALID_RECOVERY_KEY` and the account is left exactly as
+it was.
+
+The endpoint stays **unauthenticated** — by definition the user has lost the
+credentials they would authenticate with — but unauthenticated is not the same as
+unverified, and treating them as the same is what left the hole described below.
+
+### What this replaced
+
+Possession used to be proved only *implicitly*: only someone holding the real key
+could produce a wrapper containing the real DEK, so a client that guessed would
+seal garbage and lock itself out of a vault it could never read.
+
+That reasoning is sound about **confidentiality** and silent about
+**availability**. Because the server wrote first and let the ciphertext arbitrate
+afterwards, anyone who knew an email address could send syntactically valid
+nonsense and overwrite that account's credentials and both DEK wrappers —
+destroying it permanently. Denial of service rather than disclosure, but total
+and irreversible.
+
+Checking the proof before the write closes that without the server learning
+anything it was not already storing.
+
+One consequence is worth stating: a recovery kit issued before this check existed
+can no longer be used. Those accounts have no stored verifier, and one cannot be
+derived server-side, because deriving it needs the recovery key that only the
+user holds. Recovery refuses them at the first step rather than after a key is
+typed. The master password still opens the vault, and issuing a new kit from
+Settings restores recovery.
 
 ### Details that matter more than they look
 

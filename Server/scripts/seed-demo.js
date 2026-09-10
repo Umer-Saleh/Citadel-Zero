@@ -13,15 +13,14 @@
  * The file is kept, and kept exiting 0, because
  * docker-compose.prod.yml declares a one-shot `seed` service that runs
  * it on every deploy. Deleting the script would make that service exit
- * non-zero every time the stack comes up. Removing the service is a
- * change to a file this work is not permitted to touch, so the honest
- * option is a no-op that says why rather than a deletion that breaks
- * the deploy.
+ * non-zero every time the stack comes up, so the honest option is a
+ * no-op that says why rather than a deletion that breaks the deploy.
+ * Retiring the service itself is the change that would let this file
+ * go.
  *
- * DEMO_EMAIL and DEMO_PASSWORD are likewise still declared as required
- * by compose and still read by nothing. Retiring them is a separate,
- * separately authorised change across compose, .env.prod.example and
- * DEPLOY.md.
+ * This script reads no environment at all. DEMO_EMAIL and
+ * DEMO_PASSWORD were retired from compose, .env.prod.example and
+ * DEPLOY.md once nothing was left reading them.
  *
  * ---------------------------------------------------------------
  * WHAT THE SHARED ACCOUNT COST, FOR THE RECORD

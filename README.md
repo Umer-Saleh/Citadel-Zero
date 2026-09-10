@@ -7,7 +7,7 @@ encryption key, or any plaintext vault data.** If the database, the server
 process, and all network traffic were handed to an attacker, they could not read
 a single stored credential.
 
-React · Node.js · Express · PostgreSQL · Argon2id · AES-256-GCM · Docker · 143 tests
+React · Node.js · Express · PostgreSQL · Argon2id · AES-256-GCM · Docker
 
 *Citadel for the vault-within-a-vault structure — the data key sealed behind the
 password-derived key. Zero for zero-knowledge.*
@@ -446,9 +446,13 @@ The public demo deployment ([DEPLOY.md](DEPLOY.md)) adds four of its own:
   invented entries under a key the server never receives. That removes the
   previous hazard — one shared identity every visitor was authenticated as, and
   could lock everyone else out of by changing its password or enabling 2FA — but
-  it means account creation is open to anyone who clicks, repeatedly. Nothing
-  bounds that today except the auth rate limit and the nightly wipe. Per-visitor
-  quotas are the fix and are not implemented yet.
+  it means account creation is open to anyone who clicks, repeatedly. Signup has
+  its own rate-limit bucket, separate from the auth one and measured in accounts
+  rather than requests: `SIGNUP_RATE_LIMIT_MAX` allows 20 per IP per 15 minutes
+  by default, and is tunable per deployment. That plus the nightly wipe is all
+  that bounds it. The bucket keys on the address like every other limit here, so
+  a proxy pool still gets a multiple of the budget; true per-visitor quotas are
+  the fix and are not implemented yet.
 - **Everything on the demo is deleted nightly.** Every account, demo vault and
   item is gone at 03:00 UTC, and nothing is recreated afterwards — the database
   is simply empty until the next visitor provisions a vault. This is the price
@@ -577,8 +581,8 @@ needing a privilege that would also let it empty a table by accident.
 ## Testing
 
 ```bash
-cd Server && npm test    # 119 tests
-cd Web && npm test       # 24 tests
+cd Server && npm test    # 159 tests
+cd Web && npm test       # 208 tests
 ```
 
 CI runs both on every push, against a real Postgres service container, and builds

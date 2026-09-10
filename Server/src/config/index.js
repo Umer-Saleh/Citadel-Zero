@@ -86,10 +86,13 @@ config.rateLimitEnabled = config.RATE_LIMIT_ENABLED === 'true' && config.NODE_EN
 // their own throwaway vault through the ordinary signup path, so
 // there is no shared identity for the server to resolve.
 //
-// DEMO_EMAIL is therefore accepted but unused. It stays in the schema
-// because docker-compose.prod.yml still passes it and .env.prod still
-// declares it required; removing it there is a separate change to
-// files this branch does not touch. Nothing in src/ reads it.
+// DEMO_EMAIL is therefore accepted but unused, and nothing in src/
+// reads it. It is no longer passed by docker-compose.prod.yml or
+// declared in .env.prod.example either. The schema entry stays only so
+// that an older .env.prod, or a container run by hand with the value
+// still set, does not need editing: it is optional, and zod strips
+// keys the schema does not name, so a stale value cannot fail startup
+// whether or not this line is here. Removing it is behaviour-neutral.
 config.demoMode = config.DEMO_MODE === 'true';
 
 module.exports = config;

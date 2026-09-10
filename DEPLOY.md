@@ -451,7 +451,7 @@ Worth knowing where to look:
 | Did TLS work? | `logs caddy` — look for `certificate obtained successfully` |
 | Did migrations apply? | `logs migrate` — ends `Migrations complete!` then `[grants] applied` |
 | Is the least-privilege role in use? | `logs migrate` — `granted table privileges to citadel_app` |
-| Did the demo seed? | `logs seed` — five `[seed] stored …` lines |
+| Did a visitor provision a vault? | `logs server` — `[server] registered user …` then five `[server] stored encrypted item …` lines |
 | When is the next wipe? | `logs wipe` — `[wipe-cron] next run in …` |
 | Did last night's wipe run? | `logs wipe \| grep '\[wipe\]'` |
 
@@ -596,8 +596,35 @@ So `AUTH_RATE_LIMIT_MAX` defaults to 6 per IP per 15 minutes here. That is as
 much a capacity control as a security one, and it is why the `server` container
 gets a 640 MB limit while `web` gets 48 MB.
 
-If the demo feels sluggish under attention, raise the box before raising the
+`SIGNUP_RATE_LIMIT_MAX` is a separate counter on a separate endpoint, defaulting
+to 20 per IP per 15 minutes. Its unit is **accounts**, not requests — signup
+spends exactly one from this bucket — so the number is how many vaults one
+address may create per window. It is deliberately more generous than the auth
+limit: the two defend against different things, and sharing one counter meant
+the tighter of them governed both. Signup is still the most expensive request
+the API serves, at two 64 MiB Argon2 operations, so it is bounded rather than
+open.
+
+If the demo feels sluggish under attention, raise the box before raising either
 limit.
+
+### Two other ceilings worth knowing
+
+Neither is tunable from `.env.prod`; both are in the code, and both surface as a
+rejected request rather than a slow one.
+
+- **Request bodies are capped at 96 KB** (`express.json({ limit: '96kb' })` in
+  `Server/src/app.js`). The figure is derived, not round: base64 costs four
+  bytes for every three, so the largest padding bucket — 65,536 bytes — travels
+  as 87,384 characters, or 87,465 bytes inside its JSON envelope. 96 KB
+  (98,304) is the smallest round value that carries that. Do not lower it back
+  to 64 KB: the top padding bucket would no longer fit through, and an entry
+  would be refused with a 413 while looking far smaller than the limit. If you
+  put another proxy in front of Caddy, its own body limit must be at least this.
+- **A vault holds at most 1,000 items per user** (`MAX_ITEMS_PER_USER` in
+  `Server/src/services/vaultService.js`). Creating the 1,001st is refused. This
+  is a storage bound, not a rate limit, and the nightly wipe resets it along
+  with everything else.
 
 ---
 
@@ -621,11 +648,14 @@ than one that does not.
   from Settings restores recovery. This self-heals here within a day, because
   the nightly wipe deletes every account and any vault provisioned afterwards
   always has a verifier.
-- **Anyone can create demo vaults, without limit.** Each one costs two Argon2id
-  derivations in the visitor's browser and three 64 MiB Argon2 operations on the
-  API, and nothing caps how many a single address may create beyond the auth
-  rate limit. The nightly wipe bounds how long they accumulate. Per-visitor
-  quotas are the proper fix and are not implemented yet.
+- **Anyone can create demo vaults, and only an IP-keyed limit bounds it.** Each
+  one costs two Argon2id derivations in the visitor's browser and three 64 MiB
+  Argon2 operations on the API. Signup has its own counter — `signupLimiter`,
+  not `authLimiter` — measured in accounts rather than requests, so
+  `SIGNUP_RATE_LIMIT_MAX` is the number of vaults one address may create per
+  window. It keys on the address like every other limit here, so a proxy pool
+  gets a multiple of the budget. The nightly wipe bounds how long they
+  accumulate. Per-visitor quotas are the proper fix and are not implemented yet.
 - **The CSP allows a WebAssembly compile and inline style attributes.**
   `'wasm-unsafe-eval'` is what lets hash-wasm derive an Argon2id key at all, and
   `style-src-attr 'unsafe-inline'` is what lets React's `style={{}}` props
