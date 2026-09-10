@@ -431,15 +431,22 @@ function ChangePassword({ email, changePassword, onPasswordChanged }) {
         re-encrypted. You'll be signed out and need to unlock again.
       </div>
 
+      {/* Enter submits from any of the three, matching every other
+          field in this file. run() opens with its own `if (busy)
+          return`, so this cannot double-submit past the disabled
+          button. */}
       <Input label="Current" mono type={pwType} autoComplete="off"
         name="vk-current-master"
-        value={cur} onChange={e => setCur(e.target.value)} />
+        value={cur} onChange={e => setCur(e.target.value)}
+        onKeyDown={e => e.key === 'Enter' && run()} />
 
       <div className="vk-r-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
         <Input label="New" mono type={pwType} autoComplete="new-password"
-          value={next} onChange={e => setNext(e.target.value)} />
+          value={next} onChange={e => setNext(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && run()} />
         <Input label="Confirm" mono type={pwType} autoComplete="new-password"
           value={confirm} onChange={e => setConfirm(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && run()}
           error={mismatch ? "Doesn't match yet." : ''} />
       </div>
 

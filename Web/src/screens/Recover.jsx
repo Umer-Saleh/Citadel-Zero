@@ -227,6 +227,7 @@ export function Recover({ onRecovered, onBack }) {
                 onToggleReveal={() => setRevealed(r => !r)}
                 placeholder="A long passphrase works best"
                 value={pw} onChange={e => setPw(e.target.value)}
+                onKeyDown={onEnter(finish)}
                 autoComplete="new-password"
               />
 
