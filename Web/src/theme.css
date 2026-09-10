@@ -375,11 +375,6 @@ img, svg, video, canvas {
     padding-bottom: 10px !important;
   }
 
-  /* Secondary chrome that is informative but not navigational. */
-  .vk-r-hide-md {
-    display: none !important;
-  }
-
   /* Primary navigation moves to its own full-width second line once
      the header wraps. order:10 puts it after the siblings it shares
      the bar with, so the first line keeps the wordmark on the left
