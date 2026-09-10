@@ -11,11 +11,24 @@ import {
 } from '../lib/provisionDemo';
 import { ThemeToggle } from '../components/ThemeToggle';
 
-// One string, two callers. Provisioning and resuming both spend the
-// auth rate limit and can be refused for the same reason, so both say
-// the same thing — declared once so the two cannot drift apart.
-const RATE_LIMITED =
+// Two callers, two limits, two sentences.
+//
+// This was one shared string, declared once so the two could not drift
+// apart. The intent was sound and it solved the wrong problem: the risk
+// was never drift, it was that the single wording was false for one of
+// the callers. Provisioning spends the SIGNUP bucket and does create a
+// vault; resuming spends the AUTH bucket and creates nothing. Someone
+// who reopened the same tab a few times — or mistyped a password — was
+// told they had created too many vaults, which they had not.
+//
+// So they are named for their callers and kept adjacent. That keeps the
+// reviewability the shared constant was reaching for, without asserting
+// something untrue about half the cases.
+const PROVISION_RATE_LIMITED =
   'Too many demo vaults have been created from this network recently. Wait a few minutes and try again.';
+
+const RESUME_RATE_LIMITED =
+  'Too many sign-in attempts from this network recently. Wait a few minutes and try again.';
 
 // Why a resumed vault can be unreachable. Two causes, two
 // explanations: only one of them is the nightly wipe, and saying "your
@@ -113,7 +126,7 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery, onFreshVault, not
       // .code, and reporting only the code rendered a bare sentence
       // with nothing in the console either.
       setError(codeToMessage(e, 'Could not create a demo vault', {
-        TOO_MANY_ATTEMPTS: RATE_LIMITED
+        TOO_MANY_ATTEMPTS: PROVISION_RATE_LIMITED
       }));
     }
   }
@@ -151,7 +164,7 @@ export function Unlock({ onUnlocked, onGoSignup, onGoRecovery, onFreshVault, not
       // INTERNAL_ERROR, REQUEST_FAILED among them — now have shared
       // copy instead of arriving as bare identifiers.
       setError(codeToMessage(e, 'Something went wrong reopening that demo vault', {
-        TOO_MANY_ATTEMPTS: RATE_LIMITED
+        TOO_MANY_ATTEMPTS: RESUME_RATE_LIMITED
       }));
     }
   }
