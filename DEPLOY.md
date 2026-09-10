@@ -173,14 +173,12 @@ done
 `openssl` rather than `node`, because the host runs Docker and nothing else —
 there is no Node on it. Same 48 bytes, same base64url alphabet.
 
-Edit `.env.prod` and set every value: the three secrets above, `DOMAIN`,
-`ACME_EMAIL`, and `DEMO_EMAIL` / `DEMO_PASSWORD`.
+Edit `.env.prod` and set every value: the three secrets above, `DOMAIN` and
+`ACME_EMAIL`.
 
 - `ACME_EMAIL` **must not be blank.** An empty value is not "no contact
   address" — it makes Caddy's `email` directive argument-less, which fails to
   parse and crash-loops the container.
-- `DEMO_PASSWORD` is **not a secret**. It is printed on the unlock screen and
-  compiled into the public JavaScript bundle. Never reuse a real password.
 - The three secrets must be **three different values**. Different blast radius
   each: `POSTGRES_PASSWORD` is the superuser used only by migrations,
   `APP_DB_PASSWORD` is the least-privilege role the API runs as, `JWT_SECRET`
@@ -285,12 +283,10 @@ below.
 
 > **Vite inlines `VITE_*` values into the bundle at build time.** They are baked
 > into the JavaScript, not read at runtime. The `web` image is therefore specific
-> to one domain and one set of demo credentials.
+> to one domain.
 
-If you change **`DOMAIN`**, **`DEMO_EMAIL`** or **`DEMO_PASSWORD`**, a plain
-`up -d --build` may reuse a cached layer and keep serving the old values — the
-site loads and every API call fails, or the unlock screen shows credentials that
-no longer work. Force it:
+If you change **`DOMAIN`**, a plain `up -d --build` may reuse a cached layer and
+keep serving the old value — the site loads and every API call fails. Force it:
 
 ```bash
 docker compose -f docker-compose.prod.yml --env-file .env.prod build --no-cache web

@@ -154,7 +154,6 @@ services:
       # can be tuned at all, which without an entry here it could not.
       SIGNUP_RATE_LIMIT_MAX: ${SIGNUP_RATE_LIMIT_MAX:-20}
       DEMO_MODE: "true"
-      DEMO_EMAIL: ${DEMO_EMAIL:?set DEMO_EMAIL in .env.prod}
     depends_on:
       db:
         condition: service_healthy
@@ -201,11 +200,6 @@ services:
         # routes by path on the same origin.
         VITE_API_URL: https://${DOMAIN}
         VITE_DEMO_MODE: "true"
-        # Public on purpose. Everything VITE_ ships in the bundle, so
-        # this password is readable by anyone who loads the page —
-        # which is the point, it is printed on the unlock screen.
-        VITE_DEMO_EMAIL: ${DEMO_EMAIL:?set DEMO_EMAIL in .env.prod}
-        VITE_DEMO_PASSWORD: ${DEMO_PASSWORD:?set DEMO_PASSWORD in .env.prod}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
@@ -222,9 +216,6 @@ services:
     restart: "no"
     environment:
       API_URL: http://server:3000
-      DEMO_EMAIL: ${DEMO_EMAIL:?set DEMO_EMAIL in .env.prod}
-      DEMO_PASSWORD: ${DEMO_PASSWORD:?set DEMO_PASSWORD in .env.prod}
-      # config/index.js validates the whole environment on import.
       DATABASE_URL: postgres://citadel_app:${APP_DB_PASSWORD}@db:5432/password_manager
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.prod}
       NODE_ENV: production
@@ -249,8 +240,6 @@ services:
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.prod}
       NODE_ENV: production
       API_URL: http://server:3000
-      DEMO_EMAIL: ${DEMO_EMAIL:?set DEMO_EMAIL in .env.prod}
-      DEMO_PASSWORD: ${DEMO_PASSWORD:?set DEMO_PASSWORD in .env.prod}
       WIPE_HOUR_UTC: ${WIPE_HOUR_UTC:-3}
     volumes:
       - ./ops/wipe/run.sh:/app/run.sh:ro
