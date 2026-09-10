@@ -118,17 +118,23 @@ async function send(method, path, body) {
     throw new ApiError('NETWORK_ERROR', 0);
   }
 
+  // `data` alone cannot say why it is null. An empty body and an
+  // unreadable one both land here, and they mean opposite things: the
+  // first is a legitimate 204, the second is a response this app has
+  // no way to honour. So the parse failure is reported separately
+  // rather than inferred from the value.
   let data = null;
+  let parseFailed = false;
   const text = await res.text();
   if (text) {
-    try { data = JSON.parse(text); } catch { /* non-JSON body */ }
+    try { data = JSON.parse(text); } catch { parseFailed = true; }
   }
 
-  return { res, data };
+  return { res, data, parseFailed };
 }
 
 async function request(method, path, body) {
-  let { res, data } = await send(method, path, body);
+  let { res, data, parseFailed } = await send(method, path, body);
 
   // A 401 on an authenticated request means the access token expired.
   // Refresh and retry once — the user should never see this happen.
@@ -146,11 +152,30 @@ async function request(method, path, body) {
       throw new ApiError('SESSION_EXPIRED', 401);
     }
 
-    ({ res, data } = await send(method, path, body));
+    ({ res, data, parseFailed } = await send(method, path, body));
   }
 
   if (!res.ok) {
     throw new ApiError(data?.error || 'REQUEST_FAILED', res.status);
+  }
+
+  // A 2xx carrying a body this app could not read.
+  //
+  // Checked AFTER !res.ok, so an error status with an unreadable body
+  // still reports the server's own status and takes the branch above —
+  // that path already worked and is untouched.
+  //
+  // The condition is a body that was present and would not parse, NOT
+  // a null `data`. Logout answers 204 with no body at all and must
+  // keep returning null; a blanket null check would break it.
+  //
+  // Returning null here instead is what made a gateway's 200 look like
+  // a success with no fields: callers destructure the result, so they
+  // either threw a raw TypeError with no code and no status, or read
+  // undefined out of an object that was never sent. One refusal here
+  // costs every caller nothing and spares them both.
+  if (parseFailed) {
+    throw new ApiError('REQUEST_FAILED', res.status);
   }
 
   return data;
