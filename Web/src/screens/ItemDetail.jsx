@@ -5,7 +5,7 @@ import { usePix } from '../context/PixContext';
 import { copySecret } from '../lib/clipboard';
 import { MAX_ITEM_BYTES, itemByteLength } from '../crypto/cipher';
 import { Icon } from '../components/Icon';
-import { ErrorNote } from '../components/ui';
+import { ErrorNote, ClipMeter } from '../components/ui';
 
 const EMPTY = { site: '', username: '', password: '', url: '', notes: '' };
 
@@ -549,32 +549,6 @@ function Field({ label, children }) {
  * clipboard, so only a single meter can ever be truthful. Copying a
  * second field moves this meter rather than starting a second one.
  */
-function ClipMeter({ left }) {
-  if (left === null) return null;
-
-  const segsLit = Math.ceil(left / 3);   // 10 segments across 30 seconds
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 2 }}>
-      <div style={{ display: 'flex', gap: 2 }}>
-        {Array.from({ length: 10 }, (_, i) => (
-          <div key={i} style={{
-            width: 11, height: 8, borderRadius: 1,
-            background: i < segsLit ? 'var(--amber)' : 'var(--edge)',
-            transition: 'background .3s'
-          }} />
-        ))}
-      </div>
-      <span style={{
-        font: "500 11px 'Geist Mono', monospace",
-        letterSpacing: '.12em', color: 'var(--muted)'
-      }}>
-        CLEARS IN {left}S
-      </span>
-    </div>
-  );
-}
-
 function PanelInput({ font, tracking, invalid, ...props }) {
   const [focused, setFocused] = useState(false);
   return (

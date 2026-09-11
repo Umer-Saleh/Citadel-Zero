@@ -288,9 +288,9 @@ export function Card({ children, style, className }) {
 
 // ---------------------------------------------------------------
 // METER — segmented pixel bar at 14x10. Used for password strength
-// and generator entropy. The clipboard countdown (11x8) and the
-// header health HUD (7x8) draw their own at different sizes, so this
-// is not the one place segments live.
+// and generator entropy. The clipboard countdown (11x8, ClipMeter
+// below) and the header health HUD (7x8) draw their own at different
+// sizes, so this is not the one place segments live.
 // ---------------------------------------------------------------
 export function Meter({ score, max = 10, color }) {
   const fill = color || (score < 4 ? 'var(--red)' : score < 7 ? 'var(--amber)' : 'var(--green)');
@@ -304,6 +304,46 @@ export function Meter({ score, max = 10, color }) {
           transition: 'background .25s'
         }} />
       ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------
+// CLIP METER — how long the copied secret has left on the clipboard.
+//
+// Lived in ItemDetail while the entry panel was the only thing that
+// copied anything. The generator copies too now, and the countdown is
+// not decoration there: copySecret wipes the clipboard at 30 seconds
+// whether or not anything is counting, so a copy with no meter empties
+// itself mid-paste on another site with no warning.
+//
+// `left === null` renders nothing. That covers both ways a countdown
+// ends — the clipboard was wiped, or a newer copy superseded this one —
+// so a caller that wants to ANNOUNCE the wipe has to distinguish the
+// two itself. ItemDetail does; the generator deliberately does not.
+// ---------------------------------------------------------------
+export function ClipMeter({ left }) {
+  if (left === null) return null;
+
+  const segsLit = Math.ceil(left / 3);   // 10 segments across 30 seconds
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 2 }}>
+      <div style={{ display: 'flex', gap: 2 }}>
+        {Array.from({ length: 10 }, (_, i) => (
+          <div key={i} style={{
+            width: 11, height: 8, borderRadius: 1,
+            background: i < segsLit ? 'var(--amber)' : 'var(--edge)',
+            transition: 'background .3s'
+          }} />
+        ))}
+      </div>
+      <span style={{
+        font: "500 11px 'Geist Mono', monospace",
+        letterSpacing: '.12em', color: 'var(--muted)'
+      }}>
+        CLEARS IN {left}S
+      </span>
     </div>
   );
 }

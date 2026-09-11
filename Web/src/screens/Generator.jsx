@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
-import { Card, Button, Meter } from '../components/ui';
+import { Card, Button, Meter, ClipMeter } from '../components/ui';
 import { Paladin } from '../components/Paladin';
 import { Icon } from '../components/Icon';
+import { copySecret } from '../lib/clipboard';
 
 const SETS = {
   lower: 'abcdefghijklmnopqrstuvwxyz',
@@ -60,6 +61,36 @@ export function Generator({ onUse }) {
 
   const [smithing, setSmithing] = useState(false);
   const anvilTimer = useRef(null);
+
+  // Seconds left on the clipboard, or null for "nothing to show".
+  const [clipLeft, setClipLeft] = useState(null);
+  const detachClip = useRef(null);
+
+  /**
+   * Copy the generated password, and show what copySecret is going to
+   * do to it.
+   *
+   * The countdown is not decoration here. copySecret wipes the
+   * clipboard after 30 seconds whether or not anything is counting, and
+   * the reason to copy from this screen at all is to paste into
+   * something outside the vault — so without the meter the clipboard
+   * empties mid-signup on another site with no warning.
+   *
+   * setClipLeft is passed as the tick callback with nothing wrapped
+   * around it. copySecret reports null both when the clipboard is wiped
+   * and when a NEWER copy supersedes this one, and the two are not
+   * distinguishable from here, so this only ever hides the meter. It
+   * deliberately does not announce a clearing that may not have
+   * happened.
+   */
+  function copyPassword() {
+    detachClip.current?.();
+    detachClip.current = copySecret(pw, setClipLeft);
+  }
+
+  // Detach the UI callback on unmount. The pending clear is NOT
+  // cancelled: leaving this screen must not strand a secret.
+  useEffect(() => () => detachClip.current?.(), []);
 
   /**
    * Generate from EXPLICIT values rather than from the component's
@@ -125,6 +156,33 @@ export function Generator({ onUse }) {
         }}>
           {noSet ? 'Select at least one character set' : pw}
         </div>
+
+        {/* Copy, and the countdown it starts.
+
+            Its own row rather than a third button below: that row is
+            two flex:1 buttons, and at 320 a third leaves about 85px
+            each, which REGENERATE does not fit into. This keeps the
+            existing pair on one line at every width.
+
+            flexWrap so the meter drops under the button at 320 instead
+            of pushing the card wider.
+
+            aria-label rather than the visible word alone: "COPY" does
+            not say what is copied, and Icon is aria-hidden so the glyph
+            adds nothing to the name. */}
+        {!noSet && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+            <Button
+              variant="secondary"
+              onClick={copyPassword}
+              aria-label="Copy generated password"
+              style={{ font: '600 12px Geist, sans-serif', padding: '11px 18px' }}
+            >
+              <Icon name="copy" /> COPY
+            </Button>
+            <ClipMeter left={clipLeft} />
+          </div>
+        )}
 
         {/* entropy readout — left-aligned beside the meter, not spread */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
