@@ -137,7 +137,13 @@ export function Input({
             onMouseDown={() => setEyeDown(true)}
             onMouseUp={() => setEyeDown(false)}
             onMouseLeave={() => setEyeDown(false)}
+            // Both, matching ItemDetail's close button. `title` alone
+            // is the weakest possible source of an accessible name: it
+            // is a tooltip first, never surfaces on touch, and is not
+            // reliably announced. Icon is aria-hidden, so without the
+            // label this control has nothing else to be called.
             title={revealed ? 'Hide' : 'Show'}
+            aria-label={revealed ? 'Hide password' : 'Show password'}
             // Matches ItemDetail's IconButton: centred, with the same
             // depth shadow and press-down. Without them it read as a
             // flat, dead control beside its siblings.

@@ -32,7 +32,7 @@ vi.mock('../lib/clipboard', () => ({ copySecret: () => () => {} }));
 const { Vault } = await import('./Vault');
 const {
   resetHooks, beginRender, pendingEffects, flush,
-  componentNames, find, texts, apiError
+  componentNames, find, texts, walk, apiError
 } = await import('../test/hookShim.js');
 
 const PROPS = { onSelectItem: () => {}, onAddItem: () => {}, selectedId: null };
@@ -122,5 +122,151 @@ describe('the vault list distinguishes a failed load from an empty one', () => {
 
     expect(loadItems).toHaveBeenCalledTimes(2);
     expect(componentNames(tree)).not.toContain('LoadFailed');
+  });
+});
+
+/**
+ * Every entry was a bare <div onClick>. No role, no tabIndex, no name.
+ * Querying the whole list region for anything focusable returned
+ * nothing, so no entry could be opened without a mouse and none was
+ * announced as a control at all.
+ *
+ * These assert the attributes rather than a rendered ring, because the
+ * attributes are what an assistive technology reads and what a future
+ * edit would silently drop.
+ */
+describe('an entry row is reachable without a mouse', () => {
+  const ENTRY = { id: 'a', data: { site: 'GitHub', username: 'octocat', password: 'p' } };
+
+  /** The row's own rendered output, with onClick replaced by a spy. */
+  async function renderRow(onClick = vi.fn()) {
+    items = [ENTRY];
+    const tree = await renderAfterLoad();
+    const el = find(tree, n => n.type?.name === 'ItemRow');
+    resetHooks();
+    return { row: el.type({ ...el.props, onClick }), el, onClick };
+  }
+
+  // target === currentTarget means the row itself, not a chip inside it.
+  const keyEvent = (key) => ({
+    key, target: 'row', currentTarget: 'row', preventDefault: vi.fn()
+  });
+
+  test('it is a named control, not an anonymous div', async () => {
+    const { row } = await renderRow();
+
+    expect(row.props.role).toBe('button');
+    expect(row.props.tabIndex).toBe(0);
+    // Named for the entry, so a list of five is not five "button"s.
+    expect(row.props['aria-label']).toContain('GitHub');
+    expect(row.props['aria-label']).toContain('octocat');
+  });
+
+  /**
+   * The same move AppShell.test.jsx makes with the `vk-r-hide` prefix:
+   * assert the CLASS of defect, not the single element that showed it.
+   *
+   * The defect was never "this row is missing a role". It was that the
+   * list contained something clickable which a keyboard could not
+   * reach. So every clickable node in the rendered list is held to one
+   * rule — be a native control, or carry a role AND a non-negative
+   * tabIndex — and the failure names whatever broke it.
+   *
+   * A clickable div added to a row next year fails this without anyone
+   * remembering this test exists, which is the whole point of writing
+   * it this way round. The test above would not catch that.
+   */
+  test('nothing clickable in the list is unreachable by keyboard', async () => {
+    items = [
+      ENTRY,
+      { id: 'b', data: { site: 'Northwind', username: 'teller', password: 'p' } }
+    ];
+    const tree = await renderAfterLoad();
+
+    const NATIVE = new Set(['button', 'a', 'input', 'select', 'textarea']);
+    const offenders = [];
+
+    for (const el of [...walk(tree)].filter(n => n?.type?.name === 'ItemRow')) {
+      // Rendered twice: at rest, and with focus inside it, because the
+      // copy chips only exist in the second and are just as much part
+      // of the list as the row is.
+      resetHooks();
+      const atRest = el.type(el.props);
+      atRest.props.onFocusCapture();
+      beginRender();
+      const focused = el.type(el.props);
+
+      for (const node of [...walk(atRest), ...walk(focused)]) {
+        if (typeof node?.props?.onClick !== 'function') continue;
+        if (typeof node.type !== 'string') continue;       // a component, not a DOM node
+        if (NATIVE.has(node.type)) continue;
+        if (node.props.role && (node.props.tabIndex ?? -1) >= 0) continue;
+        offenders.push(`<${node.type}> role=${node.props.role ?? 'none'} tabIndex=${node.props.tabIndex ?? 'none'}`);
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
+  test.each(['Enter', ' '])('%s opens the entry', async (key) => {
+    const { row, onClick } = await renderRow();
+
+    row.props.onKeyDown(keyEvent(key));
+
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  test('Space is prevented, so a focused list does not scroll the page', async () => {
+    const { row } = await renderRow();
+    const event = keyEvent(' ');
+
+    row.props.onKeyDown(event);
+
+    expect(event.preventDefault).toHaveBeenCalled();
+  });
+
+  test('an ordinary key does not open the entry', async () => {
+    const { row, onClick } = await renderRow();
+
+    row.props.onKeyDown(keyEvent('a'));
+
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The chips are real buttons inside the row. Without this guard,
+   * Enter on "copy password" would copy AND open the entry, because
+   * the keydown bubbles to the row's handler.
+   */
+  test('a keystroke from a copy chip does not also open the entry', async () => {
+    const { row, onClick } = await renderRow();
+
+    row.props.onKeyDown({
+      key: 'Enter', target: 'chip', currentTarget: 'row', preventDefault: vi.fn()
+    });
+
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The chips rendered on `hover` alone, so they were not in the DOM
+   * for a keyboard user at all — the row could have been focusable and
+   * Tab would still have stepped straight past them.
+   */
+  test('focus reveals the copy chips, and both are named', async () => {
+    const { row, el } = await renderRow();
+
+    expect(texts(row)).not.toContain('USER');
+
+    row.props.onFocusCapture();
+    beginRender();
+    const focused = el.type({ ...el.props, onClick: vi.fn() });
+
+    const labels = [...walk(focused)]
+      .map(n => n?.props?.['aria-label'])
+      .filter(Boolean);
+
+    expect(labels).toContain('Copy username for GitHub');
+    expect(labels).toContain('Copy password for GitHub');
   });
 });

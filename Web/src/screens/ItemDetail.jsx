@@ -398,7 +398,11 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
                 data-lpignore="true"
                 data-1p-ignore="true"
               />
-              <IconButton title="Copy username" onClick={() => copy('username', form.username)}>
+              {/* title AND aria-label, as on the close button above.
+                  Icon is aria-hidden, so title alone leaves these
+                  announced by nothing a screen reader depends on. */}
+              <IconButton title="Copy username" aria-label="Copy username"
+                onClick={() => copy('username', form.username)}>
                 <Icon name="copy" />
               </IconButton>
             </div>
@@ -419,10 +423,13 @@ export function ItemDetail({ itemId, onDone, injectedPassword, onInjected }) {
                 data-lpignore="true"
                 data-1p-ignore="true"
               />
-              <IconButton title="Show / hide" onClick={() => setRevealed(r => !r)}>
+              <IconButton title="Show / hide"
+                aria-label={revealed ? 'Hide password' : 'Show password'}
+                onClick={() => setRevealed(r => !r)}>
                 <Icon name={revealed ? 'eyeoff' : 'eye'} size={15} />
               </IconButton>
-              <IconButton title="Copy password" onClick={() => copy('password', form.password)}>
+              <IconButton title="Copy password" aria-label="Copy password"
+                onClick={() => copy('password', form.password)}>
                 <Icon name="copy" />
               </IconButton>
             </div>

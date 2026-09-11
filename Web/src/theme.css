@@ -292,15 +292,44 @@ input:-webkit-autofill:active {
    ALWAYS ON — cheap guards that cannot regress a wide layout
    --------------------------------------------------------------- */
 
+/* KEYBOARD FOCUS — the app's own ring, everywhere it is not already
+   handled.
+
+   There was no focus rule of any kind, so every control fell back to
+   whatever ring the browser draws. That is legible but it is not this
+   design language, and it was the only indication a keyboard user had
+   anywhere in the app.
+
+   :focus-visible, not :focus — a mouse click on a button must not
+   leave a ring behind it. The browser decides which is which.
+
+   INPUTS ARE DELIBERATELY NOT AFFECTED, and it costs nothing to leave
+   them out. Input, the vault search field and ItemDetail's panel
+   inputs all set `outline: 'none'` as an INLINE style and draw their
+   own green border plus glow instead. An inline declaration beats a
+   stylesheet rule of any specificity, so those four keep exactly the
+   treatment they had and never take both indicators at once. Verified
+   in a browser rather than assumed: a focused input matches
+   :focus-visible and still computes outline-style: none.
+
+   That also means the exemption is load-bearing rather than
+   incidental. Adding !important here would reach past those inline
+   styles and give every focused input a ring on top of its border and
+   glow. */
+:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
 /* The header wordmark, which is a button that returns to the vault.
    Kept here rather than inline because an inline `opacity` would have
    to be overridden with !important to animate on hover, and the point
    is that the wordmark's resting appearance is untouched.
 
-   No focus rule: the nav tabs beside it carry no custom focus style
-   either, so both take the browser's own ring on keyboard focus.
-   Adding one here would make the wordmark stand out from the nav
-   rather than match it. */
+   No focus rule of its own: the nav tabs beside it have none either,
+   so both now take the app-wide :focus-visible ring above. Giving the
+   wordmark a bespoke one would make it stand out from the nav rather
+   than match it. */
 .vk-wordmark-link {
   cursor: pointer;
   transition: opacity .15s;

@@ -151,6 +151,12 @@ export function Vault({ onSelectItem, onAddItem, selectedId }) {
 
 function ItemRow({ item, index, onClick, selected }) {
   const [hover, setHover] = useState(false);
+
+  // Keyboard focus anywhere inside the row — the row itself or either
+  // copy chip. The chips render on `hover || focusWithin`, so without
+  // this they would not exist in the DOM for a keyboard user even once
+  // the row is focusable, and Tab would step straight past them.
+  const [focusWithin, setFocusWithin] = useState(false);
   const [copied, setCopied] = useState(null);
   const labelTimer = useRef(null);
   const detachClip = useRef(null);
@@ -183,6 +189,43 @@ function ItemRow({ item, index, onClick, selected }) {
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      // Focus, not hover, is what makes this reachable without a mouse.
+      // focusin/focusout rather than onFocus/onBlur so focus moving
+      // INTO a copy chip still counts as inside the row — React's
+      // onFocus does bubble, but the pair reads as what it is.
+      onFocusCapture={() => setFocusWithin(true)}
+      onBlurCapture={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) setFocusWithin(false);
+      }}
+      // A control, and named as one.
+      //
+      // This was a bare div with an onClick: no role, no tabIndex, no
+      // name. Querying the whole list region for anything focusable
+      // returned nothing, so no entry could be opened without a mouse
+      // and none was announced as a control at all.
+      //
+      // KNOWN COMPROMISE, recorded rather than hidden: role="button"
+      // on an element containing two <button> chips is technically
+      // non-conforming — a button may not contain interactive
+      // descendants. The conforming alternative is to move the role
+      // onto the name/username block, which shrinks the click target
+      // for mouse users to a fraction of the row. Whole-row clicking
+      // is the existing behaviour and worth keeping, so the compromise
+      // is here and deliberate. Revisit if a screen reader is observed
+      // mis-announcing the chips.
+      role="button"
+      tabIndex={0}
+      aria-label={`${site}, ${item.data.username || 'no username'}`}
+      onKeyDown={(e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        // Only the row's own keystrokes. Without this, Enter or Space
+        // on a copy chip would open the entry as well as copying.
+        if (e.target !== e.currentTarget) return;
+        // Space scrolls the page by default, which is exactly what a
+        // list of rows must not do while one is focused.
+        e.preventDefault();
+        onClick();
+      }}
       // vk-r-row-wrap: below 640px the quick-copy chips take a line of
       // their own rather than being crushed into this one. See the
       // rule in theme.css for why hiding them was the wrong answer.
@@ -239,13 +282,31 @@ function ItemRow({ item, index, onClick, selected }) {
         </span>
       </div>
 
-      {/* quick-copy — appear on hover */}
-      {hover && (
+      {/* quick-copy — appear on hover, or on keyboard focus.
+
+          `hover` alone meant these were not in the DOM at all unless a
+          mouse was over the row, so no amount of making the row
+          focusable would have let a keyboard reach them.
+
+          aria-label on both: the visible word is replaced by a check
+          Icon for 1.4s after a copy, and Icon is aria-hidden, so in
+          that window the button would otherwise have no accessible
+          name whatsoever. The label also says WHICH entry, because
+          "USER" alone is meaningless read out of a list of five. */}
+      {(hover || focusWithin) && (
         <div className="vk-r-row-actions" style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-          <button onClick={e => copy('user', item.data.username, e)} className="vk-r-touch" style={copyChip}>
+          <button
+            onClick={e => copy('user', item.data.username, e)}
+            aria-label={`Copy username for ${site}`}
+            className="vk-r-touch" style={copyChip}
+          >
             {copied === 'user' ? <Icon name="check" size={12} /> : 'USER'}
           </button>
-          <button onClick={e => copy('pass', item.data.password, e)} className="vk-r-touch" style={copyChip}>
+          <button
+            onClick={e => copy('pass', item.data.password, e)}
+            aria-label={`Copy password for ${site}`}
+            className="vk-r-touch" style={copyChip}
+          >
             {copied === 'pass' ? <Icon name="check" size={12} /> : 'PASS'}
           </button>
         </div>
