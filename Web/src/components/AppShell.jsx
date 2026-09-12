@@ -60,7 +60,39 @@ export function AppShell({ children, view = 'vault', onNavigate }) {
                 Padding, border and background are reset so the wordmark
                 renders exactly as it did as a span. Only cursor and the
                 hover fade are new, and both live in theme.css so they do
-                not have to fight an inline style. */}
+                not have to fight an inline style.
+
+                THE INNER SPAN IS NOT DECORATION. This button is a flex
+                container — inline-flex here, and computed `flex`,
+                because it is itself a flex item of vk-r-brand above, so
+                it gets blockified. Without the wrapper its two children
+                become two separate flex items: an anonymous one holding
+                "CITADEL " and the green span. The space then sits at the
+                END OF A LINE inside that anonymous item, where white
+                space is dropped before layout — so the header rendered
+                CITADELZERO while Signup and Unlock, which are ordinary
+                block divs, rendered CITADEL ZERO.
+
+                Measured at 1440: the text box was 91px and is 104px, the
+                difference being one 13px advance (12px glyph + 1px of
+                letter-spacing). At <=640 theme.css drops this to
+                10px/letter-spacing:0 and the pair is 70px and 80px.
+
+                The wrapper is one flex item establishing its own inline
+                formatting context, so the space is interior text rather
+                than end-of-line, at every scale and whatever the parent's
+                display mode. Moving the space into the green span does
+                NOT work: leading white space at the start of a line is
+                dropped too, which is why the pre-rename Unlock form
+                would have failed here as well.
+
+                whiteSpace: 'nowrap' IS LOAD-BEARING. The wrapper lowers
+                this button's min-content width from the whole wordmark
+                to "CITADEL", so a squeezed header could break the name
+                across two lines — something today's two separate flex
+                items cannot do. Nothing observed wraps at 320 or 375;
+                this keeps a guarantee the wrapper would otherwise give
+                away. */}
             <button
               type="button"
               onClick={() => onNavigate('vault')}
@@ -70,10 +102,11 @@ export function AppShell({ children, view = 'vault', onNavigate }) {
                 background: 'none', border: 'none', padding: 0, margin: 0,
                 display: 'inline-flex', alignItems: 'center',
                 fontFamily: "'Press Start 2P', monospace", fontSize: 12,
-                letterSpacing: 1, color: 'var(--text)'
+                letterSpacing: 1, color: 'var(--text)',
+                whiteSpace: 'nowrap'
               }}
             >
-              CITADEL <span style={{ color: 'var(--green)' }}>ZERO</span>
+              <span>CITADEL <span style={{ color: 'var(--green)' }}>ZERO</span></span>
             </button>
             {/* PIX's line carries NO hide utility, and must not.
 

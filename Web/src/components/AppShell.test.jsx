@@ -125,3 +125,74 @@ describe('the vault health HUD', () => {
     expect(hud(render())).toBeUndefined();
   });
 });
+
+/**
+ * The wordmark's two halves live inside ONE wrapper span.
+ *
+ * READ THIS BEFORE TRUSTING IT. These tests pin the MECHANISM of the
+ * fix. They do not and cannot detect the defect it fixes, and they
+ * would NOT have caught the original bug.
+ *
+ * The bug was that the header rendered CITADELZERO while Signup and
+ * Unlock rendered CITADEL ZERO. The button is a flex container, so its
+ * two children were two separate flex items and the space between them
+ * sat at the end of a line, where white space is dropped before
+ * layout. The text was always right; the pixels were not. A commit
+ * shipped with exactly that confusion: it verified the text nodes,
+ * which were already correct on all three screens, and the header kept
+ * rendering 91px where 104px was wanted.
+ *
+ * Nothing in this file can see that. There is no DOM here, let alone
+ * layout — the shim returns the element tree, and in it "CITADEL " has
+ * its space whether or not a browser would draw one. Even with a DOM
+ * it would not help: Range.toString() returns "CITADEL ZERO" while
+ * 91px renders, and innerText on the flex button reads "CITADEL\nZERO"
+ * because each flex item is its own block.
+ *
+ * THE CHECK THAT SEES IT IS A MEASUREMENT, and it needs a browser:
+ * docs/wordmark-measurement.md. Run that when the wordmark changes.
+ *
+ * What these tests are for is the other failure mode — someone tidying
+ * the wrapper away as redundant markup, or dropping nowrap as a stray
+ * style, without knowing either is load-bearing. That is a plausible
+ * edit, it is invisible in review, and it silently restores the bug.
+ * So the structure is pinned here, cheaply, in CI, and the comment in
+ * AppShell.jsx says why the structure exists.
+ */
+describe('the header wordmark structure', () => {
+  const wordmark = (tree) => find(
+    tree, n => String(n.props?.className ?? '').includes('vk-r-wordmark')
+  );
+
+  test('wraps both halves in a single element child', () => {
+    const button = wordmark(render());
+    expect(button).toBeDefined();
+
+    // One child, and an element rather than a string. Two children is
+    // the broken shape: two flex items with a collapsible space
+    // between them.
+    const child = button.props.children;
+    expect(Array.isArray(child)).toBe(false);
+    expect(typeof child).toBe('object');
+
+    // ...and that one child is what holds both halves.
+    const halves = child.props.children;
+    expect(halves[0]).toBe('CITADEL ');
+    expect(halves[1].props.children).toBe('ZERO');
+  });
+
+  test('keeps the green half green', () => {
+    // The split is the point of the wrapper existing at all: it has to
+    // preserve the two-tone wordmark, not flatten it.
+    const halves = wordmark(render()).props.children.props.children;
+    expect(halves[1].props.style.color).toBe('var(--green)');
+  });
+
+  test('carries nowrap, which the wrapper makes necessary', () => {
+    // The wrapper lowers the button's min-content width from the whole
+    // wordmark to "CITADEL", so without this a squeeze could break the
+    // name across two lines — which the two separate flex items it
+    // replaced could not do.
+    expect(wordmark(render()).props.style.whiteSpace).toBe('nowrap');
+  });
+});
