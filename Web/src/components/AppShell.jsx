@@ -162,9 +162,37 @@ export function AppShell({ children, view = 'vault', onNavigate }) {
 
               Showing it costs nothing between 768 and 1024 — the header
               already stands at 112px and stays there — and one wrapped
-              row lower down: measured 121px -> 205px at 375, and
-              121px -> 165px at 320. It fits at 320 with no horizontal
-              overflow at any width. */}
+              row lower down: measured 165px -> 205px at 375, and
+              165px -> 205px at 320. It fits at 320 with no horizontal
+              overflow at any width.
+
+              THE PAIR IS EMPTY VAULT VERSUS POPULATED, which is what
+              makes the two states differ at all: vaultHealth returns
+              null when there is nothing to measure, so for an empty
+              vault this block renders nothing and the header row is one
+              item shorter. The populated figures were taken with the
+              readout actually rendering.
+
+              BOTH PHONE FIGURES WERE CORRECTED, FOR TWO DIFFERENT
+              REASONS, and they are worth keeping apart:
+
+                375 used to read 121 -> 205, and 121 was right when it
+                was written. The wordmark beside this block grew 10px
+                when it got its missing space back, which is enough to
+                push LOCK onto a row of its own while the readout is
+                absent — so the empty-vault header is 165px now. The
+                populated figure did not move: at 205px LOCK is on its
+                own row either way.
+
+                320 used to read 121 -> 165, and NEITHER number was ever
+                right. Re-measured it is 165 -> 205, the same pair as
+                375. That one is not fallout from the wordmark: both
+                states measure identically before and after it. The
+                figure was wrong when it was written and had been wrong
+                since.
+
+              The 768/1024 claim above was re-measured at the same time
+              and is unchanged: 112px in both states, at both widths. */}
           {health !== null && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }} title="Average password strength across your vault">
             <span style={{ font: "600 10px 'Geist Mono', monospace", letterSpacing: '.14em', color: 'var(--muted)' }}>
