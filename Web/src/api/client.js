@@ -133,15 +133,64 @@ async function send(method, path, body) {
   return { res, data, parseFailed };
 }
 
+/**
+ * The 401s that mean "this access token is no good" — and nothing else.
+ *
+ * requireAuth on the server is the only thing that produces these two:
+ * INVALID_TOKEN when a token is expired or does not verify, NO_TOKEN
+ * when no bearer arrived at all. A refresh is the right answer to
+ * both, and both keep the refresh-and-retry they have always had.
+ *
+ * Server/test/e2e/auth-401-codes.test.js pins these spellings against
+ * the server, precisely because this list reads them.
+ */
+const TOKEN_ERRORS = ['INVALID_TOKEN', 'NO_TOKEN'];
+
 async function request(method, path, body) {
   let { res, data, parseFailed } = await send(method, path, body);
 
-  // A 401 on an authenticated request means the access token expired.
+  // A 401 CARRYING A TOKEN CODE means the access token is no good.
   // Refresh and retry once — the user should never see this happen.
   //
-  // `retried` guards against a loop: if the retry also 401s, the
-  // problem isn't a stale token and refreshing again won't help.
-  if (res.status === 401 && refreshToken && !path.startsWith('/api/auth/')) {
+  // THE GATE IS THE BODY'S CODE, NOT THE STATUS, and that distinction
+  // is the whole point. The server answers 401 for two unrelated
+  // things: a token that is no good, and a credential the user typed
+  // wrong — a current password on /api/account/password, a code on
+  // /api/account/totp/confirm. Nothing else separates them. Both are
+  // 401, neither carries WWW-Authenticate, and the codes above are the
+  // only field that differs.
+  //
+  // Keying on the status alone treated "wrong password" as "expired
+  // token", so one wrong attempt spent FOUR requests from the auth
+  // bucket — the kdf-params lookup, the rejected attempt, a refresh,
+  // then the identical attempt rejected identically. Production allows
+  // six per address per fifteen minutes, so two wrong attempts locked
+  // a real user out of their own account, and the second one usually
+  // said "Too many attempts" where it should have said the password
+  // was wrong. It also rotated a refresh token per attempt, and when
+  // the bucket ran out ON the refresh rather than on the attempt, the
+  // failed refresh below read as a dead session: the vault locked
+  // mid-edit and unsaved work went with it. All of that for a typo.
+  //
+  // An ALLOWLIST rather than a list of credential codes to skip: a new
+  // credential failure added to the server later must not silently
+  // inherit the retry. The cost of that choice is that a 401 this
+  // client cannot read — an opaque one from some future gateway — is
+  // now surfaced rather than retried. Nothing produces one today: the
+  // API is reached through Caddy, which only reverse-proxies /api/*
+  // with no auth of its own, so requireAuth and the services are the
+  // only sources of a 401.
+  //
+  // `data?.error` and not `data.error`: a 401 whose body would not
+  // parse leaves data null, and an unreadable body is not a token
+  // code.
+  //
+  // There is no `retried` flag, and the comment here used to claim one.
+  // The bound on looping is simpler: there is exactly ONE re-send
+  // below, and whatever it answers is what the caller gets. A retry
+  // that 401s again falls straight through to the throw.
+  if (res.status === 401 && TOKEN_ERRORS.includes(data?.error)
+      && refreshToken && !path.startsWith('/api/auth/')) {
     try {
       await refreshOnce();
     } catch {
