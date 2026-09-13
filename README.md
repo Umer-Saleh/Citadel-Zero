@@ -140,11 +140,32 @@ are, the client — which holds the master password at that moment, the only tim
 it legitimately can — re-derives the KEK under stronger parameters and re-wraps
 the same DEK. No vault operation is involved.
 
-The server refuses parameters weaker than current defaults on **any** dimension,
-so an authenticated client or a stolen session cannot silently downgrade an
-account's work factor. Argon2 cost is not a single comparable number, so the
-check is deliberately conservative rather than trying to rank trade-offs between
-memory and time.
+The three routes that rewrite an existing account's parameters — KDF upgrade,
+password change and recovery — refuse a proposal whose memory cost `m` or time
+cost `t` is below the current default, and they check only after the caller has
+proved the master password or the recovery key. The two are compared separately
+rather than folded into one figure: Argon2 cost is not a single comparable
+number, so the check is deliberately conservative rather than trying to rank
+trade-offs between memory and time. Parallelism `p` is not compared at all.
+Today that changes nothing, because the default `p` is also the lowest the
+schema accepts; it would matter if the default ever moved.
+
+What the check does not do is as important:
+
+- **The floor is the current default, not the account's own parameters.** An
+  account above the default can be brought back down to it — `m=262144, t=3`
+  to `m=131072, t=2` is accepted. The web client always proposes the default,
+  so its own password change does exactly that, and refusing it would break
+  password change for such an account.
+- **Signup is held only to the schema floor.** It stores whatever passes
+  validation, so a new account can be created at `m=19456, t=2`, below the default.
+  Login then reports it as below defaults, as for any older account.
+
+It is also not a defence against an attacker. Whoever holds the master password
+or the recovery key can already unwrap the DEK, so a lower work factor gives them
+nothing they did not have, and a stolen session alone never reaches the check.
+What it stops is a buggy, stale or malicious client, acting for the real user,
+leaving an existing account below policy.
 
 ---
 
@@ -385,7 +406,7 @@ not guaranteed by the module structure.
 | IDOR / cross-user access | Guesses another user's item UUID | Every vault query is scoped by `user_id` from the verified JWT, in the `WHERE` clause. A mismatch matches zero rows and returns 404 — not 403, which would confirm the item exists. |
 | Token forgery | Modifies the JWT payload | Payload is readable but signature-protected; any change fails verification. |
 | Username enumeration | Probes login to discover registered emails | Identical 401 for unknown account and wrong password — and login always performs an Argon2 verification, against a dummy hash when the account does not exist, so response time does not distinguish them either. |
-| KDF downgrade | Authenticated client proposes weak parameters | Rejected at two levels: the schema enforces the OWASP floor, and the service refuses anything below current defaults on any dimension. |
+| KDF parameters below policy | A client holding the password or recovery key proposes weak parameters | Not a confidentiality threat — that caller can already unwrap the DEK — but refused at two levels: the schema enforces the OWASP floor on every route, and KDF upgrade, password change and recovery also refuse `m` or `t` below current defaults. Signup is held only to the floor, and nothing stops an account above the default being lowered to it. |
 
 ### A logging fix worth naming
 
@@ -645,7 +666,11 @@ Among them:
 - Tampered ciphertext, tampered auth tags, and swapped nonces are all rejected
 - 1000 encryptions produce 1000 distinct nonces
 - User A gets 404 for user B's item ID — and B's data is verifiably unchanged
-- An authenticated KDF downgrade is rejected and the account left untouched
+- KDF upgrade, password change and recovery each refuse parameters below
+  current defaults, from a caller who has proved the credential — and the
+  refusal writes nothing: the stored credentials and both DEK wrappers are
+  unchanged after a refused password change or recovery, and the stored
+  parameters after a refused upgrade
 - A wrong recovery key cannot unwrap the DEK
 - A replayed refresh token revokes the whole family, **including the token that
   was still valid**
