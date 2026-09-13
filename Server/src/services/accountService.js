@@ -7,6 +7,28 @@ const { needsKdfUpgrade, DEFAULT_KDF_PARAMS } = require('../crypto');
 const { DUMMY_HASH } = require('./authService');
 
 /**
+ * Refuse KDF parameters below current defaults.
+ *
+ * Every route that writes kdf_params for an existing account calls
+ * this AFTER its credential check, so a caller who has not proved a
+ * credential never sees this 400.
+ *
+ * Not an attack mitigation. Whoever holds the master password or the
+ * recovery key can already unwrap the DEK. What it stops is a buggy,
+ * stale or malicious client acting for the real user leaving the
+ * account below policy.
+ *
+ * The comparison is needsKdfUpgrade's — m and t, not p. Through HTTP
+ * only m can actually fall short: the schema floor for t equals the
+ * default, so a low t never gets this far.
+ */
+function refuseWeakKdf(params) {
+  if (needsKdfUpgrade(params)) {
+    throw new AppError('WEAK_KDF_PARAMS', 400, 'proposed parameters are below current defaults');
+  }
+}
+
+/**
  * Change the master password.
  *
  * The client does all the crypto: it unwraps the DEK with the old KEK,
@@ -29,6 +51,8 @@ async function changePassword(userId, {
     console.warn(`[server] failed password change for user ${user.id}`);
     throw new AppError('INVALID_CREDENTIALS', 401, 'current password is incorrect');
   }
+
+  refuseWeakKdf(newKdfParams);
 
   // Argon2 is slow, so hash BEFORE opening the transaction — holding
   // a connection and a row lock open across a ~1s hash would block
@@ -151,6 +175,10 @@ async function completeRecovery({
     throw new AppError('INVALID_RECOVERY_KEY', 401, 'invalid recovery key');
   }
 
+  // After the proof, so the one-failure-response rule above still holds:
+  // only a caller who has proved the key can ever see this 400.
+  refuseWeakKdf(newKdfParams);
+
   // Only past the proof do we spend anything on the new credentials.
   const stored = await serverStoreAuth(newAuthHash);
   const storedNewProof = await serverStoreAuth(newRecoveryAuthHash);
@@ -211,9 +239,7 @@ async function upgradeKdf(userId, {
 
   // Refuse a downgrade. The client proposes parameters; the server
   // must not let a malicious one weaken an existing account.
-  if (needsKdfUpgrade(newKdfParams)) {
-    throw new AppError('WEAK_KDF_PARAMS', 400, 'proposed parameters are below current defaults');
-  }
+  refuseWeakKdf(newKdfParams);
 
   const stored = await serverStoreAuth(newAuthHash);
 

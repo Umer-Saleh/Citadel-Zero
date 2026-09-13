@@ -8,7 +8,8 @@ const app = require('../../src/app');
 const { resetDatabase, closeDatabase, makeSignupPayload, FAST_KDF, query } = require('../helpers/db');
 const {
   generateSalt, deriveKeys, wrapDEK, unwrapDEK, encryptItem, decryptItem,
-  generateRecoveryKey, deriveRecoveryKek, deriveRecoveryAuthHash
+  generateRecoveryKey, deriveRecoveryKek, deriveRecoveryAuthHash,
+  DEFAULT_KDF_PARAMS
 } = require('../../src/crypto');
 
 test.beforeEach(resetDatabase);
@@ -34,24 +35,33 @@ async function setup() {
   };
 }
 
-/** Build the client-side half of a password change. */
-async function buildPasswordChange(dek, currentAuthHash, newPassword = NEW_PASSWORD) {
+/**
+ * Build the client-side half of a password change.
+ *
+ * Defaults to DEFAULT_KDF_PARAMS because that is what the real client
+ * sends (Web/src/api/auth.js). FAST_KDF sits below policy and is now
+ * refused here; signups still use it, since signup is not guarded.
+ */
+async function buildPasswordChange(dek, currentAuthHash, newPassword = NEW_PASSWORD, kdfParams = DEFAULT_KDF_PARAMS) {
   const newSalt = generateSalt();
-  const { authHash: newAuthHash, kek: newKek } = await deriveKeys(newPassword, newSalt, FAST_KDF);
+  const { authHash: newAuthHash, kek: newKek } = await deriveKeys(newPassword, newSalt, kdfParams);
 
   return {
     currentAuthHash,
     newAuthHash: newAuthHash.toString('base64'),
     newKdfSalt: newSalt.toString('base64'),
-    newKdfParams: FAST_KDF,
+    newKdfParams: kdfParams,
     newWrappedDek: wrapDEK(dek, newKek)      // the SAME dek, new wrapper
   };
 }
 
 // ---------- RECOVERY ----------
 
-/** Build the client-side half of a recovery, given the recovery key. */
-async function buildRecovery(email, recoveryKey, recoveryMaterial, newPassword) {
+/**
+ * Build the client-side half of a recovery, given the recovery key.
+ * Defaults to DEFAULT_KDF_PARAMS for the same reason as above.
+ */
+async function buildRecovery(email, recoveryKey, recoveryMaterial, newPassword, kdfParams = DEFAULT_KDF_PARAMS) {
   // Unwrap the DEK using the recovery key — this is the whole point.
   const recoveryKek = deriveRecoveryKek(
     recoveryKey,
@@ -61,7 +71,7 @@ async function buildRecovery(email, recoveryKey, recoveryMaterial, newPassword) 
 
   // Set up new credentials around the recovered DEK.
   const newSalt = generateSalt();
-  const { authHash, kek } = await deriveKeys(newPassword, newSalt, FAST_KDF);
+  const { authHash, kek } = await deriveKeys(newPassword, newSalt, kdfParams);
 
   // Issue a fresh recovery kit too — the old one has been used.
   const newRecoveryKey = generateRecoveryKey();
@@ -83,7 +93,7 @@ async function buildRecovery(email, recoveryKey, recoveryMaterial, newPassword) 
       ).toString('base64'),
       newAuthHash: authHash.toString('base64'),
       newKdfSalt: newSalt.toString('base64'),
-      newKdfParams: FAST_KDF,
+      newKdfParams: kdfParams,
       newWrappedDek: wrapDEK(dek, kek),
       newRecoverySalt: newRecoverySalt.toString('base64'),
       newRecoveryWrappedDek: wrapDEK(dek, newRecoveryKek)
@@ -175,10 +185,14 @@ test('the ciphertext is unchanged by a password change', async () => {
     .get('/api/vault')
     .set('Authorization', `Bearer ${token}`);
 
-  await request(app)
+  const change = await request(app)
     .post('/api/account/password')
     .set('Authorization', `Bearer ${token}`)
     .send(await buildPasswordChange(dek, payload.authHash));
+
+  // Without this the test passes on a REJECTED change too: nothing was
+  // written, so of course the ciphertext is unchanged.
+  assert.strictEqual(change.status, 200, 'the password change did not happen');
 
   const after = await request(app)
     .get('/api/vault')
@@ -269,6 +283,46 @@ test('one user cannot change another user password', async () => {
     .send({ email: 'bob@example.com', authHash: bobPayload.authHash });
 
   assert.strictEqual(bobLogin.status, 200);
+});
+
+// ---------- KDF POLICY ----------
+//
+// Not an attack mitigation: whoever holds the master password can
+// already unwrap the DEK. This stops a buggy, stale or malicious client
+// acting for the real user from leaving the account below policy.
+//
+// Only m is exercised. The schema floor for t is 2 and so is the
+// default, so a low t is refused as VALIDATION_FAILED before the
+// service runs and would not reach the guard at all.
+
+test('a password change below current KDF defaults is rejected and writes nothing', async () => {
+  const { payload, dek } = await makeSignupPayload(EMAIL, OLD_PASSWORD, DEFAULT_KDF_PARAMS);
+  await request(app).post('/api/auth/signup').send(payload);
+
+  const login = await request(app)
+    .post('/api/auth/login')
+    .send({ email: EMAIL, authHash: payload.authHash });
+
+  // The correct current password, so the request gets past the
+  // credential check. FAST_KDF meets the schema floor but not policy.
+  const change = await buildPasswordChange(dek, payload.authHash, NEW_PASSWORD, FAST_KDF);
+
+  const before = await accountFingerprint(EMAIL);
+
+  const res = await request(app)
+    .post('/api/account/password')
+    .set('Authorization', `Bearer ${login.body.token}`)
+    .send(change);
+
+  assert.strictEqual(res.status, 400, 'a password change downgraded the KDF');
+  assert.strictEqual(res.body.error, 'WEAK_KDF_PARAMS');
+  assert.strictEqual(await accountFingerprint(EMAIL), before);
+
+  const stillOld = await request(app)
+    .post('/api/auth/login')
+    .send({ email: EMAIL, authHash: payload.authHash });
+
+  assert.strictEqual(stillOld.status, 200, 'the original password stopped working');
 });
 
 test('the recovery key unwraps the same DEK as the password', async () => {
@@ -595,6 +649,34 @@ test('recovery with a correct proof succeeds', async () => {
   const res = await request(app).post('/api/account/recover').send(recovery.payload);
 
   assert.strictEqual(res.status, 200);
+});
+
+test('recovery below current KDF defaults is rejected and writes nothing', async () => {
+  const { payload, recoveryKey } = await makeSignupPayload(EMAIL, OLD_PASSWORD, DEFAULT_KDF_PARAMS);
+  await request(app).post('/api/auth/signup').send(payload);
+
+  const material = await request(app)
+    .get('/api/account/recovery-material')
+    .query({ email: EMAIL });
+
+  // A valid proof, so the request gets past possession. Only the
+  // proposed parameters are wrong.
+  const weak = await buildRecovery(EMAIL, recoveryKey, material.body, NEW_PASSWORD, FAST_KDF);
+
+  const before = await accountFingerprint(EMAIL);
+
+  const res = await request(app).post('/api/account/recover').send(weak.payload);
+
+  assert.strictEqual(res.status, 400, 'a recovery downgraded the KDF');
+  assert.strictEqual(res.body.error, 'WEAK_KDF_PARAMS');
+  assert.strictEqual(await accountFingerprint(EMAIL), before);
+
+  // Refusing must not lock anyone out: nothing moved, so the same key
+  // can try again with parameters that meet policy.
+  const retry = await buildRecovery(EMAIL, recoveryKey, material.body, NEW_PASSWORD, DEFAULT_KDF_PARAMS);
+  const ok = await request(app).post('/api/account/recover').send(retry.payload);
+
+  assert.strictEqual(ok.status, 200, 'the recovery key stopped working after a refusal');
 });
 
 test('recovery with a WRONG proof is rejected and writes nothing', async () => {
