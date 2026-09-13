@@ -325,9 +325,10 @@ server-known value under the vault and destroy §1.
 
 ### One error for two failures
 
-A wrong TOTP code returns the same `INVALID_CREDENTIALS` as a wrong password.
+At login, a wrong TOTP code returns the same `INVALID_CREDENTIALS` as a wrong
+password.
 
-The friendlier alternative — a distinct `INVALID_TOTP_CODE` — is an oracle. It
+The friendlier alternative there — a distinct code — is an oracle. It
 confirms the password was correct. An attacker working through a
 credential-stuffing list learns exactly which passwords are live without ever
 getting in, and can focus phishing or SIM-swap effort on precisely those accounts.
@@ -335,6 +336,14 @@ getting in, and can focus phishing or SIM-swap effort on precisely those account
 This is a real trade. The cost is a worse error message for legitimate users who
 mistype a code, and plenty of production systems choose the other way. It was
 chosen deliberately rather than by default.
+
+The same code is **not** used everywhere, and that is deliberate too. Confirming
+enrolment and turning 2FA off return `INVALID_TOTP_CODE` for a wrong code. Both
+routes sit behind `requireAuth`, so the caller already holds a valid session and
+a distinct code reveals nothing about whether a password is live. And the client
+relies on the distinction: a 401 triggers a refresh only when its code is
+`INVALID_TOKEN` or `NO_TOKEN`, so the code, not the status, is what separates a
+mistyped TOTP code from an expired session.
 
 ---
 
@@ -386,10 +395,17 @@ The length prefix is what makes the padding removable. Trailing zeros alone woul
 be ambiguous with a plaintext that genuinely ends in zeros — there is a test for
 exactly that case. The prefix sits **inside** the encryption, so it leaks nothing.
 
-**This reduces the leak; it does not eliminate it.** A 6-character password and a
-200-character passphrase both land in the first bucket and are indistinguishable.
-But an observer can still tell which of nine buckets an item falls into, which in
-practice mostly distinguishes "has notes" from "doesn't."
+**This reduces the leak; it does not eliminate it.** The unit that is padded is the
+whole entry — `JSON.stringify` of site, username, password, URL and notes — not
+the password, so the password is one of five fields spending from the same
+bucket. For `GitHub`, `you@example.com` and `https://github.com` with no notes, a
+6-character password comes to 108 bytes with its length prefix and a
+100-character passphrase to 202: both land in the 256-byte bucket and are
+indistinguishable. At 155 characters the same entry crosses into 512.
+
+An observer can still tell which of nine buckets an item falls into, which in
+practice mostly distinguishes "has notes" from "doesn't" — 300 bytes of notes
+moves that same entry to 512 on its own.
 
 Eliminating it entirely means padding everything to the largest bucket and paying
 64 KB per item. That was judged not worth it, and the residual leak is documented
@@ -453,9 +469,15 @@ wiping row B's password 25 seconds early. Per-component state cannot coordinate
 access to a resource the whole application shares.
 
 The token refresh case is the same shape with sharper teeth: several requests
-401ing together would each fire their own refresh, each replaying the same token,
-and the application would trip **its own reuse detection** and log itself out. All
-callers now await a single in-flight promise.
+rejected together for an expired access token would each fire their own refresh,
+each replaying the same token, and the application would trip **its own reuse
+detection** and log itself out. All callers now await a single in-flight promise.
+
+What counts as "rejected for an expired token" is the body's code, not the status.
+Only `INVALID_TOKEN` and `NO_TOKEN` trigger a refresh. A 401 for a wrong current
+password or a wrong TOTP code is surfaced unchanged: refreshing cannot fix a
+mistyped credential, and doing it anyway cost a refresh and a repeat of the
+rejected attempt against the same rate-limit bucket.
 
 A related instance appeared later in the generator handoff. `VaultLayout` opened a
 new entry whenever a forged password existed with nothing selected — but nothing
@@ -540,7 +562,9 @@ It rated `Password1!` highly — four character classes, ten characters — and
 `correct horse battery staple` poorly, because lowercase-only means a small
 charset. The formula measures **the alphabet**, not the guessability.
 
-zxcvbn replaced it: dictionary matching against ~30,000 words, keyboard-adjacency
+zxcvbn replaced it — `@zxcvbn-ts`, with its common and English dictionaries both
+loaded: 236,514 entries across 20 lists in the installed 4.1 packages, the largest
+being surnames, common words and leaked passwords — plus keyboard-adjacency
 graphs, date detection, repeat detection, and l33t-speak unmunging, so `P@ssw0rd`
 scores as `password` and `qwertyui` scores as a keyboard walk.
 

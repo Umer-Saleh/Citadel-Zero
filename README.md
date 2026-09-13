@@ -7,6 +7,13 @@ encryption key, or any plaintext vault data.** If the database, the server
 process, and all network traffic were handed to an attacker, they could not read
 a single stored credential.
 
+> **Live demo: [https://citadelzero.site](https://citadelzero.site)**
+>
+> **This is a public demo, not a service. Do not store real credentials there.**
+> **The entire database is deleted every day at 03:00 UTC**, and any vault you
+> create is gone with it. There is no shared account: each visitor provisions a
+> private throwaway vault in their own browser.
+
 React · Node.js · Express · PostgreSQL · Argon2id · AES-256-GCM · Docker
 
 *Citadel for the vault-within-a-vault structure — the data key sealed behind the
@@ -245,9 +252,13 @@ Two details that took getting right:
 Rotation does **not** extend expiry — the new token inherits the original
 `expires_at`. A sliding window would let a stolen family be renewed indefinitely.
 
-On the client, concurrent 401s share a single in-flight refresh promise. Without
-that, several requests would each replay the same token and the app would trip
-its own reuse detection, logging itself out.
+On the client, a 401 triggers a refresh and one retry only when its body says the
+access token is dead — `INVALID_TOKEN` or `NO_TOKEN`, the two codes `requireAuth`
+issues. Concurrent ones share a single in-flight refresh promise. Without that,
+several requests would each replay the same token and the app would trip its own
+reuse detection, logging itself out. Any other 401 — a wrong current password, a
+wrong TOTP code — is shown as it is, with no refresh and no retry, because
+refreshing cannot fix a mistyped credential.
 
 ### Two-factor authentication (TOTP)
 
@@ -261,9 +272,15 @@ The consumed time-step is recorded, and codes at or below it are refused — so 
 code observed over someone's shoulder cannot be replayed inside its 90-second
 validity window.
 
-A bad code returns the **same** `INVALID_CREDENTIALS` as a bad password. A
-distinct error would confirm to an attacker that the password they hold is live,
+At login, a bad code returns the **same** `INVALID_CREDENTIALS` as a bad password.
+A distinct error would confirm to an attacker that the password they hold is live,
 letting them focus effort on exactly the accounts worth attacking.
+
+Confirming enrolment and turning 2FA off are different: a wrong code there returns
+`INVALID_TOTP_CODE`. Both routes already require a valid session, so a distinct
+code reveals nothing about whether a password is live — and the client relies on
+it, because the code, not the 401 status, is what separates a mistyped TOTP code
+from an expired session.
 
 **What 2FA protects here is the API, not the vault.** The vault is sealed under a
 key the server never sees, so a server-side check cannot gate it. What it does
@@ -310,9 +327,10 @@ Server/src/
   crypto/         keys, cipher, envelope, padding, recovery, refreshToken, totp
   repositories/   all SQL lives here, and nowhere else
   services/       business rules; knows nothing about HTTP
-  routes/         zod schemas per endpoint, all .strict()
+  routes/         zod schemas; every body and query schema is .strict()
   middleware/     requireAuth, rate limiting, validation
   errors/         AppError, separating operational failures from bugs
+  auth.js         serverStoreAuth / serverVerifyAuth — Argon2 re-hash of the auth hash
   app.js          wiring only — exports the app, does not listen
   server.js       imports app, calls listen, sweeps expired tokens hourly
 
@@ -332,9 +350,16 @@ Dependencies point one way: routes call services, services call repositories.
 which writes must land together, and a repository that opens its own cannot be
 composed with anything else.
 
-The server imports only `serverStoreAuth` and `serverVerifyAuth` from its crypto
-layer. It has no access to `deriveKeys`, `wrapDEK`, or `decryptItem`. That absence
-is enforced by the module boundary.
+No server code outside `src/crypto/` calls `deriveKeys`, `wrapDEK`, `unwrapDEK`,
+`encryptItem` or `decryptItem`. The services take `serverStoreAuth` and
+`serverVerifyAuth` from `src/auth.js`, and from the crypto layer only what they
+need to flag a KDF upgrade, issue refresh tokens and run TOTP.
+
+That absence is a convention, not an enforced boundary. `src/crypto/index.js`
+re-exports the whole layer — key derivation and the vault cipher included, which
+exist server-side for the tests and the vector generator — so any service is one
+import away from them. It is checked by searching `Server/src` for those names,
+not guaranteed by the module structure.
 
 ---
 
@@ -412,10 +437,14 @@ a threat model.
   whether an account has 2FA enabled. It is rate limited. The alternative — a
   two-step login with a separate pending-2FA token — was judged not worth the
   extra credential type for this project.
-- **Padding reduces the length leak; it does not eliminate it.** A 6-character
-  password and a 200-character passphrase are indistinguishable, but an observer
-  can still tell which of nine size buckets an item falls into — mostly, whether
-  it has notes. Full mitigation means padding everything to the largest bucket
+- **Padding reduces the length leak; it does not eliminate it.** What decides the
+  bucket is the whole entry — site, username, password, URL and notes serialised
+  together, plus a 4-byte length prefix — not the password alone. For an entry of
+  `GitHub`, `you@example.com` and `https://github.com` with no notes, a
+  6-character password and a 100-character passphrase both land in the 256-byte
+  bucket and are indistinguishable; at 155 characters the same entry moves up.
+  An observer can still tell which of nine size buckets an item falls into —
+  mostly, whether it has notes. Full mitigation means padding everything to the largest bucket
   and paying 64 KB per item.
 - **Reused-password detection only sees loaded items,** and only in the browser.
   The server cannot help: two identical passwords encrypt to completely different
@@ -466,13 +495,14 @@ The public demo deployment ([DEPLOY.md](DEPLOY.md)) adds four of its own:
   hardcoded id, which was a stronger property; that pin depended on the shared
   demo account which no longer exists, and what replaces it is ordinary
   ownership scoping — the same guarantee `GET /api/vault` gives, no better.
-- **The CSP keeps two relaxations**, and neither can be removed without
-  rewriting the UI: `'wasm-unsafe-eval'`, because hash-wasm compiles a
+- **The CSP goes beyond `'self'` in three places.** Two cannot be removed
+  without rewriting the UI: `'wasm-unsafe-eval'`, because hash-wasm compiles a
   WebAssembly Argon2id, and `style-src-attr 'unsafe-inline'`, because the
   interface styles itself with React `style={{}}` props, which become inline
   style attributes. Both are the narrow token rather than the broad one — script
-  `eval()` stays blocked, and `style-src-elem` stays strict. Every other fetch
-  directive is `'self'`.
+  `eval()` stays blocked, and `style-src-elem` stays strict. The third is
+  `img-src data:`, because the TOTP QR code is generated in the browser and
+  rendered as a `data:` URI. Every other fetch directive is `'self'`.
 
 ---
 
