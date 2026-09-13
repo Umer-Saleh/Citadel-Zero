@@ -10,7 +10,8 @@ import * as en from '@zxcvbn-ts/language-en';
  * staple" poorly, which is backwards — it measured the alphabet, not
  * the guessability.
  *
- * zxcvbn matches against a ~30k dictionary, keyboard-adjacency graphs,
+ * zxcvbn matches against its common and English dictionaries, loaded
+ * below — about 237k entries across 20 lists — plus keyboard-adjacency graphs,
  * dates, and repeats, and unmunges l33t-speak first. So "P@ssw0rd"
  * scores as "password" and "qwertyui" as a keyboard walk. That covers
  * the same ground a hardcoded list of common passwords would, without

@@ -80,7 +80,14 @@ const build = (prefix, options) => config.rateLimitEnabled
     })
   : noLimit;
 
-/** Auth endpoints trigger Argon2 work, so a cheap request costs real CPU. */
+/**
+ * Credential routes, mounted in app.js. Login, password change, KDF
+ * upgrade, recovery and kit regeneration each run a 64 MiB Argon2
+ * verification, so a cheap request can cost real CPU and memory. The
+ * rest — refresh, kdf-params, recovery-material and the three TOTP
+ * routes — run no Argon2 at all; they share this bucket because they
+ * are guessing or enumeration surfaces.
+ */
 const authLimiter = build('rl:auth:', {
   windowMs,
   max: config.AUTH_RATE_LIMIT_MAX,

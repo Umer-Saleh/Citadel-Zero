@@ -608,8 +608,10 @@ img, svg, video, canvas {
 
   /* The demo banner becomes a column: the warning text gets the full
      width instead of the ~99px left over beside the chip and the
-     dismiss button, which is what made it 231px tall at 320px. Same
-     words, a third of the height. Its height is measured and
+     dismiss button, which is what made it 231px tall at 320px. Its
+     height at 320px after this change is UNMEASURED: this comment said a
+     third of 231px, ThemeToggle.jsx said 179px, and the two cannot both
+     be right. Its height is measured and
      published by the component, so nothing here needs to be mirrored
      in JavaScript. */
   .vk-r-banner {

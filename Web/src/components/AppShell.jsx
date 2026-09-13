@@ -14,8 +14,10 @@ const TABS = [
 /**
  * @param view      which tab is active — 'vault' | 'generator' | 'settings'
  * @param onNavigate(view)
- * @param pixSays   short shout beside the wordmark ('SEALED.', 'GOT IT.')
- *                  Not wired to anything yet; the moments come later.
+ *
+ * PIX's short shout beside the wordmark ('SEALED.', 'GOT IT.') is not a
+ * prop. The shell reads it from usePix() below, which PixContext fills
+ * from the app's moments.
  */
 export function AppShell({ children, view = 'vault', onNavigate }) {
   const { lock, items } = useVault();
@@ -36,10 +38,13 @@ export function AppShell({ children, view = 'vault', onNavigate }) {
         position: 'sticky', top: 'var(--demo-banner-h, 0px)', zIndex: 40,
         background: 'var(--surface)', borderBottom: '1px solid var(--edge)'
       }}>
-        {/* This row needs 986px before anything gives. That is more
-            than a tablet has, so it starts wrapping at 1024 rather
-            than at the mobile breakpoint — the header is the one
-            thing here that breaks above 640. */}
+        {/* This row was recorded as needing 986px before anything
+            gives, without saying whether the vault health readout was
+            showing — and the readout changes the row's width (see the
+            HUD below). Treat 986 as unmeasured for either state. What
+            is certain is the rule: theme.css wraps this row at 1024 and
+            below rather than waiting for the mobile breakpoint, so the
+            header is the one thing here that breaks above 640. */}
         <div className="vk-r-shell-wrap vk-r-pad" style={{
           maxWidth: 1120, margin: '0 auto', padding: '0 24px', height: 64,
           display: 'flex', alignItems: 'center', gap: 32
@@ -163,8 +168,11 @@ export function AppShell({ children, view = 'vault', onNavigate }) {
               Showing it costs nothing between 768 and 1024 — the header
               already stands at 112px and stays there — and one wrapped
               row lower down: measured 165px -> 205px at 375, and
-              165px -> 205px at 320. It fits at 320 with no horizontal
-              overflow at any width.
+              165px -> 205px at 320 (164.8 and 204.8 exactly). Both
+              pairs were taken with no PIX moment showing; PIX's line
+              adds a row to this header while one is live, as described
+              above. It fits at 320 with no horizontal overflow at any
+              width.
 
               THE PAIR IS EMPTY VAULT VERSUS POPULATED, which is what
               makes the two states differ at all: vaultHealth returns

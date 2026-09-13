@@ -190,9 +190,11 @@ function ItemRow({ item, index, onClick, selected }) {
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       // Focus, not hover, is what makes this reachable without a mouse.
-      // focusin/focusout rather than onFocus/onBlur so focus moving
-      // INTO a copy chip still counts as inside the row — React's
-      // onFocus does bubble, but the pair reads as what it is.
+      // onFocusCapture and onBlurCapture: React's capture-phase focus
+      // and blur, which fire for focus landing anywhere inside the row,
+      // copy chips included. The blur side clears only when focus leaves
+      // the row entirely — relatedTarget outside currentTarget — so
+      // moving from the row into a chip does not take the chips away.
       onFocusCapture={() => setFocusWithin(true)}
       onBlurCapture={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget)) setFocusWithin(false);

@@ -45,21 +45,21 @@ function decryptBytes({ ciphertext, nonce, authTag }, key) {
  * Web/src/crypto/cipher.js — because anything larger is a request the
  * server would answer with a 413 at a size where no retry helps.
  *
- * This copy has no such cap and does not need one: its only callers
- * are the seed and demo scripts, which write to the database directly
- * and never cross express.json. So a script COULD write a row larger
- * than any client is able to upload. The row would decrypt perfectly
- * well — unpad reads the length from the prefix and does not care
- * which bucket it came from — and would then be unsavable the moment
- * someone opened it and pressed SAVE.
+ * This copy has no such cap and does not need one. Nothing in the
+ * running server calls it: outside the tests, its only caller is
+ * scripts/generate-vectors.js, which writes test vectors to files and
+ * never touches the database. The seed that once encrypted demo
+ * entries with it is a no-op now, and the demo fixtures live in
+ * Web/src/lib/demoFixtures.js, where they pass through the browser's
+ * cap like any other entry.
  *
- * Left as it is rather than fixed. Nothing in the current fixtures
- * comes near it (the longest demo note is a few hundred bytes), a cap
- * here would be enforcing a client's transport limit inside code that
- * has no transport, and the seed scripts are trusted input. It is
- * written down because it is the one remaining way this system can
- * hold an item it cannot re-save, and someone hunting that symptom
- * should find this comment rather than rediscover it.
+ * So no server path writes an item row at all, and none can write one
+ * larger than a client could upload. If a script that writes items
+ * directly is ever added, it needs the cap too: such a row would
+ * decrypt perfectly well — unpad reads the length from the prefix and
+ * does not care which bucket it came from — and would then be
+ * unsavable the moment someone opened it and pressed SAVE. That is the
+ * symptom to look for, and why this is written down.
  */
 function encryptItem(obj, key) {
   return encryptBytes(Buffer.from(pad(Buffer.from(JSON.stringify(obj), 'utf8'))), key);

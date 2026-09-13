@@ -74,8 +74,9 @@ app.use(helmet());
 // This does NOT make every bucket carryable. bucketFor rounds sizes
 // past 65536 up to multiples of it, and the next one, 131072, would
 // travel as 174,845 bytes — beyond any body limit worth setting. The
-// padder is unbounded and the transport cannot be; bounding the entry
-// before it is padded is a separate piece.
+// padder is unbounded and the transport cannot be, so the entry is
+// bounded before it is padded, in the browser: MAX_ITEM_BYTES in
+// Web/src/crypto/cipher.js, derived from this limit and the buckets.
 // ---------------------------------------------------------------
 app.use(express.json({ limit: '96kb' }));
 

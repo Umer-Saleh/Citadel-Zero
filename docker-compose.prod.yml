@@ -116,8 +116,9 @@ services:
         condition: service_healthy
     # Migrations, then the table grants. The grants come second
     # because they target tables the migrations create, and they are
-    # idempotent so this is safe on every deploy — which is also what
-    # picks up a table added by a later migration.
+    # idempotent so this is safe on every deploy. A new table is NOT
+    # picked up by itself: grant-app-role.sql names each table, so a
+    # migration that adds one must add it there too.
     command: sh -c "npx node-pg-migrate up -m migrations && node scripts/apply-grants.js"
     mem_limit: 256m
 
@@ -143,7 +144,8 @@ services:
       TRUST_PROXY: 1
       REDIS_URL: redis://redis:6379
       # Tighter than the defaults, because this instance is public and
-      # every auth request costs a 64 MiB Argon2 verification.
+      # several routes in the auth bucket cost a 64 MiB Argon2
+      # verification each.
       AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-6}
       API_RATE_LIMIT_MAX: ${API_RATE_LIMIT_MAX:-200}
       # Its own bucket, and measured in ACCOUNTS per window rather than
@@ -222,8 +224,9 @@ services:
     depends_on:
       server:
         condition: service_healthy
-    # A no-op when the account already exists, so this runs on every
-    # deploy without touching a live demo.
+    # A no-op, unconditionally, since the shared demo account was
+    # retired (scripts/seed-demo.js). Kept only so this service still
+    # exits 0; retiring the service is what would let the script go.
     command: node scripts/seed-demo.js
     mem_limit: 256m
 

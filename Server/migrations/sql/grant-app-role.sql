@@ -2,8 +2,11 @@
 --
 -- Applied AFTER migrations, because it grants on tables migrations
 -- create. Re-running it is harmless, so it is applied on every deploy
--- rather than once — which is also what picks up a table added by a
--- later migration.
+-- rather than once, which is how a change to this file reaches an
+-- existing database. It does NOT pick up a new table by itself: the
+-- GRANT below names each table, so a migration that adds one must add
+-- it to that list too. Local development and CI connect as postgres,
+-- so a table left off the list is found first by the deployed instance.
 --
 --   psql -U postgres -d password_manager -f migrations/sql/grant-app-role.sql
 --

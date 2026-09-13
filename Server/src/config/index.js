@@ -53,11 +53,11 @@ const schema = z.object({
   // API serves: two 64 MiB Argon2 hardening operations against a
   // 640 MB container limit.
   //
-  // NOTE ON TUNING: docker-compose.prod.yml passes environment through
-  // an explicit `environment:` map with no `env_file:`, so setting
-  // this in .env.prod does NOT reach the container. The default below
-  // is what production runs until a line is added to that map. See the
-  // commented entry in .env.prod.example.
+  // TUNING: docker-compose.prod.yml has no `env_file:`, so a variable
+  // reaches the container only if its `environment:` map names it. This
+  // one is named, as ${SIGNUP_RATE_LIMIT_MAX:-20}: a value in .env.prod
+  // takes effect, and unset or empty resolves to the same 20 as the
+  // default below. See the commented entry in .env.prod.example.
   SIGNUP_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(20),
 
   // Public-demo mode. Off unless explicitly enabled, so nothing here

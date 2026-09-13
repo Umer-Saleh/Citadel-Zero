@@ -16,14 +16,24 @@ import { ThemeToggle } from '../components/ThemeToggle';
 // This was one shared string, declared once so the two could not drift
 // apart. The intent was sound and it solved the wrong problem: the risk
 // was never drift, it was that the single wording was false for one of
-// the callers. Provisioning spends the SIGNUP bucket and does create a
-// vault; resuming spends the AUTH bucket and creates nothing. Someone
-// who reopened the same tab a few times — or mistyped a password — was
-// told they had created too many vaults, which they had not.
+// the callers. Provisioning signs up and then logs in, so it spends one
+// request from the SIGNUP bucket and one from the AUTH bucket, and
+// creates a vault (lib/provisionDemo.js); resuming spends the AUTH
+// bucket and creates nothing. Someone who reopened the same tab a few
+// times — or mistyped a password — was told they had created too many
+// vaults, which they had not.
 //
 // So they are named for their callers and kept adjacent. That keeps the
 // reviewability the shared constant was reaching for, without asserting
 // something untrue about half the cases.
+//
+// KNOWN MISATTRIBUTION, NOT FIXED HERE. Both limiters answer with the
+// same TOO_MANY_ATTEMPTS body (Server/src/middleware/rateLimit.js), and
+// the provisioning path maps that code to PROVISION_RATE_LIMITED. So when
+// provisioning is refused at its login step by the AUTH bucket, the
+// visitor is still told too many demo vaults were created — although
+// the cause was sign-in attempts, and the signup before it succeeded.
+// Telling the two apart needs the server to distinguish the limits.
 const PROVISION_RATE_LIMITED =
   'Too many demo vaults have been created from this network recently. Wait a few minutes and try again.';
 

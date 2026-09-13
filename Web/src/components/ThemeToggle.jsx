@@ -40,10 +40,12 @@ export function ThemeToggle({ floating = false }) {
       // sections with no shared shell between them.
       //
       // Anchored to --demo-banner-h rather than a constant. DemoBanner
-      // measures itself and publishes its real height there, which is
-      // 179px at 320px wide and 0 on any build without the banner —
-      // so this clears it at every width without knowing anything
-      // about it. A hardcoded offset was the bug that put the banner's
+      // measures itself and publishes its real height there — 0 on any
+      // build without the banner — so this clears it at every width
+      // without knowing anything about it. Its height at 320px is
+      // UNMEASURED: this comment said 179px, theme.css says the column
+      // layout cut 231px to about a third of that, and the two cannot
+      // both be right. A hardcoded offset was the bug that put the banner's
       // own text under the header once already.
       //
       // z-index 50: above the app content (2) and below the banner

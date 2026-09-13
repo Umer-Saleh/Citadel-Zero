@@ -35,8 +35,9 @@ reachable only from inside the compose network.
 
 2 GB / 2 vCPU is the floor, and anything smaller will not work — see
 [capacity](#capacity-and-why-the-rate-limits-are-low). In practice 4 GB is what
-you will end up with: the container limits total roughly 1.5 GB before the host
-and the Docker daemon, and the build peak is higher still, since Vite and the
+you will end up with: the long-running containers' limits total 1,488 MB — 1,744 MB
+while the one-shot `seed` runs beside them during a deploy — before the host and
+the Docker daemon, and the build peak is higher still, since Vite and the
 `argon2` native compile are the hungriest things that ever run on the box. As of
 2026 the cheapest Hetzner shared-vCPU plan (CX23, €5.49/mo) ships 4 GB anyway,
 so the headroom costs nothing. Add swap regardless.
@@ -235,10 +236,47 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
 ```
 
 Migrations run automatically as their own service, and the server waits for them
-to *complete* rather than merely start. The grants re-apply on every deploy,
-which is how a table added by a new migration gets picked up. `seed` does
-nothing at all now — visitors provision their own vaults — but it still runs and
-still exits 0, because compose declares the service.
+to *complete* rather than merely start. The grants re-apply on every deploy, so
+an edit to `grant-app-role.sql` reaches the existing database. That file names
+each table: a migration that adds a table must add it there too, or
+`citadel_app` cannot touch it — and since local development and CI connect as
+`postgres`, this instance is where the omission shows up. `seed` does nothing at
+all now — visitors provision their own vaults — but it still runs and still
+exits 0, because compose declares the service.
+
+### Compose parses the whole file before it does anything
+
+Every `${VAR:?message}` in `docker-compose.prod.yml` is checked each time any
+compose command runs. A reference whose value is missing from `.env.prod` fails
+interpolation, and that failure happens **before the Docker daemon is
+contacted**. Nothing is stopped or restarted: the running containers keep
+serving, and after a host reboot Docker brings the long-running services back by
+itself (`restart: unless-stopped`), so from outside nothing looks wrong.
+
+What breaks is compose. `up`, `ps`, `logs`, `down` — every command on the host
+exits with the interpolation error and does nothing at all. So it surfaces at the
+next deploy, the next look at the logs, or an attempt to stop the stack in an
+incident, and not before.
+
+That makes the order of a deploy matter whenever a push changes which variables
+compose requires:
+
+- **A push that adds a required `:?` variable:** put the value in `.env.prod`
+  *before* running the deploy.
+- **A push that removes one:** deploy *first*, and only then delete the value from
+  `.env.prod`. Deleting it while the running checkout still references it breaks
+  every compose command on the host.
+
+New optional variables use `${VAR:-default}` instead, which resolves whether the
+value is set, empty or absent and so cannot fail interpolation. To check the
+file against `.env.prod` without touching anything:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod config --quiet
+```
+
+Silence and exit 0 means it resolves. A missing value exits 1 and names it —
+`required variable JWT_SECRET is missing a value`.
 
 > **`up -d` on its own NEVER rebuilds anything.** It compares the compose file
 > against what is running and starts whatever is missing or changed — always
@@ -477,8 +515,9 @@ role as the API, needing no elevation.
 
 **It no longer reseeds anything, so a successful wipe ends with an empty
 database.** That is the expected outcome, not a failure. The log says so in
-as many words; if you are reading `logs wipe` in the morning, "0 accounts" is
-what a healthy night looks like. The next visitor to click "Start a demo vault"
+as many words. If you are reading `logs wipe` in the morning, a healthy night
+reads `deleted N of N accounts; vault_items now 0, refresh_tokens now 0` — N is
+however many vaults visitors created, and 0 of 0 on a quiet night. The next visitor to click "Start a demo vault"
 creates one.
 
 The scheduler is a shell loop rather than crond, because BusyBox crond wants to
@@ -487,9 +526,12 @@ its target from the real clock on every cycle, so a restart lands on the next
 slot rather than drifting, and a long wipe does not push the following night
 later.
 
-`WIPE_ON_START=true` runs a wipe immediately at container start. Off by default,
-deliberately: a redeploy should not destroy the instance's data as a side
-effect. Useful for catching up a missed night, or for testing.
+`ops/wipe/run.sh` also honours `WIPE_ON_START=true`, which runs a wipe
+immediately at container start. Off by default, deliberately: a redeploy should
+not destroy the instance's data as a side effect. **It cannot be switched on from
+`.env.prod`:** the `wipe` service's `environment:` map does not name it and the
+compose file has no `env_file:`, so a value there never reaches the container. To
+catch up a missed night or to test, use the manual run below.
 
 Run it by hand:
 
@@ -544,11 +586,12 @@ you investigate:
 docker compose -f docker-compose.prod.yml --env-file .env.prod stop wipe
 ```
 
-**If the cascade assertion fires** (`cascade left rows behind`), a migration
-added a table with a foreign key to `users` that lacks `ON DELETE CASCADE`. The
-wipe deliberately refuses to continue rather than leave one user's rows on a
-machine that advertises nightly deletion. Find the offender — `confdeltype`
-should be `c` on every one of these:
+**If the wipe fails with a foreign-key violation** (`[wipe] failed: update or
+delete on table "users" violates foreign key constraint …`), a migration added a
+table with a foreign key to `users` that lacks `ON DELETE CASCADE`. Such a key
+defaults to `NO ACTION`, so the `DELETE` is refused outright and **nothing is
+deleted that night** — every account survives. Find the offender —
+`confdeltype` should be `c` on every one of these:
 
 ```bash
 docker compose -f docker-compose.prod.yml --env-file .env.prod \
@@ -559,6 +602,12 @@ WHERE confrelid = 'users'::regclass AND contype = 'f';"
 ```
 
 Then fix the migration, not production.
+
+The script's own assertion, `cascade left rows behind — check foreign keys on new
+tables`, is not what reports this case, whatever its wording suggests. It counts
+only `vault_items` and `refresh_tokens` after the delete, both of which cascade
+with `user_id NOT NULL`, so no foreign-key change on those tables leaves rows
+behind without raising first. It is a backstop, not the detector.
 
 ---
 
@@ -633,8 +682,9 @@ rejected request rather than a slow one.
 Stated plainly, because a runbook that implies everything is covered is worse
 than one that does not.
 
-- **Rate limits are per IP.** Redis makes the counters survive restarts and
-  shared across instances; it does not help against a distributed source. Anyone
+- **Rate limits are per IP.** Redis keeps the counters across API restarts and
+  shares them across instances — not across a Redis restart, since it runs
+  without persistence — and it does not help against a distributed source. Anyone
   with a proxy pool gets a multiple of the budget.
 - **`/api/user/kdf-params` is an account-enumeration oracle.** It is rate
   limited, not fixed. See the README.
@@ -659,8 +709,10 @@ than one that does not.
 - **The CSP allows a WebAssembly compile and inline style attributes.**
   `'wasm-unsafe-eval'` is what lets hash-wasm derive an Argon2id key at all, and
   `style-src-attr 'unsafe-inline'` is what lets React's `style={{}}` props
-  render. Both are the narrow token; every other fetch directive is `'self'`,
-  and the page loads nothing from a third-party origin.
+  render. Both are the narrow token. Images also allow `data:`, because the TOTP
+  QR code is generated in the browser and rendered as a `data:` URI. Every other
+  fetch directive is `'self'`, and the page loads nothing from a third-party
+  origin.
 - **HSTS is sent without `preload`.** Adding it commits the domain to a
   browser-baked list that is slow to leave. Add it only when you are sure every
   present and future subdomain will be HTTPS.

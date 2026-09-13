@@ -78,10 +78,16 @@ async function wipe() {
     );
 
     if (items.rows[0].n !== 0 || tokens.rows[0].n !== 0) {
-      // The cascade is the whole basis for using DELETE. If it ever
-      // stops holding — a new table added without ON DELETE CASCADE —
-      // fail loudly rather than leaving one user's rows behind on a
-      // machine that told everyone it wipes itself.
+      // The cascade is the whole basis for using DELETE, and this checks
+      // it held for the two tables counted above — not totp_backup_codes,
+      // and not any table added later. It is a backstop, not the
+      // detector for a missing cascade, and the message below points the
+      // wrong way. A NEW table whose foreign key to users lacks
+      // ON DELETE CASCADE never reaches this line: the key defaults to
+      // NO ACTION, so the DELETE above fails with a foreign-key violation,
+      // deletes nothing, and the run ends in `[wipe] failed:`. And with
+      // user_id NOT NULL on both counted tables, even ON DELETE SET NULL
+      // would raise rather than leave rows behind.
       throw new Error('cascade left rows behind — check foreign keys on new tables');
     }
   } finally {

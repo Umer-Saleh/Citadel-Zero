@@ -455,9 +455,11 @@ a threat model.
 - **JavaScript cannot guarantee memory erasure.** `dek.fill(0)` is best effort;
   the runtime may have copied the buffer already.
 - **Rate limiting is per IP.** The store is Redis when `REDIS_URL` is set and an
-  in-process Map otherwise, so counters now survive a restart in deployment —
-  but keying on the address is the real limit. Anyone with a proxy pool or a
-  /64 of IPv6 gets a multiple of the budget, and no store fixes that.
+  in-process Map otherwise, so in deployment counters survive an API restart —
+  though not a Redis restart, since Redis runs without persistence. But keying
+  on the address is the real limit. Anyone with a proxy pool gets a multiple of
+  the budget. IPv6 addresses are grouped by /56, so a single /64 or /56 shares
+  one bucket, but a /48 holds 256 of them. No store fixes that.
 - **A weak master password weakens everything.** Argon2id makes guessing
   expensive; it cannot rescue a password from a wordlist.
 - **A compromised client device is out of scope.** A keylogger sees plaintext at
@@ -601,7 +603,9 @@ times:
   itself, which is what local development does.
 - `migrations/sql/grant-app-role.sql` runs **after migrations**, because it
   grants on tables migrations create. It is idempotent and applied on every
-  deploy, so a table added by a later migration is picked up. It skips silently
+  deploy, so a change to it reaches existing databases. It names each table,
+  so a migration that adds one must add it to this file too — nothing adds it
+  automatically, and local development never uses the role. It skips silently
   when the role does not exist.
 
 They were one file, and that file was mounted into `/docker-entrypoint-initdb.d`

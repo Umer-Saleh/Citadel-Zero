@@ -36,10 +36,12 @@ COPY --chown=node:node package*.json ./
 COPY --chown=node:node src ./src
 COPY --chown=node:node migrations ./migrations
 
-# Operational one-shots: the demo seed and the nightly wipe. They ride
-# in the same image because they need the same crypto and the same
-# native argon2 build — but neither is reachable from the running
-# server, which only ever executes src/server.js.
+# Operational scripts. Compose runs three of them from this image: the
+# grant step after migrations, the nightly wipe, and the no-op seed.
+# They need this image's node_modules — pg — not the crypto layer or
+# argon2. The rest are development tools that ride along. None is
+# reachable from the running server, which only ever executes
+# src/server.js.
 COPY --chown=node:node scripts ./scripts
 
 ENV NODE_ENV=production

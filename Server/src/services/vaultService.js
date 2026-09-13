@@ -10,28 +10,32 @@ const { AppError } = require('../errors/AppError');
  * 96 KB body limit puts the real ceiling at 98,223 base64 characters,
  * about 72 KB of ciphertext. Measured, that stores 1:1 on disk: TOAST
  * cannot compress high-entropy base64 and gives up, so 2,000 max-size
- * items occupy 196 MB. With apiLimiter at 300 requests per 15 minutes,
- * one address can write 28,800 items — 2.8 GB — in a day, and roughly
- * fourteen addresses working in parallel fill a 40 GB disk before the
- * nightly wipe comes round.
+ * items occupy 196 MB. With apiLimiter at its code default of 300
+ * requests per 15 minutes, one address can write 28,800 items — 2.8 GB —
+ * in a day, and roughly fourteen addresses working in parallel fill a
+ * 40 GB disk. Production, which is where the nightly wipe runs, sets
+ * apiLimiter to 200 (docker-compose.prod.yml): 19,200 items, 1.9 GB a
+ * day, and about twenty-one addresses before the wipe comes round.
  *
  * EVERY FIGURE ABOVE MOVED when the body limit went from 64 KB to
  * 96 KB, because every one of them is that limit multiplied by
- * something. They are 1.33x what they were: the ceiling was 65,455
- * characters, 2,000 items were 130 MB, a day was 1.8 GB, and it took
- * about twenty addresses to fill the disk instead of fourteen. The
- * limit moved so that a padded item in the largest bucket could
- * actually be sent — see the comment on express.json in app.js. This
- * arithmetic is the price that was paid for it, and it is worth
- * recomputing rather than deleting, because the disk is what runs out
- * first and fourteen addresses is a materially easier bar than twenty.
+ * something. They are 1.5x what they were — 98,223 / 65,455. At the
+ * code default of 300: the ceiling was 65,455 characters, 2,000 items
+ * were 131 MB, a day was 1.9 GB, and it took about twenty-one addresses
+ * to fill the disk instead of fourteen. The limit moved so that a
+ * padded item in the largest bucket could actually be sent — see the
+ * comment on express.json in app.js. This arithmetic is the price that
+ * was paid for it, and it is worth recomputing rather than deleting,
+ * because the disk is what runs out first and fourteen addresses is a
+ * materially easier bar than twenty-one.
  *
  * WHY 1,000
  * ---------
- * The seeded demo holds five. Real password-manager users cluster
- * around 60-120 credentials; a heavy user with a decade of accounts
- * reaches 300-500. So this is roughly 8x the plausible heavy user and
- * 200x the demo — generous enough that reaching it accidentally would
+ * A provisioned demo vault holds five (Web/src/lib/demoFixtures.js).
+ * Real password-manager users cluster around 60-120 credentials; a
+ * heavy user with a decade of accounts reaches 300-500. So this is
+ * roughly 8x the top of the typical range, 2-3x the heavy user, and
+ * 200x a demo vault — generous enough that reaching it accidentally would
  * itself be a bug report, which is the test a limit like this has to
  * pass.
  *
@@ -44,8 +48,8 @@ const { AppError } = require('../errors/AppError');
  * a larger body changes is how many bytes each of the 1,000 items may
  * hold, not how many items a real person keeps — the 60-120 credentials
  * and the 300-500 heavy user are the same people they were. So 1,000
- * still sits at roughly 8x the plausible heavy user; only the byte
- * figure it multiplies out to went from 64 MB to 98 MB.
+ * still sits at roughly 2-3x the heavy user; only the byte figure it
+ * multiplies out to went from 65 MB to 98 MB.
  *
  * Below about 200 this would be a defect — real people would hit it.
  * Above about 5,000 it stops bounding anything useful, since the

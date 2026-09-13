@@ -70,9 +70,10 @@
 	handle {
 		# CSP for the application, derived from what this frontend
 		# actually does rather than copied from a template. Every
-		# fetch directive is 'self'; the only two relaxations are a
-		# WebAssembly compile and inline style attributes, and both
-		# are the narrow token rather than the broad one:
+		# fetch directive is 'self', with three allowances beyond it:
+		# a WebAssembly compile and inline style attributes, both the
+		# narrow token rather than the broad one, and data: images for
+		# the TOTP QR code:
 		#
 		#   'wasm-unsafe-eval'  hash-wasm compiles a WebAssembly
 		#                       Argon2id. Without it the unlock screen

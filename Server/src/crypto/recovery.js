@@ -20,8 +20,9 @@ function generateRecoveryKey() {
   }
 
   // 128 bits does not divide evenly into 5-bit base32 characters.
-  // Pad to 130 so we get exactly 26 characters — a clean 6+6+6+4
-  // grouping with no stray single character to mistype.
+  // Pad to 130 so we get exactly 26 characters. Grouped in fours below,
+  // that is six groups of four and a final group of two — no stray
+  // single character to mistype.
   bits = bits.padEnd(130, '0');
 
   let out = '';
