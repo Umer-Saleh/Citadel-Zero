@@ -648,9 +648,13 @@ error could not be seen.
 
 ## 15. What I would do differently
 
-**Rate limiting is in-memory.** Counters reset on restart and are not shared
-across instances. Two containers means two independent limits. Redis is the
-answer, and it was scoped out.
+**Rate limiting still keys on the address.** The counters did move out of the
+process: when `REDIS_URL` is set they live in Redis, and production sets it, so
+they are shared across instances and survive an API restart — though not a Redis
+restart, because Redis runs with no persistence. Local development keeps the
+in-process store. What no store fixes is keying on the IP: anyone with a proxy
+pool gets a multiple of every budget. Per-visitor quotas are the next step, and
+they are not built.
 
 **The client crypto is not audited.** Argon2id via `hash-wasm` in a browser is
 slower and more variable than native code, and 128 MiB is a lot to allocate on a
@@ -663,13 +667,21 @@ with a separate pending-2FA token — a whole extra credential type, judged not
 worth it here, but it is a real weakness and it is rate limited rather than
 solved.
 
-**The least-privilege database role is documented but not the default.** Wiring it
-into the container setup requires splitting role creation from the grants, since
-init scripts run before the tables exist. The SQL is there; compose still connects
-as `postgres`.
+**The least-privilege database role is exercised only in production.** There the
+API, the seed and the wipe connect as `citadel_app`, created at database
+initialisation and granted its table privileges after migrations. Splitting
+creation from the grants is what it took, because init scripts run before the
+tables exist. But local compose and CI both connect as `postgres`, so nothing
+outside production uses the role. A privilege the application needs and the role
+lacks — a new table missing from the grant list, say — would be found first by
+the deployed instance.
 
-**No responsive layout.** Documented rather than hidden, but on a portfolio piece
-that someone may open on a phone, it is the most visible gap.
+**Responsive layout came last.** The interface was designed at desktop width and
+made responsive afterwards, with breakpoints at 1024px and 640px, and checked at
+320, 375 and 1440px. Retrofitting it is how the vault health readout spent a while
+hidden on every tablet and phone, on the assumption that the same number was
+shown elsewhere — it was not. Designing the narrow layout first would have made
+choices like that deliberate rather than something found later.
 
 **No email confirmation on recovery.** The endpoint cannot be authenticated, so
 the only real defence against the denial-of-service case is confirming out of

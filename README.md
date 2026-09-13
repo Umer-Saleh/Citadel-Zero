@@ -511,8 +511,15 @@ The public demo deployment ([DEPLOY.md](DEPLOY.md)) adds four of its own:
 > **This is an educational implementation.** It has not been independently
 > audited and is not intended to store real credentials.
 
-> **Desktop only.** The interface is built for a desktop viewport and has no
-> responsive layout. It will not lay out correctly on a phone.
+> **Desktop first, and responsive.** The interface was designed at desktop width
+> and made responsive afterwards, with two breakpoints. At 1024px and below, the
+> header wraps and navigation moves to its own line of 44px-tall tabs. At 640px
+> and below, the vault list and the entry panel collapse into one column,
+> fixed-width cards shrink to the screen, controls get 44×44px touch targets, and
+> the header wordmark drops from 12px to 10px. Layout is checked at 320, 375 and
+> 1440px wide — the widths
+> [docs/wordmark-measurement.md](docs/wordmark-measurement.md) measures — with no
+> horizontal overflow at any of them. 320px is the narrowest width checked.
 
 ---
 
@@ -611,8 +618,8 @@ needing a privilege that would also let it empty a table by accident.
 ## Testing
 
 ```bash
-cd Server && npm test    # 159 tests
-cd Web && npm test       # 208 tests
+cd Server && npm test
+cd Web && npm test
 ```
 
 CI runs both on every push, against a real Postgres service container, and builds
@@ -701,7 +708,6 @@ machine-readable codes (`EMAIL_TAKEN`, `INVALID_CREDENTIALS`,
 
 ## Not yet implemented
 
-- Responsive layout for mobile
 - Structured logging and an audit trail
 - Email confirmation on the recovery endpoint
 
