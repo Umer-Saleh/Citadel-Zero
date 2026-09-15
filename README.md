@@ -105,8 +105,10 @@ nonce is generated for every encryption, including every update.
 **Server-side re-hashing.** The client's auth hash is hashed again with Argon2id
 before storage. Without this, a stolen `auth_hash` column would be
 password-equivalent — an attacker could replay a stored value directly to the
-login endpoint. The server-side cost is deliberately lower than the client-side
-cost: its input is already a 256-bit uniformly random value, not a guessable
+login endpoint. The server re-hashes with the argon2 library's defaults
+(`m = 64 MiB, t = 3, p = 4`) rather than the client's tuned parameters. That is
+half the client's memory, though a higher time cost. Neither needs to match the
+client: the input is already a 256-bit uniformly random value, not a guessable
 password, so there is nothing brute-forceable to defend against.
 
 **Fixed-size padding.** Vault items are padded into power-of-two buckets from 256
@@ -136,9 +138,10 @@ without locking existing users out — the client always derives with the
 parameters that account was registered under.
 
 Login reports whether an account's parameters are below current defaults. If they
-are, the client — which holds the master password at that moment, the only time
-it legitimately can — re-derives the KEK under stronger parameters and re-wraps
-the same DEK. No vault operation is involved.
+are, Settings shows an upgrade banner. The upgrade is not automatic: the user
+enters the master password again, because the client needs it to re-derive and
+does not keep it after unlock. The client then re-derives the KEK under stronger
+parameters and re-wraps the same DEK. No vault operation is involved.
 
 Because the server supplies those parameters, the client does not take them on
 trust. Before deriving anything from a server-supplied value — at login, and
@@ -568,7 +571,9 @@ The public demo deployment ([DEPLOY.md](DEPLOY.md)) adds five of its own:
   style attributes. Both are the narrow token rather than the broad one — script
   `eval()` stays blocked, and `style-src-elem` stays strict. The third is
   `img-src data:`, because the TOTP QR code is generated in the browser and
-  rendered as a `data:` URI. Every other fetch directive is `'self'`.
+  rendered as a `data:` URI. The remaining source directives are `'self'`, and
+  `object-src`, `base-uri` and `frame-ancestors` are `'none'`. The policy is
+  set by Caddy in the demo deployment; the local nginx setup sends no CSP.
 
 ---
 
