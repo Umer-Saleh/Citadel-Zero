@@ -45,11 +45,13 @@ async function deriveKeys(masterPassword, salt, params = DEFAULT_KDF_PARAMS) {
 /**
  * Does this account's KDF configuration fall short of current policy?
  *
- * Compared on EVERY axis independently rather than as a combined cost
- * score. A proposal that raises memory while lowering time might look
- * equivalent on a single number but be a net weakening, so any drop on
- * any dimension counts as needing an upgrade — and, at the upgrade
- * endpoint, as grounds to refuse.
+ * Memory (m) and time (t) are compared independently rather than as a
+ * combined cost score. A proposal that raises memory while lowering
+ * time might look equivalent on a single number but be a net
+ * weakening, so a drop on either counts as needing an upgrade — and,
+ * at the routes that rewrite parameters, as grounds to refuse.
+ * Parallelism (p) is not compared: the default is also the lowest
+ * value the schema accepts.
  *
  * This lives server-side only. The browser has no equivalent: a client
  * must never be the one deciding what counts as strong enough.

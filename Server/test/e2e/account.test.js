@@ -588,10 +588,14 @@ test('regenerating does not touch vault ciphertext', async () => {
     .get('/api/vault')
     .set('Authorization', `Bearer ${login.body.token}`);
 
-  await request(app)
+  const regen = await request(app)
     .post('/api/account/recovery-kit')
     .set('Authorization', `Bearer ${login.body.token}`)
     .send(buildKitRegeneration(dek, payload.authHash).payload);
+
+  // Same guard as the password-change test: a rejected rotation writes
+  // nothing and would pass the comparison below vacuously.
+  assert.strictEqual(regen.status, 200, 'the kit rotation did not happen');
 
   const after = await request(app)
     .get('/api/vault')

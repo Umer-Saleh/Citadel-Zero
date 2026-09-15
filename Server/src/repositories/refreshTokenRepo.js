@@ -78,7 +78,7 @@ async function revokeAllForUser(userId, client) {
   return rows.length;
 }
 
-/** Housekeeping. Nothing calls this yet — see the note below. */
+/** Housekeeping. Called hourly by the sweep in server.js. */
 async function deleteExpired(client) {
   const { rows } = await q(client).query(
     `DELETE FROM refresh_tokens

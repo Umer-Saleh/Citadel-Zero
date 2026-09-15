@@ -127,10 +127,14 @@ test('vault ciphertext is unchanged by an upgrade', async () => {
     .get('/api/vault')
     .set('Authorization', `Bearer ${login.body.token}`);
 
-  await request(app)
+  const upgrade = await request(app)
     .post('/api/account/kdf-upgrade')
     .set('Authorization', `Bearer ${login.body.token}`)
     .send(await buildUpgrade(dek, payload.authHash, STRONGER));
+
+  // Without this the test passes on a REJECTED upgrade too: nothing was
+  // written, so of course the ciphertext is unchanged.
+  assert.strictEqual(upgrade.status, 200, 'the upgrade did not happen');
 
   const after = await request(app)
     .get('/api/vault')
