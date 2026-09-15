@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'vitest';
 import vectors from './vectors/crypto-vectors.json';
-import { deriveKeys, generateSalt } from './keys';
+import { deriveKeys, generateSalt, assertKdfParams, MIN_KDF_PARAMS, DEFAULT_KDF_PARAMS } from './keys';
 import { fromHex, toHex } from './bytes';
 
 describe('key derivation matches the Node implementation', () => {
@@ -28,5 +28,31 @@ describe('key derivation matches the Node implementation', () => {
 
     expect(a.length).toBe(16);
     expect(toHex(a)).not.toBe(toHex(b));
+  });
+});
+
+describe('server-supplied KDF parameters have a floor', () => {
+  test('the floor matches the server schema floor', () => {
+    expect(MIN_KDF_PARAMS).toEqual({ m: 19456, t: 2, p: 1 });
+  });
+
+  test('defaults and the floor itself are accepted', () => {
+    expect(assertKdfParams(DEFAULT_KDF_PARAMS)).toBe(DEFAULT_KDF_PARAMS);
+    expect(() => assertKdfParams({ ...MIN_KDF_PARAMS })).not.toThrow();
+  });
+
+  test.each([
+    ['memory below the floor', { m: 8, t: 2, p: 1 }],
+    ['time below the floor', { m: 131072, t: 1, p: 1 }],
+    ['zero parallelism', { m: 131072, t: 2, p: 0 }],
+    ['parallelism above the schema maximum', { m: 131072, t: 2, p: 5 }],
+    ['non-integer memory', { m: 19456.5, t: 2, p: 1 }],
+    ['a string where a number belongs', { m: '131072', t: 2, p: 1 }],
+    ['missing fields', { m: 131072 }],
+    ['nothing at all', undefined]
+  ])('%s is refused with UNSAFE_KDF_PARAMS', (_, params) => {
+    expect(() => assertKdfParams(params)).toThrow(
+      expect.objectContaining({ code: 'UNSAFE_KDF_PARAMS' })
+    );
   });
 });

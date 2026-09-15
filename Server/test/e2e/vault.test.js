@@ -137,6 +137,27 @@ test('a forged token is rejected', async () => {
   assert.strictEqual(res.status, 401);
 });
 
+test('a real token with an edited payload is rejected', async () => {
+  // Not a garbage string: a genuine token for Alice, with its payload
+  // rewritten to claim Bob's id and the original signature kept. The
+  // payload is readable by anyone; only the signature protects it.
+  const alice = await createUserAndLogin('alice@example.com');
+  await createUserAndLogin('bob@example.com');
+  const { query } = require('../../src/db');
+  const bobId = (await query('SELECT id FROM users WHERE email = $1', ['bob@example.com'])).rows[0].id;
+
+  const [header, payload, signature] = alice.token.split('.');
+  const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+  const forged = [header, Buffer.from(JSON.stringify({ ...claims, sub: bobId })).toString('base64url'), signature].join('.');
+
+  const res = await request(app)
+    .get('/api/vault')
+    .set('Authorization', `Bearer ${forged}`);
+
+  assert.strictEqual(res.status, 401);
+  assert.strictEqual(res.body.error, 'INVALID_TOKEN');
+});
+
 test('user A cannot read user B items', async () => {
   const alice = await createUserAndLogin('alice@example.com');
   const bob = await createUserAndLogin('bob@example.com');

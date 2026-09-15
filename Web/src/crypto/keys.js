@@ -3,6 +3,43 @@ import { utf8 } from './bytes';
 
 export const DEFAULT_KDF_PARAMS = { m: 131072, t: 2, p: 1 };
 
+/**
+ * The weakest parameters this client will derive under: the OWASP
+ * floor, the same values the server's signup schema enforces
+ * (Server/src/routes/schemas.js, kdfParams).
+ *
+ * The server tells the client which parameters an account uses, and
+ * the client used to derive with whatever came back. A malicious or
+ * compromised server could answer m=8, t=1 and receive an auth hash
+ * cheap enough to brute-force offline — the password, in effect. No
+ * legitimate account is below this, because the server never stored
+ * one that was.
+ */
+export const MIN_KDF_PARAMS = { m: 19456, t: 2, p: 1 };
+const MAX_PARALLELISM = 4;
+
+/**
+ * Refuse server-supplied KDF parameters below the floor.
+ *
+ * Called on every value that arrived over the network, before any
+ * derivation. Throws a coded error rather than deriving: sending an
+ * auth hash computed under weak parameters is the leak.
+ */
+export function assertKdfParams(params) {
+  const ok = params
+    && Number.isInteger(params.m) && params.m >= MIN_KDF_PARAMS.m
+    && Number.isInteger(params.t) && params.t >= MIN_KDF_PARAMS.t
+    && Number.isInteger(params.p) && params.p >= MIN_KDF_PARAMS.p
+    && params.p <= MAX_PARALLELISM;
+
+  if (!ok) {
+    const err = new Error('server supplied KDF parameters below the minimum this client accepts');
+    err.code = 'UNSAFE_KDF_PARAMS';
+    throw err;
+  }
+  return params;
+}
+
 const KEY_LENGTH = 32;
 const SALT_LENGTH = 16;
 

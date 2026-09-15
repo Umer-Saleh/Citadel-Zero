@@ -7,3 +7,10 @@ dist/
 coverage/
 # Production environment — secrets, never committed.
 .env.prod
+
+# Python bytecode from stray local scripts. Nothing in this repo is Python.
+__pycache__/
+*.pyc
+
+# Local screenshots, not part of the build or the docs.
+shots/

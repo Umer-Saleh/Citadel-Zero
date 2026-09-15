@@ -164,7 +164,10 @@ const SHARED = {
 
   // --- account -------------------------------------------------------
   EMAIL_TAKEN: 'An account with this email already exists.',
-  WEAK_KDF_PARAMS: 'The server refused those key-derivation parameters as too weak.'
+  WEAK_KDF_PARAMS: 'The server refused those key-derivation parameters as too weak.',
+  // Raised by this client, not the server: the server asked it to
+  // derive under parameters below the floor, and it refused.
+  UNSAFE_KDF_PARAMS: 'The server asked for unsafe key-derivation settings, so your password was not sent.'
 };
 
 /**

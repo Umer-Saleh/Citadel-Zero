@@ -1,7 +1,7 @@
 import {
   deriveKeys, generateSalt, generateDEK, wrapDEK, unwrapDEK,
   generateRecoveryKey, deriveRecoveryKek, deriveRecoveryAuthHash,
-  DEFAULT_KDF_PARAMS, toBase64, fromBase64
+  DEFAULT_KDF_PARAMS, assertKdfParams, toBase64, fromBase64
 } from '../crypto';
 import { api, setToken, setRefreshToken, getRefreshToken, clearToken } from './client';
 
@@ -118,7 +118,8 @@ export async function login(email, password, totpCode, knownKdf) {
     }
 
     salt = fromBase64(kdfSalt);
-    kdfParams = storedParams;
+    // Server-supplied, so checked before deriving: see assertKdfParams.
+    kdfParams = assertKdfParams(storedParams);
   }
 
   const { authHash, kek } = await deriveKeys(password, salt, kdfParams);
@@ -167,7 +168,7 @@ export async function changePassword(email, currentPassword, newPassword, dek) {
     `/api/user/kdf-params?email=${encodeURIComponent(email)}`
   );
   const { authHash: currentAuthHash } = await deriveKeys(
-    currentPassword, fromBase64(curSaltB64), curParams
+    currentPassword, fromBase64(curSaltB64), assertKdfParams(curParams)
   );
 
   // Derive brand-new material from the new password.
@@ -196,7 +197,7 @@ export async function upgradeKdf(email, password, dek) {
     `/api/user/kdf-params?email=${encodeURIComponent(email)}`
   );
   const { authHash: currentAuthHash } = await deriveKeys(
-    password, fromBase64(curSaltB64), curParams
+    password, fromBase64(curSaltB64), assertKdfParams(curParams)
   );
 
   const newSalt = generateSalt();
@@ -335,7 +336,7 @@ export async function regenerateRecoveryKit(email, password, dek) {
     `/api/user/kdf-params?email=${encodeURIComponent(email)}`
   );
   const { authHash: currentAuthHash } = await deriveKeys(
-    password, fromBase64(kdfSalt), kdfParams
+    password, fromBase64(kdfSalt), assertKdfParams(kdfParams)
   );
 
   const newRecoveryKey = generateRecoveryKey();

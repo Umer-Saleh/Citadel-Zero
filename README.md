@@ -140,6 +140,16 @@ are, the client — which holds the master password at that moment, the only tim
 it legitimately can — re-derives the KEK under stronger parameters and re-wraps
 the same DEK. No vault operation is involved.
 
+Because the server supplies those parameters, the client does not take them on
+trust. Before deriving anything from a server-supplied value — at login, and
+before password change, KDF upgrade and kit regeneration — it refuses
+parameters below the OWASP floor the server's own schema enforces (`m=19456`,
+`t=2`, `1 ≤ p ≤ 4`) and sends nothing. Otherwise a malicious server could
+answer `m=8, t=1` and receive an auth hash cheap enough to brute-force offline.
+The floor is the floor, not the default: a hostile server can still ask for
+19 MiB instead of 128 MiB, and nothing here stops it serving different
+JavaScript in the first place (see [Accepted limitations](#accepted-limitations)).
+
 The three routes that rewrite an existing account's parameters — KDF upgrade,
 password change and recovery — refuse a proposal whose memory cost `m` or time
 cost `t` is below the current default, and they check only after the caller has
@@ -346,22 +356,25 @@ server necessarily holds in plaintext.
 Server/src/
   config/         env validated with zod at startup; exits on invalid
   crypto/         keys, cipher, envelope, padding, recovery, refreshToken, totp
-  repositories/   all SQL lives here, and nowhere else
+  repositories/   all application SQL lives here (db.js issues only BEGIN/COMMIT/ROLLBACK)
   services/       business rules; knows nothing about HTTP
-  routes/         zod schemas; every body and query schema is .strict()
+  routes/         schemas.js only — zod schemas; every body and query schema is .strict()
   middleware/     requireAuth, rate limiting, validation
   errors/         AppError, separating operational failures from bugs
   auth.js         serverStoreAuth / serverVerifyAuth — Argon2 re-hash of the auth hash
-  app.js          wiring only — exports the app, does not listen
+  db.js           connection pool and withTransaction
+  app.js          middleware, every route handler, error handler; exports the app, does not listen
   server.js       imports app, calls listen, sweeps expired tokens hourly
 
 Web/src/
   crypto/         the browser port, byte-verified against Node vectors
   api/            fetch wrapper with transparent token refresh
   context/        vault (holds the DEK), theme, mascot reactions
-  lib/            strength, policy, clipboard, health
+  lib/            strength, policy, clipboard, health, errors, email, appPaths,
+                  demo, demoFixtures, provisionDemo
   components/     shared UI primitives and the pixel icon set
-  screens/        signup, recovery kit, unlock, recover, vault, generator, settings
+  screens/        signup, recovery kit, unlock, recover, vault, vault layout,
+                  item detail, generator, settings, locked, not found
 ```
 
 Dependencies point one way: routes call services, services call repositories.
@@ -388,25 +401,25 @@ not guaranteed by the module structure.
 
 | Adversary | Capability | Why it fails |
 |---|---|---|
-| Database theft | Full dump of every table | No key exists in any column. Vault rows are AES-GCM ciphertext; both DEK wrappers require a secret the server never holds; `auth_hash` is a hash of a hash; refresh tokens and backup codes are stored as SHA-256. |
-| Malicious server operator | Reads the database, logs all traffic | The server never possesses the master password, master key, KEK, or DEK at any point. |
-| Network interception | Reads all traffic | TLS in transit; and a full TLS break exposes only the auth hash and ciphertext, neither of which decrypts anything. |
+| Database theft | Full dump of every table | No column holds a key that decrypts anything. Vault rows are AES-GCM ciphertext; both DEK wrappers require a secret the server never holds; `auth_hash` is a hash of a hash; refresh tokens and backup codes are stored as SHA-256. The exception is `totp_secret`, stored in plaintext because TOTP is symmetric — a thief can generate 2FA codes, but a code opens no vault. |
+| Passive server operator | Reads the database, logs all traffic | The server code as shipped never receives the master password, master key, KEK, or DEK. The client refuses KDF parameters below the OWASP floor, so the server cannot ask for a cheaply crackable auth hash. This does **not** hold against an operator who changes the code the server delivers — see Accepted limitations. |
+| Passive network interception | Reads all traffic | TLS in transit; and traffic read after a TLS break exposes only the auth hash and ciphertext, neither of which decrypts anything. An attacker who can break TLS *and modify* traffic can inject JavaScript, which is the malicious-server case. |
 | Offline brute force | Unlimited guesses against a stolen dump | Each guess costs a 128 MiB Argon2id derivation, then a second Argon2id verification. Memory-hardness blocks GPU parallelism. |
 | Rainbow tables | Precomputed hash lookups | Unique random 16-byte salt per user. |
 | Credential replay | Sends a stored `auth_hash` to the login endpoint | Server-side re-hashing means the stored value is not the value the endpoint accepts. |
 | Refresh token theft | Steals a refresh token and uses it | Rotation makes each token single-use. When the real user next refreshes, the server sees a spent token, cannot tell which party is legitimate, and revokes the whole family. |
-| Session persistence after compromise | Wants access to survive a password change | Password change and recovery revoke every session for that user, in the same transaction as the credential write. |
+| Session persistence after compromise | Wants access to survive a password change | Password change and recovery revoke every refresh token for that user, in the same transaction as the credential write. An access token already issued is a stateless JWT and stays valid until it expires — at most 10 minutes. |
 | Stolen recovery key | Holds a copy of a printed kit | The kit can be rotated from Settings without a full recovery, and any completed recovery rotates it automatically. |
 | Unauthorised kit minting | Uses a borrowed unlocked session to issue a new recovery key | Requires the master password, not merely a valid session. |
 | TOTP replay | Reuses an observed 6-digit code inside its window | The consumed time-step is recorded; codes at or below it are refused. |
 | 2FA as an oracle | Probes to learn whether a password is valid | A wrong code and a wrong password return the same error. |
 | Size analysis | Infers password length from ciphertext length | Items are padded into power-of-two buckets before encryption. |
-| Data tampering | Flips bits in stored ciphertext | GCM auth tag fails loudly at decryption. |
+| Data tampering | Flips bits in stored ciphertext | GCM auth tag fails loudly at decryption. Whole-blob swaps and rollbacks are not detected — see Accepted limitations. |
 | SQL injection | Malicious input in any request field | All queries parameterized; no SQL built by string concatenation. |
 | IDOR / cross-user access | Guesses another user's item UUID | Every vault query is scoped by `user_id` from the verified JWT, in the `WHERE` clause. A mismatch matches zero rows and returns 404 — not 403, which would confirm the item exists. |
-| Token forgery | Modifies the JWT payload | Payload is readable but signature-protected; any change fails verification. |
+| Token forgery | Modifies the JWT payload | Payload is readable but signature-protected; any change fails verification. A test rewrites a real token's `sub` to another user and asserts `INVALID_TOKEN`. |
 | Username enumeration | Probes login to discover registered emails | Identical 401 for unknown account and wrong password — and login always performs an Argon2 verification, against a dummy hash when the account does not exist, so response time does not distinguish them either. |
-| KDF parameters below policy | A client holding the password or recovery key proposes weak parameters | Not a confidentiality threat — that caller can already unwrap the DEK — but refused at two levels: the schema enforces the OWASP floor on every route, and KDF upgrade, password change and recovery also refuse `m` or `t` below current defaults. Signup is held only to the floor, and nothing stops an account above the default being lowered to it. |
+| KDF parameters below policy | A client holding the password or recovery key proposes weak parameters | Not a confidentiality threat — that caller can already unwrap the DEK — but refused at two levels: the schema enforces the OWASP floor on every route, and KDF upgrade, password change and recovery also refuse `m` or `t` below current defaults. Signup is held only to the floor, and nothing stops an account above the default being lowered to it. In the other direction, the client refuses server-supplied parameters below the floor before deriving. |
 
 ### A logging fix worth naming
 
@@ -454,8 +467,31 @@ a threat model.
   from Settings restores recovery. On the public demo the exposure is at most a
   day: the nightly wipe deletes every account, and any vault provisioned
   afterwards is created with a verifier.
+- **A malicious server operator can still take the password.** The server
+  delivers the JavaScript that runs the crypto, so whoever controls it — or an
+  attacker who can modify traffic — can ship a client that sends the master
+  password home. The client-side KDF floor stops a server from *asking* for a
+  crackable auth hash; it cannot stop a server from replacing the client. This
+  is inherent to a web-delivered client and is the main reason a production
+  password manager ships signed browser extensions or native apps.
+- **Access tokens outlive a password change by up to 10 minutes.** Password
+  change and recovery revoke every refresh token, but an access token is a
+  stateless JWT and is honoured until it expires.
+- **A stolen database defeats 2FA.** `totp_secret` is stored in plaintext,
+  because TOTP is symmetric, so whoever holds a dump can generate valid codes.
+  It still opens no vault: nothing in the key hierarchy derives from it.
+- **The server can swap or roll back whole items undetected.** Items are
+  encrypted without associated data, so an item's ciphertext is not bound to its
+  id or version. A malicious server can return one of a user's items in place of
+  another, replay an older version, or delete items. It can never read or forge
+  one.
+- **Vaults and entries are size-capped.** One account holds at most 1,000 items
+  (`VAULT_FULL`), and one entry — every field serialised together — at most
+  65,532 bytes, the largest padding bucket the 96 KB request body can carry.
 - **`/api/user/kdf-params` is an account-enumeration oracle,** and also reveals
-  whether an account has 2FA enabled. It is rate limited. The alternative — a
+  whether an account has 2FA enabled. `/api/account/recovery-material` is one
+  too: it answers 404 for an unknown address and 409 for an account created
+  before the recovery verifier existed. Both are rate limited. The alternative — a
   two-step login with a separate pending-2FA token — was judged not worth the
   extra credential type for this project.
 - **Padding reduces the length leak; it does not eliminate it.** What decides the
@@ -490,7 +526,7 @@ a threat model.
 - **No TLS in local development.** The architecture assumes TLS terminating at a
   reverse proxy in deployment.
 
-The public demo deployment ([DEPLOY.md](DEPLOY.md)) adds four of its own:
+The public demo deployment ([DEPLOY.md](DEPLOY.md)) adds five of its own:
 
 - **Every visitor provisions their own demo vault, and anyone can create
   them.** There is no shared demo account and no published password: clicking
@@ -505,6 +541,13 @@ The public demo deployment ([DEPLOY.md](DEPLOY.md)) adds four of its own:
   that bounds it. The bucket keys on the address like every other limit here, so
   a proxy pool still gets a multiple of the budget; true per-visitor quotas are
   the fix and are not implemented yet.
+- **A demo vault's password is kept in `sessionStorage`.** The browser
+  generates a random 160-bit master password for each demo vault and stores it,
+  with the demo email, in `sessionStorage` for the life of the tab, so a page
+  refresh can offer to reopen the vault instead of stranding it. Any script
+  running on the page can read it while the tab is open. Ordinary accounts never
+  do this — their password is never persisted — and the demo vault holds only
+  invented entries.
 - **Everything on the demo is deleted nightly.** Every account, demo vault and
   item is gone at 03:00 UTC, and nothing is recreated afterwards — the database
   is simply empty until the next visitor provisions a vault. This is the price
@@ -618,11 +661,11 @@ deployment uses `citadel_app`, which holds `SELECT`, `INSERT`, `UPDATE` and
 It is created in two phases, because the two halves can only run at different
 times:
 
-- `migrations/sql/create-app-role.sh` runs at **database initialisation**, where
+- `Server/migrations/sql/create-app-role.sh` runs at **database initialisation**, where
   superuser is available. It creates the role and grants `CONNECT` and `USAGE`.
   The password comes from `APP_DB_PASSWORD`; with it unset the script skips
   itself, which is what local development does.
-- `migrations/sql/grant-app-role.sql` runs **after migrations**, because it
+- `Server/migrations/sql/grant-app-role.sql` runs **after migrations**, because it
   grants on tables migrations create. It is idempotent and applied on every
   deploy, so a change to it reaches existing databases. It names each table,
   so a migration that adds one must add it to this file too — nothing adds it
@@ -642,21 +685,31 @@ needing a privilege that would also let it empty a table by accident.
 
 ## Testing
 
+From the repository root:
+
 ```bash
-cd Server && npm test
-cd Web && npm test
+(cd Server && npm test)
+(cd Web && npm test)
 ```
 
-CI runs both on every push, against a real Postgres service container, and builds
-both Docker images on Linux — which is where case-sensitive imports and native
-module problems surface and a Windows machine never would.
+The server suite needs `TEST_DATABASE_URL` in `Server/.env` and a migrated test
+database (`npm run migrate:test`).
 
-| Layer | Scope |
-|---|---|
-| Unit | Crypto primitives with no I/O |
-| Integration | Services against a real test database |
-| End-to-end | Full HTTP requests through the stack |
-| **Adversarial** | **Asserts that attacks fail** |
+**435 tests: 172 server (16 files, `node --test`) and 263 web (23 files,
+Vitest).** All pass; none are skipped.
+
+CI runs on every push to `main` and on every pull request. The server suite runs
+against a real Postgres service container, the web suite runs lint, tests and a
+production build, and both Docker images are built on Linux — which is where
+case-sensitive imports and native module problems surface and a Windows machine
+never would.
+
+| Layer | Where | Scope |
+|---|---|---|
+| Unit | `Server/test/unit`, `Web/src/**/*.test.js` | Crypto primitives, padding, tokens, TOTP, config — no I/O |
+| End-to-end | `Server/test/e2e` | Full HTTP requests through the app against a real test database; a few call repositories directly |
+| UI | `Web/src/**/*.test.jsx` | Screens and components, with the network mocked |
+| **Adversarial** | **Spread across all three** | **Asserts that attacks fail** |
 
 The adversarial suite is the one that matters. In ordinary software, tests prove
 features work; in security software, the valuable tests prove attacks do not.
@@ -671,6 +724,9 @@ Among them:
   refusal writes nothing: the stored credentials and both DEK wrappers are
   unchanged after a refused password change or recovery, and the stored
   parameters after a refused upgrade
+- A server that proposes KDF parameters below the floor receives nothing: login,
+  password change, KDF upgrade and kit regeneration all refuse before sending
+- A real JWT with its `sub` rewritten to another user is rejected
 - A wrong recovery key cannot unwrap the DEK
 - A replayed refresh token revokes the whole family, **including the token that
   was still valid**
@@ -685,7 +741,9 @@ Among them:
 
 Three tests state the central design claim directly: vault ciphertext is
 **byte-identical** before and after a password change, before and after a KDF
-upgrade, and before and after a recovery kit rotation.
+upgrade, and before and after a recovery kit rotation. Each first asserts that
+the operation succeeded, so none can pass on a request that was refused and
+wrote nothing.
 
 ### Verifying the claims yourself
 
@@ -720,6 +778,7 @@ possession of a key that exists in neither the database nor the server.
 | `POST` | `/api/account/totp/begin` | Bearer | Issue a TOTP secret and QR URI |
 | `POST` | `/api/account/totp/confirm` | Bearer | Verify a code, enable 2FA, return backup codes once |
 | `POST` | `/api/account/totp/disable` | Bearer | Turn 2FA off; requires a current code |
+| `GET` | `/api/demo/stored-material` | Bearer | Demo mode only (`DEMO_MODE=true`); the caller's own stored rows, for the ciphertext-beside-plaintext panel. Not mounted otherwise. |
 
 No endpoint accepts or returns plaintext vault data. Errors carry
 machine-readable codes (`EMAIL_TAKEN`, `INVALID_CREDENTIALS`,
@@ -739,6 +798,13 @@ machine-readable codes (`EMAIL_TAKEN`, `INVALID_CREDENTIALS`,
 
 - Structured logging and an audit trail
 - Email confirmation on the recovery endpoint
+- Per-visitor quotas on the demo — every limit today keys on the IP address
+- Tests that exercise the rate limiters themselves — they are disabled under
+  `NODE_ENV=test`, so the suite never runs them
+- Associated data binding each item's ciphertext to its id, so a swapped or
+  rolled-back item fails to decrypt
+- Delivery the server cannot silently change, such as a signed browser
+  extension, which is what closes the malicious-server limitation
 
 Redis-backed rate limiting and the least-privilege role are now wired into the
 production setup — see [DEPLOY.md](DEPLOY.md). Both are off by default in local
